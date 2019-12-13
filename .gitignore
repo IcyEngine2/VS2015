@@ -1,6 +1,5 @@
 bin
 obj
 lib
-include/Qt5
 *.vs
 build/test
