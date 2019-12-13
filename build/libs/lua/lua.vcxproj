@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>16.0</VCProjectVersion>
+    <ProjectGuid>{1E1FC636-6E0C-4064-B5DA-9B7698388537}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>lua</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0.17763.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v140</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v140</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\..\LibDebugL2.props" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\..\LibReleaseL2.props" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>true</LinkIncremental>
+    <TargetName>lib$(ProjectName)d</TargetName>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <TargetName>lib$(ProjectName)</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\..\source\libs\lua\lapi.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\lauxlib.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\lbaselib.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\lbitlib.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\lcode.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\lcorolib.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\lctype.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\ldblib.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\ldebug.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\ldo.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\ldump.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\lfunc.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\lgc.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\linit.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\liolib.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\llex.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\lmathlib.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\lmem.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\loadlib.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\lobject.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\lopcodes.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\loslib.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\lparser.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\lstate.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\lstring.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\lstrlib.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\ltable.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\ltablib.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\ltm.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\lua.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\luac.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\lundump.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\lutf8lib.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\lvm.c" />
+    <ClCompile Include="..\..\..\source\libs\lua\lzio.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\..\source\libs\lua\lapi.h" />
+    <ClInclude Include="..\..\..\source\libs\lua\lauxlib.h" />
+    <ClInclude Include="..\..\..\source\libs\lua\lcode.h" />
+    <ClInclude Include="..\..\..\source\libs\lua\lctype.h" />
+    <ClInclude Include="..\..\..\source\libs\lua\ldebug.h" />
+    <ClInclude Include="..\..\..\source\libs\lua\ldo.h" />
+    <ClInclude Include="..\..\..\source\libs\lua\lfunc.h" />
+    <ClInclude Include="..\..\..\source\libs\lua\lgc.h" />
+    <ClInclude Include="..\..\..\source\libs\lua\llex.h" />
+    <ClInclude Include="..\..\..\source\libs\lua\llimits.h" />
+    <ClInclude Include="..\..\..\source\libs\lua\lmem.h" />
+    <ClInclude Include="..\..\..\source\libs\lua\lobject.h" />
+    <ClInclude Include="..\..\..\source\libs\lua\lopcodes.h" />
+    <ClInclude Include="..\..\..\source\libs\lua\lparser.h" />
+    <ClInclude Include="..\..\..\source\libs\lua\lprefix.h" />
+    <ClInclude Include="..\..\..\source\libs\lua\lstate.h" />
+    <ClInclude Include="..\..\..\source\libs\lua\lstring.h" />
+    <ClInclude Include="..\..\..\source\libs\lua\ltable.h" />
+    <ClInclude Include="..\..\..\source\libs\lua\ltm.h" />
+    <ClInclude Include="..\..\..\source\libs\lua\lua.h" />
+    <ClInclude Include="..\..\..\source\libs\lua\lua.hpp" />
+    <ClInclude Include="..\..\..\source\libs\lua\luaconf.h" />
+    <ClInclude Include="..\..\..\source\libs\lua\lualib.h" />
+    <ClInclude Include="..\..\..\source\libs\lua\lundump.h" />
+    <ClInclude Include="..\..\..\source\libs\lua\lvm.h" />
+    <ClInclude Include="..\..\..\source\libs\lua\lzio.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>
