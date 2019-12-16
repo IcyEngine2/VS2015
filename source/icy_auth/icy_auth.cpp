@@ -1,12 +1,11 @@
-#include <icy_module/icy_auth.hpp>
-#include <icy_engine/icy_string.hpp>
-#include <icy_engine/icy_json.hpp>
-#include <icy_lib/icy_crypto.hpp>
+#include <icy_auth/icy_auth.hpp>
+#include <icy_engine/core/icy_string.hpp>
+#include <icy_engine/core/icy_json.hpp>
 
 using namespace icy;
 
 ICY_STATIC_NAMESPACE_BEG
-constexpr auto auth_version = 2019'11'21'0001;
+constexpr auto auth_version = 2019'12'15'0001;
 constexpr auto auth_str_key_version = "Version"_s;
 constexpr auto auth_str_key_type = "Type"_s;
 constexpr auto auth_str_key_time = "Time"_s;

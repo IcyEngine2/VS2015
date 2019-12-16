@@ -1,9 +1,9 @@
 #pragma once
 
-#include <icy_engine/icy_thread.hpp>
-#include <icy_engine/icy_map.hpp>
-#include <icy_engine/icy_string.hpp>
-#include <icy_engine/icy_event.hpp>
+#include <icy_engine/core/icy_thread.hpp>
+#include <icy_engine/core/icy_map.hpp>
+#include <icy_engine/core/icy_string.hpp>
+#include <icy_engine/core/icy_event.hpp>
 
 class auth_config;
 

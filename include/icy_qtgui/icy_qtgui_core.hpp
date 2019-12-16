@@ -12,7 +12,7 @@
 #define ICY_QTGUI_API __declspec(dllimport)
 #endif
 
-#define ICY_GUI_VERSION 0x0004'0001
+#define ICY_GUI_VERSION 0x0004'0003
 
 #pragma warning(push)
 #pragma warning(disable:4201)
@@ -314,12 +314,20 @@ namespace icy
         static_assert(std::is_trivially_destructible<T>::value, "INVALID STRUCT VARIANT TYPE");
         ICY_GUI_ERROR(var.initialize(alloc, user, &data, sizeof(data), gui_variant_type::user));
     }
-    struct gui_widget
+    struct gui_widget : detail::rel_ops<gui_widget>
     {
+        int compare(const gui_widget rhs) const noexcept
+        {
+            return icy::compare(index, rhs.index);
+        }
         uint64_t index = 0;
     };
-    struct gui_action
+    struct gui_action : detail::rel_ops<gui_action>
     {
+        int compare(const gui_action rhs) const noexcept
+        {
+            return icy::compare(index, rhs.index);
+        }
         uint64_t index = 0;
     };
     struct gui_event

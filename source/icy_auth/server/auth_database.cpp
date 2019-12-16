@@ -1,6 +1,5 @@
 #include "auth_database.hpp"
-#include "auth_core.hpp"
-#include <icy_engine/icy_win32.hpp>
+#include "auth_config.hpp"
 
 #if _DEBUG
 #pragma comment(lib, "libsodiumd")
@@ -30,14 +29,14 @@ error_type auth_database::initialize(const auth_config_dbase& config) noexcept
     ICY_ERROR(m_dbi_usr.initialize_create_int_key(txn, "clients"_s));
     ICY_ERROR(m_dbi_mod.initialize_create_int_key(txn, "modules"_s));
     
-    if (m_dbi_usr.size(txn) > config.clients())
+    if (m_dbi_usr.size(txn) > config.clients)
         return make_auth_error(auth_error_code::client_max_capacity);
-    if (m_dbi_mod.size(txn) > config.modules())
+    if (m_dbi_mod.size(txn) > config.modules)
         return make_auth_error(auth_error_code::module_max_capacity);
     
     ICY_ERROR(txn.commit());
-    m_max_clients = config.clients();
-    m_max_modules = config.modules();
+    m_max_clients = config.clients;
+    m_max_modules = config.modules;
     m_timeout = config.timeout;
     return {};
 }

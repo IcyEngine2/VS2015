@@ -1,8 +1,8 @@
 #pragma once
 
-#include <icy_engine/core/icy_string.hpp>
-#include <icy_engine/core/icy_array.hpp>
-#include <icy_engine/core/icy_map.hpp>
+#include "icy_string.hpp"
+#include "icy_array.hpp"
+#include "icy_map.hpp"
 
 struct jsmntok_t;
 

@@ -1,9 +1,7 @@
 #pragma once
 
-#include <icy_module/icy_auth.hpp>
-#include <icy_lib/icy_database.hpp>
-#include <icy_lib/icy_crypto.hpp>
-#include <icy_engine/icy_core.hpp>
+#include <icy_auth/icy_auth.hpp>
+#include <icy_engine/utility/icy_database.hpp>
 
 static constexpr auto auth_date_length = sizeof("YYYY-MM-DD HH:MM:SS");
 class auth_config_dbase;
@@ -89,7 +87,7 @@ private:
     icy::database_dbi m_dbi_usr;
     icy::database_dbi m_dbi_mod;
     size_t m_max_clients = 0;
-    size_t m_max_modules = 0x10;
+    size_t m_max_modules = 0;
     std::chrono::system_clock::duration m_timeout = {};
     icy::crypto_key m_password = icy::crypto_random;
 };

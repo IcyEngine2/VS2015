@@ -36,5 +36,8 @@
     <ClCompile Include="..\..\..\source\icy_engine\core\icy_core.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_engine\core\icy_json.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

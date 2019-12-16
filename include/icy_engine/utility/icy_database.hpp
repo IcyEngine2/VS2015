@@ -1,6 +1,6 @@
 #pragma once
 
-#include <icy_engine/icy_string_view.hpp>
+#include <icy_engine/core/icy_string_view.hpp>
 
 struct MDB_env;
 struct MDB_txn;

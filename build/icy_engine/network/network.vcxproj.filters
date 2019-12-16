@@ -21,5 +21,8 @@
     <ClCompile Include="..\..\..\source\icy_engine\network\icy_network_http.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_engine\network\icy_http.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

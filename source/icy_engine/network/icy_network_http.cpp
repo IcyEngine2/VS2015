@@ -1,6 +1,6 @@
 #include <icy_engine/network/icy_network_http.hpp>
-#include <icy_engine/utility/icy_config.hpp>
-#include <icy_engine/utility/icy_json.hpp>
+#include <icy_engine/core/icy_json.hpp>
+#include <icy_engine/core/icy_file.hpp>
 
 using namespace icy;
 
@@ -171,37 +171,23 @@ void http_system::shutdown() noexcept
 
 error_type http_config::from_json(const icy::json& json) noexcept
 {
-    config config; 
-    string str_addr_type;
-    ICY_ERROR(to_string(network_address_type::unknown, str_addr_type));
-    ICY_ERROR(config.bind(key::port, json_type_integer(0), config::required));
-    ICY_ERROR(config.bind(key::max_conn, json_type_integer(0), config::required));
-    ICY_ERROR(config.bind(key::addr_type, str_addr_type, config::optional));
-    ICY_ERROR(config.bind(key::max_size, json_type_integer(default_values::max_size), config::optional));
-    ICY_ERROR(config.bind(key::timeout, std::chrono::duration_cast<std::chrono::milliseconds>(network_default_timeout).count(), config::optional));
-    ICY_ERROR(config.bind(key::file_path, json_type_string(), config::optional));
-    ICY_ERROR(config.bind(key::file_size, json_type_integer(0), config::optional));
-
-
-    ICY_ERROR(config(json, hash64(key::port), port));
-    ICY_ERROR(config(json, hash64(key::addr_type), str_addr_type));
-    switch (hash(str_addr_type))
+    if (const auto val = json.find(key::addr_type))
     {
-    case "IPv4"_hash:
-        addr_type = network_address_type::ip_v4;
-        break;
-    case "IPv6"_hash:
-        addr_type = network_address_type::ip_v6;
-        break;
+        switch (hash(val->get()))
+        {
+        case "IPv4"_hash: addr_type = network_address_type::ip_v4; break; 
+        case "IPv6"_hash: addr_type = network_address_type::ip_v6; break;
+        }
     }
-    ICY_ERROR(config(json, hash64(key::max_conn), max_conn));
-    ICY_ERROR(config(json, hash64(key::max_size), max_size));
-    auto timeout_ms = 0u;
-    ICY_ERROR(config(json, hash64(key::timeout), timeout_ms));
-    timeout = std::chrono::milliseconds(timeout_ms);
+    json.get(key::file_path, file_path);
+    json.get(key::file_size).to_value_uint(file_size);
+    json.get(key::port).to_value_uint(port);
+    json.get(key::max_conn).to_value_uint(max_conn);
+    json.get(key::max_size).to_value_uint(max_size);
 
-    ICY_ERROR(config(json, hash64(key::file_path), file_path));
-    ICY_ERROR(config(json, hash64(key::file_size), file_size));
+    auto timeout_ms = 0u;
+    json.get(key::timeout).to_value_uint(timeout_ms);
+    timeout = std::chrono::milliseconds(timeout_ms);
     file_size *= 1_mb;
     
     return {};

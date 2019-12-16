@@ -35,7 +35,6 @@ namespace icy
     using memsize_func = size_t(*)(const void* const ptr, void* user);
     struct global_heap_type
     {
-        static void* static_realloc(const void* const ptr, const size_t size, void*) noexcept;
         realloc_func realloc = nullptr;
         memsize_func memsize = nullptr;
         void* user = nullptr;
@@ -44,15 +43,11 @@ namespace icy
 
     inline void* realloc(const void* const old_ptr, const size_t new_size) noexcept
     {
-        return detail::global_heap.realloc ? 
-            detail::global_heap.realloc(old_ptr, new_size, detail::global_heap.user) : 
-            global_heap_type::static_realloc(old_ptr, new_size, nullptr);
+        return detail::global_heap.realloc(old_ptr, new_size, detail::global_heap.user);
     }
     inline size_t memsize(const void* const ptr) noexcept
     {
-        return detail::global_heap.memsize ? 
-            detail::global_heap.memsize(ptr, detail::global_heap.user) :
-            0_z;
+        return detail::global_heap.memsize(ptr, detail::global_heap.user);
     }
 
     struct heap_init

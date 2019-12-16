@@ -1,14 +1,10 @@
-#include <icy_engine/icy_string.hpp>
-#include <icy_engine/icy_array.hpp>
-#include <icy_engine/icy_win32.hpp>
-#include <icy_engine/icy_json.hpp>
-#include <icy_engine/icy_parser.hpp>
-#include <icy_engine/icy_input.hpp>
+#include <icy_engine/core/icy_string.hpp>
+#include <icy_engine/core/icy_array.hpp>
+#include <icy_engine/core/icy_json.hpp>
+#include <icy_engine/parser/icy_parser_cmd.hpp>
 #include "auth_console.hpp"
-#include "auth_core.hpp"
+#include "auth_config.hpp"
 #include "auth_database.hpp"
-
-#define AUTH_CONFIRMATION_CODE "1581"_s
 
 using namespace icy;
 
@@ -22,7 +18,6 @@ static error_type append(map<string_view, auth_console_thread::pair_type>& cmds,
     ICY_ERROR(cmds.insert(std::move(cmd), std::move(pair)));
     return {};
 }
-
 
 error_type auth_console_thread::initialize(const auth_config& config) noexcept
 {
@@ -81,7 +76,6 @@ error_type auth_console_thread::initialize(const auth_config& config) noexcept
 
     return {};
 }
-
 void auth_console_thread::cancel() noexcept
 {
     console_exit();
@@ -135,12 +129,18 @@ error_type auth_console_thread::run() noexcept
             if (etype == auth_event_type::clear_clients ||
                 etype == auth_event_type::clear_modules)
             {
-                ICY_ERROR(console_write("\r\nThis admin operation can't be undone! Confirmation code: "_s));
+                string msg;
+                crypto_salt random = crypto_random;
+                char base64[base64_encode_size(sizeof(random))];
+                base64_encode(random, base64);
+                const auto str_code = string_view(base64, _countof(base64) / 2);
+                ICY_ERROR(to_string("\r\nPlease confirm operation (input code '%1'): "_s, msg, str_code));
+                ICY_ERROR(console_write(msg));
                 string code;
                 ICY_ERROR(console_read_line(code, done));
                 if (done)
                     break;
-                if (code != AUTH_CONFIRMATION_CODE)
+                if (code != str_code)
                 {
                     ICY_ERROR(console_write("\r\nInvalid confirmation code: admin operation cancelled!"_s));
                     continue;
@@ -158,7 +158,46 @@ error_type auth_console_thread::run() noexcept
             case auth_event_type::clear_clients:
             case auth_event_type::clear_modules:
             {
-                ICY_ERROR(server_console_loop(auth_event_type::console_error, etype, done));
+                const auto timeout = std::chrono::milliseconds(100);
+                timer timer;
+                ICY_ERROR(timer.initialize(SIZE_MAX, timeout));
+
+                shared_ptr<event_loop> loop;
+                ICY_ERROR(event_loop::create(loop, auth_event_type::console_error | event_type::global_timer));
+                ICY_ERROR(event::post(nullptr, etype));
+                while (true)
+                {
+                    event event;
+                    ICY_ERROR(loop->loop(event));
+                    if (event->type == event_type::global_quit)
+                    {
+                        done = true;
+                        return {};
+                    }
+                    else if (event->type == auth_event_type::console_error)
+                    {
+                        const auto error = event->data<error_type>();
+                        string str;
+                        if (error)
+                        {
+                            ICY_ERROR(to_string(" Error: (%1) code %2 - %3."_s, str, error.source, error.code, error));
+                            ICY_ERROR(console_write(str));
+                        }
+                        else
+                        {
+                            ICY_ERROR(console_write(". Success!"_s));
+                        }
+                        break;
+                    }
+                    else if (event->type == event_type::global_timer)
+                    {
+                        auto pair = event->data<timer::pair>();
+                        if (pair.timer == &timer)
+                        {
+                            ICY_ERROR(console_write("."_s));
+                        }
+                    }
+                }
                 break;
             }
 

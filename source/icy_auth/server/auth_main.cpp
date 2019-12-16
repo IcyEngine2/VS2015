@@ -1,7 +1,6 @@
-#include <icy_engine/icy_json.hpp>
-#include <icy_engine/icy_file.hpp>
-#include <icy_engine/icy_win32.hpp>
-#include "auth_core.hpp"
+#include <icy_engine/core/icy_json.hpp>
+#include <icy_engine/core/icy_file.hpp>
+#include "auth_config.hpp"
 #include "auth_database.hpp"
 #include "auth_console.hpp"
 #include "auth_http.hpp"
@@ -9,9 +8,11 @@
 #pragma warning(disable:4063) // case 'identifier' is not a valid value for switch of enum 'enumeration'
 
 #if _DEBUG
-#pragma comment(lib, "icy_engined")
+#pragma comment(lib, "icy_engine_cored")
+#pragma comment(lib, "icy_engine_networkd")
 #else
-#pragma comment(lib, "icy_engine")
+#pragma comment(lib, "icy_engine_core")
+#pragma comment(lib, "icy_engine_network")
 #endif
 
 using namespace icy;
@@ -280,11 +281,10 @@ error_type auth_core::run() noexcept
         }
         case auth_event_type::print_status:
         {
-            const string_view label[] = { "disabled"_s, "enabled"_s };
             ICY_ERROR(str.append( "\r\nHTTP status:"_s));
-            ICY_ERROR(str.appendf("\r\nClients    : %1", label[m_client.running()]));
-            ICY_ERROR(str.appendf("\r\nModules    : %1", label[m_module.running()]));
-            ICY_ERROR(str.appendf("\r\nAdmin      : %1", label[m_admin.running()]));
+            ICY_ERROR(m_client.status(str));
+            ICY_ERROR(m_module.status(str));
+            ICY_ERROR(m_admin.status(str));
             break;
         }
         case auth_event_type::print_clients:
@@ -319,18 +319,16 @@ error_type auth_core::run() noexcept
 int main()
 {
     heap gheap;
+    auth_config config;
+    auth_core core;
+
     if (const auto error = gheap.initialize(heap_init::global(auth_config::default_values::gheap_size)))
         return ENOMEM;
-
-    auth_config config;
-    if (const auto error = config.initialize())
-        return ENOMEM;
-
-    auth_core core;
+    
     auto show_error = [](const error_type error) -> int
     {
         string msg;
-        icy::to_string("\r\nError: (%1) code %2 - %3"_s, msg, error.source, error.code, error);
+        icy::to_string("\r\nError: (%1) code %2 - %3"_s, msg, error.source, long(error.code), error);
         console_write(msg);
         return error.code;
     };
@@ -348,12 +346,12 @@ int main()
         file file;
         string path;
         array<string> args;
-        ICY_ERROR(win32_cmd_args(args));
+        ICY_ERROR(win32_parse_cargs(args));
         
         if (args.size() == 1)
         {
             ICY_ERROR(path.append(file_name(args[0]).dir));
-            ICY_ERROR(path.append(auth_config_default_file_path));
+            ICY_ERROR(path.append(auth_config::default_values::file_path));
         }
         else if (args.size() > 1)
         {

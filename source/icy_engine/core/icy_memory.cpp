@@ -793,29 +793,5 @@ heap_node_unit* heap_node_list::pop(heap_base& heap) noexcept
     }
 }
 size_t icy::align_size(const size_t size) noexcept { size_t tmp; return ::align_size(size, tmp); }
-void* global_heap_type::static_realloc(const void* const ptr, const size_t size, void*) noexcept
-{
-    static char buffer[4096];
-    static size_t capacity = 0;
-    if (!ptr)
-    {
-        if (capacity + size > _countof(buffer))
-        {
-            ICY_ASSERT(false, "OUT OF STATIC MEMORY");
-        }
-        else
-        {
-            const auto memory = buffer + capacity;
-            capacity += size;
-            return memory;
-        }
-    }
-    if (ptr >= buffer && ptr < buffer + _countof(buffer))
-        ;
-    else if (ptr)
-    {
-        ICY_ASSERT(false, "INVALID 'REALLOC' POINTER");
-    }
-    return nullptr;
-}
+
 icy::global_heap_type detail::global_heap;

@@ -1,4 +1,4 @@
-#include <icy_engine/icy_http.hpp>
+#include <icy_engine/network/icy_http.hpp>
 #include <chrono>
 
 using namespace icy;
@@ -162,7 +162,7 @@ static error_type parse(const string_view input, const char delim, map<string, s
 		return {};
 }
 
-error_type http_request::create(const string_view buffer, http_request& request) noexcept
+error_type http_request::initialize(const string_view buffer) noexcept
 {
 	enum
 	{
@@ -194,13 +194,13 @@ error_type http_request::create(const string_view buffer, http_request& request)
 				switch (hash(string_view{ beg, ptr + k }))
 				{
 				case "GET"_hash: 
-					request.type = http_request_type::get; 
+					type = http_request_type::get; 
 					break;
 				case "POST"_hash: 
-					request.type = http_request_type::post; 
+					type = http_request_type::post; 
 					break;
 				case "OPTIONS"_hash:
-					request.type = http_request_type::options;
+					type = http_request_type::options;
 					break;
 				default:
 					return make_stdlib_error(std::errc::illegal_byte_sequence);
@@ -231,7 +231,7 @@ error_type http_request::create(const string_view buffer, http_request& request)
 			string path;
 			if (const auto error = decode(string_view{ beg, ptr + k }, path))
 				return error;
-			if (const auto error = request.url_sub.push_back(std::move(path)))
+			if (const auto error = url_sub.push_back(std::move(path)))
 				return error;
 			beg = ptr + k + 1;
 			break;
@@ -261,7 +261,7 @@ error_type http_request::create(const string_view buffer, http_request& request)
 				return error;
 			if (const auto error = decode(string_view{ beg, ptr + k }, val))
 				return error;
-			if (const auto error = request.url_args.insert(std::move(key), std::move(val)))
+			if (const auto error = url_args.insert(std::move(key), std::move(val)))
 				return error;
 			beg = ptr + k + 1;
 			break;
@@ -304,7 +304,7 @@ error_type http_request::create(const string_view buffer, http_request& request)
 
 			if (header_key == http_key_cookie_r)
 			{
-				ICY_ERROR(parse(string_view{ beg, ptr + k }, ';', request.cookies));
+				ICY_ERROR(parse(string_view{ beg, ptr + k }, ';', cookies));
 			}
 			else if (header_key == http_key_cookie_w)
 			{
@@ -316,7 +316,7 @@ error_type http_request::create(const string_view buffer, http_request& request)
 				string val;
 				ICY_ERROR(decode(header_key, key));
 				ICY_ERROR(decode(string_view{ beg, ptr + k }, val));
-				ICY_ERROR(request.headers.insert(std::move(key), std::move(val)));
+				ICY_ERROR(headers.insert(std::move(key), std::move(val)));
 			}
 
 			if (ptr[k + 2] == '\r' && ptr[k + 3] == '\n')
@@ -337,19 +337,19 @@ error_type http_request::create(const string_view buffer, http_request& request)
 			return make_stdlib_error(std::errc::illegal_byte_sequence);
 		}
 	}
-	const auto keys = request.headers.keys();
+	const auto keys = headers.keys();
 	const auto key_content_size = binary_search(keys.begin(), keys.end(), http_key_content_size);
 	const auto key_content_type = binary_search(keys.begin(), keys.end(), http_key_content_type);
 	const auto key_host = binary_search(keys.begin(), keys.end(), http_key_host);
 
 	if (key_content_size != keys.end())
 	{
-		const auto val_content_size = string_view{ request.headers.vals()[key_content_size - keys.begin()] };
+		const auto val_content_size = string_view{ headers.vals()[key_content_size - keys.begin()] };
 		auto size = 0u;
 		if (val_content_size.to_value(size) || beg + size != ptr + len)
 			return make_stdlib_error(std::errc::illegal_byte_sequence);
 
-		ICY_ERROR(to_string(string_view{ beg, size }, request.body));
+		ICY_ERROR(to_string(string_view{ beg, size }, body));
 	}
 	else if (beg != ptr + len)
 	{
@@ -358,27 +358,27 @@ error_type http_request::create(const string_view buffer, http_request& request)
 
 	if (key_host != keys.end())
 	{
-		ICY_ERROR(to_string(request.headers.vals()[key_host - keys.begin()], request.host));
+		ICY_ERROR(to_string(headers.vals()[key_host - keys.begin()], host));
 	}
 
 	if (key_content_type != keys.end())
 	{
-		const auto& val = request.headers.vals()[key_content_type - keys.begin()];
+		const auto& val = headers.vals()[key_content_type - keys.begin()];
 		for (auto k = http_content_type::none; k < http_content_type::_count; )
 		{
 			if (::to_string(k) == val)
 			{
-				request.content = k;
+				content = k;
 				break;
 			}
 			k = http_content_type(uint32_t(k) + 1);
 		}
-		if (request.content == http_content_type::application_x_www_form_urlencoded)
-			ICY_ERROR(parse(request.body, '&', request.body_args));
+		if (content == http_content_type::application_x_www_form_urlencoded)
+			ICY_ERROR(parse(body, '&', body_args));
 	}
 	return {};
 }
-error_type http_response::create(const string_view buffer, http_response& response, const_array_view<uint8_t>& body) noexcept
+error_type http_response::initialize(const string_view buffer, const_array_view<uint8_t>& body) noexcept
 {
 	enum
 	{
@@ -415,7 +415,7 @@ error_type http_response::create(const string_view buffer, http_response& respon
 		{
 			if (ptr[k] == '\r')
 			{
-				if (string_view(beg, ptr + k).to_value(reinterpret_cast<uint32_t&>(response.herror)) != error_type{} || k + 1 >= len || ptr[k + 1] != '\n')
+				if (string_view(beg, ptr + k).to_value(reinterpret_cast<uint32_t&>(herror)) != error_type{} || k + 1 >= len || ptr[k + 1] != '\n')
 					return make_stdlib_error(std::errc::illegal_byte_sequence);
 				state = parse_header_key;
 				beg = ptr + k + 2;
@@ -474,7 +474,7 @@ error_type http_response::create(const string_view buffer, http_response& respon
 				string val;
 				ICY_ERROR(decode(cookie_key, key));
 				ICY_ERROR(decode(cookie_val, val));
-				ICY_ERROR(response.cookies.insert(std::move(key), std::move(val)));
+				ICY_ERROR(cookies.insert(std::move(key), std::move(val)));
 			}
 			else
 			{
@@ -482,7 +482,7 @@ error_type http_response::create(const string_view buffer, http_response& respon
 				string val;
 				ICY_ERROR(decode(header_key, key));
 				ICY_ERROR(decode(string_view{ beg, ptr + k }, val));
-				ICY_ERROR(response.headers.insert(std::move(key), std::move(val)));
+				ICY_ERROR(headers.insert(std::move(key), std::move(val)));
 			}
 
 			if (ptr[k + 2] == '\r' && ptr[k + 3] == '\n')
@@ -503,13 +503,13 @@ error_type http_response::create(const string_view buffer, http_response& respon
 			return make_stdlib_error(std::errc::illegal_byte_sequence);
 		}
 	}
-	const auto keys = response.headers.keys();
+	const auto keys = headers.keys();
 	const auto key_content_size = binary_search(keys.begin(), keys.end(), http_key_content_size);
 	//const auto key_content_type = binary_search(keys.begin(), keys.end(), http_key_content_type);
 
 	if (key_content_size != keys.end())
 	{
-		const auto val_content_size = string_view{ response.headers.vals()[key_content_size - keys.begin()] };
+		const auto val_content_size = string_view{ headers.vals()[key_content_size - keys.begin()] };
 		auto size = 0u;
 		if (val_content_size.to_value(size) || beg + size != ptr + len)
 			return make_stdlib_error(std::errc::illegal_byte_sequence);

@@ -1,4 +1,4 @@
-#include <icy_engine/utility/icy_json.hpp>
+#include <icy_engine/core/icy_json.hpp>
 #include "jsmn.h"
 
 using namespace icy;

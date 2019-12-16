@@ -38,11 +38,11 @@
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-    <Import Project="..\..\..\LibDebugL2.props" />
+    <Import Project="..\..\..\vsprops\LibDebugL2.props" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-    <Import Project="..\..\..\LibReleaseL2.props" />
+    <Import Project="..\..\..\vsprops\LibReleaseL2.props" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -87,6 +87,7 @@
     <ClCompile Include="..\..\..\source\icy_engine\core\icy_color.cpp" />
     <ClCompile Include="..\..\..\source\icy_engine\core\icy_event.cpp" />
     <ClCompile Include="..\..\..\source\icy_engine\core\icy_file.cpp" />
+    <ClCompile Include="..\..\..\source\icy_engine\core\icy_json.cpp" />
     <ClCompile Include="..\..\..\source\icy_engine\core\icy_memory.cpp" />
     <ClCompile Include="..\..\..\source\icy_engine\core\icy_string.cpp" />
     <ClCompile Include="..\..\..\source\icy_engine\core\icy_thread.cpp" />

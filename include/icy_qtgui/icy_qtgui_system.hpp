@@ -22,6 +22,7 @@ namespace icy
         window,
         message,
         menu,
+        menubar,
         line_edit,
         vsplitter,
         hsplitter,
@@ -29,6 +30,7 @@ namespace icy
         list_view,
         tree_view,
         grid_view,
+        label,
     };
 
     class gui_system
