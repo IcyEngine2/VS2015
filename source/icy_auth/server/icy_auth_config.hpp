@@ -40,7 +40,6 @@ public:
         static constexpr icy::string_view modules = "Modules"_s;
     };
 public:
-    icy::error_type initialize(const icy::const_array_view<icy::string_view> keys) noexcept;
     icy::error_type from_json(const icy::json& input) noexcept;
     icy::error_type to_json(icy::json& output) const noexcept;
     static icy::error_type copy(const auth_config_dbase& src, auth_config_dbase& dst) noexcept;

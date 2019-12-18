@@ -1,5 +1,5 @@
-#include "auth_database.hpp"
-#include "auth_config.hpp"
+#include "icy_auth_database.hpp"
+#include "icy_auth_config.hpp"
 
 #if _DEBUG
 #pragma comment(lib, "libsodiumd")

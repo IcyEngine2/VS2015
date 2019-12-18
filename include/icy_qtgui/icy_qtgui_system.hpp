@@ -19,18 +19,50 @@ namespace icy
     enum class gui_widget_type : uint32_t
     {
         none,
+        
         window,
-        message,
-        menu,
-        menubar,
-        line_edit,
         vsplitter,
         hsplitter,
+
+        //  -- text --
+
+        label,
+        line_edit,
+        text_edit,
+
+        //  -- menu --
+
+        menu,
+        menubar,
+
+        //  -- model view --
+
         combo_box,
         list_view,
         tree_view,
         grid_view,
-        label,
+
+        //  -- utility --
+
+        message,
+        progress,
+
+        //  --  buttons --
+
+        text_button,
+        tool_button,
+
+        //  --  dialogs --
+
+        dialog_open_file,
+        dialog_save_file,
+        dialog_select_directory,
+        dialog_select_color,
+        dialog_select_font,
+        dialog_input_line,
+        dialog_input_text,
+        dialog_input_integer,
+        dialog_input_double,
     };
 
     class gui_system
@@ -51,7 +83,7 @@ namespace icy
         virtual uint32_t bind(const gui_action action, const gui_widget menu) noexcept = 0;
     protected:
         ~gui_system() noexcept = default;
-    }; 
+    };
 }
 
-extern "C" uint32_t ICY_QTGUI_API icy_gui_system_create(const int version, const icy::global_heap_type heap, icy::gui_system** system) noexcept;
+extern "C" uint32_t ICY_QTGUI_API icy_gui_system_create(const int version, icy::gui_system** system) noexcept;

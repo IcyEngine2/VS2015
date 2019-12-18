@@ -54,13 +54,25 @@ namespace icy
 		ICY_DEFAULT_MOVE_ASSIGN(json);
         ~json() noexcept;
         error_type copy(json& dst) const noexcept;
-		error_type get(json_type_boolean& value) const noexcept;
-		error_type get(json_type_integer& value) const noexcept;
-        error_type get(json_type_double& value) const noexcept;
+        error_type get(bool& value) const noexcept;
+        error_type get(uint8_t& value) const noexcept;
+        error_type get(uint16_t& value) const noexcept;
+        error_type get(uint32_t& value) const noexcept;
+        error_type get(uint64_t& value) const noexcept;
+        error_type get(int8_t& value) const noexcept;
+        error_type get(int16_t& value) const noexcept;
+        error_type get(int32_t& value) const noexcept;
+        error_type get(int64_t& value) const noexcept;
+        error_type get(float& value) const noexcept;
+        error_type get(double& value) const noexcept;
         string_view get() const noexcept;
-		error_type get(const string_view key, json_type_boolean& value) const noexcept;
-		error_type get(const string_view key, json_type_integer& value) const noexcept;
-        error_type get(const string_view key, json_type_double& value) const noexcept;
+        template<typename T>
+        error_type get(const string_view key, T& value) const noexcept
+        {
+            if (const auto ptr = find(key))
+                return ptr->get(value);
+            return make_stdlib_error(std::errc::invalid_argument);
+        }
         string_view get(const string_view key) const noexcept;
         error_type get(const string_view key, json_type_string& value) const noexcept;
         size_t size() const noexcept;
@@ -75,8 +87,38 @@ namespace icy
 			return const_cast<json*>(static_cast<const json*>(this)->at(index));
 		}
 		error_type insert(const string_view key, json&& json) noexcept;
+        error_type insert(const string_view key, const bool value) noexcept
+        {
+            return insert(key, json(value));
+        }
+        template<typename T, typename = std::enable_if_t<std::is_integral<T>::value>>
+        error_type insert(const string_view key, const T value) noexcept
+        {
+            return insert(key, json(json_type_integer(value)));
+        }
+        error_type insert(const string_view key, const float value) noexcept
+        {
+            return insert(key, json(json_type_double(value)));
+        }
+        error_type insert(const string_view key, const double value) noexcept
+        {
+            return insert(key, json(value));
+        }
         error_type insert(const string_view key, const string_view value) noexcept;
 		error_type push_back(json&& json) noexcept;
+        template<typename T, typename = std::enable_if_t<std::is_integral<T>::value>>
+        error_type push_back(const T value) noexcept
+        {
+            return push_back(json(json_type_integer(value)));
+        }
+        error_type push_back(const float value) noexcept
+        {
+            return push_back(json(json_type_double(value)));
+        }
+        error_type push_back(const double value) noexcept
+        {
+            return push_back(json(value));
+        }
 		error_type reserve(const size_t size) noexcept;
 		const_array_view<string> keys() const noexcept;
         const_array_view<json> vals() const noexcept;

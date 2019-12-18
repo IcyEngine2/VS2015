@@ -180,13 +180,13 @@ error_type http_config::from_json(const icy::json& json) noexcept
         }
     }
     json.get(key::file_path, file_path);
-    json.get(key::file_size).to_value_uint(file_size);
-    json.get(key::port).to_value_uint(port);
-    json.get(key::max_conn).to_value_uint(max_conn);
-    json.get(key::max_size).to_value_uint(max_size);
+    json.get(key::file_size, file_size);
+    json.get(key::port, port);
+    json.get(key::max_conn, max_conn);
+    json.get(key::max_size, max_size);
 
     auto timeout_ms = 0u;
-    json.get(key::timeout).to_value_uint(timeout_ms);
+    json.get(key::timeout, timeout_ms);
     timeout = std::chrono::milliseconds(timeout_ms);
     file_size *= 1_mb;
     

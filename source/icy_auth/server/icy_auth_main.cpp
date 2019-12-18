@@ -1,9 +1,9 @@
 #include <icy_engine/core/icy_json.hpp>
 #include <icy_engine/core/icy_file.hpp>
-#include "auth_config.hpp"
-#include "auth_database.hpp"
-#include "auth_console.hpp"
-#include "auth_http.hpp"
+#include "icy_auth_config.hpp"
+#include "icy_auth_database.hpp"
+#include "icy_auth_console.hpp"
+#include "icy_auth_http.hpp"
 
 #pragma warning(disable:4063) // case 'identifier' is not a valid value for switch of enum 'enumeration'
 

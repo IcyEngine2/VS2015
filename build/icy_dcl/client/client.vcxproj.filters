@@ -21,7 +21,10 @@
     <ClCompile Include="..\..\..\source\icy_dcl\client\icy_dcl_client_text_enUS.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\source\icy_dcl\client\icy_dcl_client_server.cpp">
+    <ClCompile Include="..\..\..\source\icy_dcl\client\icy_dcl_client_core.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_dcl\client\icy_dcl_client_menu.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -29,7 +32,16 @@
     <ClInclude Include="..\..\..\source\icy_dcl\client\icy_dcl_client_text.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\source\icy_dcl\client\icy_dcl_client_server.hpp">
+    <ClInclude Include="..\..\..\source\icy_dcl\client\icy_dcl_client_core.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\icy_dcl\client\icy_dcl_client_menu.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\icy_engine\core\icy_new.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Qt5\qtbase\src\gui\kernel\qwindowsysteminterface_p.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

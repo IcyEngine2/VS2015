@@ -43,11 +43,13 @@ namespace icy
 
     inline void* realloc(const void* const old_ptr, const size_t new_size) noexcept
     {
-        return detail::global_heap.realloc(old_ptr, new_size, detail::global_heap.user);
+        return detail::global_heap.realloc ? 
+            detail::global_heap.realloc(old_ptr, new_size, detail::global_heap.user) : nullptr;
     }
     inline size_t memsize(const void* const ptr) noexcept
     {
-        return detail::global_heap.memsize(ptr, detail::global_heap.user);
+        return detail::global_heap.memsize ?
+            detail::global_heap.memsize(ptr, detail::global_heap.user) : 0_z;
     }
 
     struct heap_init

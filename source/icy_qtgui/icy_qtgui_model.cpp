@@ -11,10 +11,12 @@
 
 using namespace icy;
 
+
 extern uint32_t qtgui_model_bind(const QModelIndex& index, const gui_widget& widget);
 extern QAbstractItemModel* qtgui_model_create(QObject& root, gui_model_base& base);
 extern QVariant qtgui_make_variant(const gui_variant& var);
 extern std::errc qtgui_make_variant(const QVariant& qvar, gui_variant& var);
+extern void qtgui_exit(const std::errc code);
 
 ICY_STATIC_NAMESPACE_BEG
 enum qtgui_flag
@@ -226,8 +228,8 @@ bool qtgui_model::event(QEvent* event)
             error = std::errc::function_not_supported;
             break;
         }
-        if (const auto cerr = static_cast<int>(error))
-            qApp->exit(cerr);
+        if (error != std::errc(0))
+            qtgui_exit(error);
     }
     return QAbstractItemModel::event(event);
 }
@@ -284,7 +286,7 @@ QVariant qtgui_model::data(const QModelIndex& index, int qtrole) const
     node.par = index.parent().internalId();
     gui_variant value;
     if (const auto error = m_base.data(node, role, value))
-        qApp->exit(error);
+        qtgui_exit(std::errc(error));
     return qtgui_make_variant(value);
 }
 

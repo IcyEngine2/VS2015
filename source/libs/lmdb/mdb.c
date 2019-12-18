@@ -756,10 +756,6 @@ typedef uint16_t	 indx_t;
 #define CACHELINE	64
 #endif
 
-#if _WIN32
-#define sprintf sprintf_s
-#endif
-
 	/**	The information we store in a single slot of the reader table.
 	 *	In addition to a transaction ID, we also record the process and
 	 *	thread ID that owns a slot, so that we can detect stale information,

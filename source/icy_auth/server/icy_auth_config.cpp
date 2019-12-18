@@ -1,16 +1,16 @@
-#include "auth_config.hpp"
+#include "icy_auth_config.hpp"
 
 using namespace icy;
 
 error_type auth_config_dbase::from_json(const json& input) noexcept
 {
     ICY_ERROR(to_string(input.get(key::file_path), file_path));
-    ICY_ERROR(input.get(key::file_size).to_value(file_size));
+    ICY_ERROR(input.get(key::file_size, file_size));
     file_size *= 1_mb;
-    ICY_ERROR(input.get(key::clients).to_value(clients));
-    ICY_ERROR(input.get(key::modules).to_value(modules));
+    ICY_ERROR(input.get(key::clients, clients));
+    ICY_ERROR(input.get(key::modules, modules));
     auto timeout_ms = 0u;    
-    ICY_ERROR(input.get(key::modules).to_value(timeout_ms));
+    ICY_ERROR(input.get(key::timeout, timeout_ms));
     timeout = std::chrono::milliseconds(timeout_ms);
     return {};
 }
@@ -20,8 +20,8 @@ error_type auth_config_dbase::to_json(json& output) const noexcept
     ICY_ERROR(output.insert(key::file_size, json_type_integer(file_size / 1_mb)));
     ICY_ERROR(output.insert(key::file_path, file_path));
     ICY_ERROR(output.insert(key::clients, json_type_integer(clients)));
-    ICY_ERROR(output.insert(key::clients, json_type_integer(modules)));
-    ICY_ERROR(output.insert(key::clients, std::chrono::duration_cast<std::chrono::milliseconds>(timeout).count()));
+    ICY_ERROR(output.insert(key::modules, json_type_integer(modules)));
+    ICY_ERROR(output.insert(key::timeout, std::chrono::duration_cast<std::chrono::milliseconds>(timeout).count()));
     return {};
 }
 error_type auth_config_dbase::copy(const auth_config_dbase& src, auth_config_dbase& dst) noexcept
@@ -36,7 +36,7 @@ error_type auth_config_dbase::copy(const auth_config_dbase& src, auth_config_dba
 
 error_type auth_config_network::from_json(const json& input) noexcept
 {
-    input.get(key::file_size).to_value(file_size);
+    input.get(key::file_size, file_size);
     input.get(key::file_path, file_path);
     file_size *= 1_mb;
 
@@ -124,7 +124,7 @@ error_type auth_config::from_json(const json& input) noexcept
     ICY_ERROR(module.from_json(*json_module));
     ICY_ERROR(admin.from_json(*json_admin));
 
-    input.get(key::gheap_size).to_value_uint(gheap_size);
+    input.get(key::gheap_size, gheap_size);
     if (!gheap_size) gheap_size = default_values::gheap_size;
 
     return {};
@@ -144,7 +144,7 @@ error_type auth_config::to_json(json& output) const noexcept
     ICY_ERROR(output.insert(key::client, std::move(json_client)));
     ICY_ERROR(output.insert(key::module, std::move(json_module)));
     ICY_ERROR(output.insert(key::admin, std::move(json_admin)));
-    ICY_ERROR(output.insert(key::gheap_size, icy::json_type_integer(gheap_size)));
+    ICY_ERROR(output.insert(key::gheap_size, gheap_size));
     return {};
 }
 error_type auth_config::copy(const auth_config& src, auth_config& dst) noexcept

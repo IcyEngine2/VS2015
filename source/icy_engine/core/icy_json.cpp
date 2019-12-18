@@ -31,6 +31,22 @@ static json_type get_json_type(const string_view str, const jsmntok_t& token) no
 	}
 	return json_type::none;
 };
+template<typename T>
+static error_type json_to_integer(const json& json, T& value) noexcept
+{
+    json_type_integer integer = 0;
+    ICY_ERROR(json.get(integer));
+    const auto max = std::numeric_limits<T>::max();
+    const auto min = std::numeric_limits<T>::min();
+    if (integer > max)
+        value = max;
+    else if (integer < min)
+        value = min;
+    else
+        value = T(integer);
+    return {};
+}
+
 json::json(json&& rhs) noexcept : m_type(rhs.m_type)
 {
     switch (m_type)
@@ -246,7 +262,41 @@ error_type json::get(json_type_boolean& value) const noexcept
     }
     return {};
 }
-error_type json::get(json_type_integer& value) const noexcept
+error_type json::get(uint8_t& value) const noexcept
+{
+    return json_to_integer(*this, value);
+}
+error_type json::get(uint16_t& value) const noexcept
+{
+    return json_to_integer(*this, value);
+}
+error_type json::get(uint32_t& value) const noexcept
+{
+    return json_to_integer(*this, value);
+}
+error_type json::get(uint64_t& value) const noexcept
+{
+    json_type_integer integer = 0;
+    ICY_ERROR(get(integer));
+    if (integer < 0)
+        value = 0;
+    else
+        value = uint64_t(integer);
+    return {};
+}
+error_type json::get(int8_t& value) const noexcept
+{
+    return json_to_integer(*this, value);
+}
+error_type json::get(int16_t& value) const noexcept
+{
+    return json_to_integer(*this, value);
+}
+error_type json::get(int32_t& value) const noexcept
+{
+    return json_to_integer(*this, value);
+}
+error_type json::get(int64_t& value) const noexcept
 {
     switch (m_type)
     {
@@ -257,7 +307,7 @@ error_type json::get(json_type_integer& value) const noexcept
         value = m_integer;
         break;
     case json_type::floating:
-        value = json_type_integer(m_floating);
+        value = llround(m_floating);
         break;
     default:
         value = 0;
@@ -265,7 +315,29 @@ error_type json::get(json_type_integer& value) const noexcept
     }
     return {};
 }
-error_type json::get(json_type_double& value) const noexcept
+error_type json::get(float& value) const noexcept
+{
+    const auto max = std::numeric_limits<float>::max();
+    const auto min = std::numeric_limits<float>::min();
+    json_type_double ext_value = 0;
+    ICY_ERROR(get(ext_value));
+    const auto abs_value = fabs(ext_value);
+    const auto sign = std::signbit(ext_value);
+    if (abs_value > max)
+    {
+        value = sign ? -max : +max;        
+    }
+    else if (abs_value < min)
+    {
+        value = sign ? -min : +min;
+    }
+    else
+    {
+        value = float(ext_value);
+    }
+    return {};
+}
+error_type json::get(double& value) const noexcept
 {
     switch (m_type)
     {
@@ -290,24 +362,6 @@ string_view json::get() const noexcept
         return m_string;
     else
         return string_view{};
-}
-error_type json::get(const string_view key, json_type_boolean& value) const noexcept
-{
-    if (const auto ptr = find(key))
-        return ptr->get(value);
-    return make_stdlib_error(std::errc::invalid_argument);
-}
-error_type json::get(const string_view key, json_type_integer& value) const noexcept
-{
-    if (const auto ptr = find(key))
-        return ptr->get(value);
-    return make_stdlib_error(std::errc::invalid_argument);
-}
-error_type json::get(const string_view key, json_type_double& value) const noexcept
-{
-    if (const auto ptr = find(key))
-        return ptr->get(value);
-    return make_stdlib_error(std::errc::invalid_argument);
 }
 string_view json::get(const string_view key) const noexcept
 {

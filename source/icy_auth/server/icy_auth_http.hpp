@@ -1,6 +1,6 @@
 #pragma once
 
-#include "auth_config.hpp"
+#include "icy_auth_config.hpp"
 #include <icy_engine/core/icy_thread.hpp>
 
 class auth_database;

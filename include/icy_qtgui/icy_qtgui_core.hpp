@@ -6,13 +6,17 @@
 
 #define ICY_GUI_ERROR(X) if (const auto error = (X)) return make_stdlib_error(static_cast<std::errc>(error)); return {};
 
+#if ICY_QTGUI_STATIC
+#define ICY_QTGUI_API
+#else
 #ifdef ICY_QTGUI_EXPORTS
 #define ICY_QTGUI_API __declspec(dllexport)
 #else
 #define ICY_QTGUI_API __declspec(dllimport)
 #endif
+#endif
 
-#define ICY_GUI_VERSION 0x0004'0003
+#define ICY_GUI_VERSION 0x0005'0001
 
 #pragma warning(push)
 #pragma warning(disable:4201)

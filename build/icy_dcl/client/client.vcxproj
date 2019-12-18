@@ -58,7 +58,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>ICY_QTGUI_STATIC=1;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
@@ -73,7 +73,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>ICY_QTGUI_STATIC=1;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
@@ -84,13 +84,17 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\..\source\icy_dcl\client\icy_dcl_client_core.cpp" />
     <ClCompile Include="..\..\..\source\icy_dcl\client\icy_dcl_client_main.cpp" />
     <ClCompile Include="..\..\..\source\icy_dcl\client\icy_dcl_client_text_enUS.cpp" />
-    <ClCompile Include="..\..\..\source\icy_dcl\client\icy_dcl_client_server.cpp" />
+    <ClCompile Include="..\..\..\source\icy_dcl\client\icy_dcl_client_menu.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\..\include\icy_engine\core\icy_new.hpp" />
+    <ClInclude Include="..\..\..\source\icy_dcl\client\icy_dcl_client_menu.hpp" />
+    <ClInclude Include="..\..\..\source\icy_dcl\client\icy_dcl_client_core.hpp" />
     <ClInclude Include="..\..\..\source\icy_dcl\client\icy_dcl_client_text.hpp" />
-    <ClInclude Include="..\..\..\source\icy_dcl\client\icy_dcl_client_server.hpp" />
+    <ClInclude Include="C:\Qt5\qtbase\src\gui\kernel\qwindowsysteminterface_p.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

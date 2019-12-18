@@ -1,5 +1,5 @@
-#include "auth_http.hpp"
-#include "auth_database.hpp"
+#include "icy_auth_http.hpp"
+#include "icy_auth_database.hpp"
 #include <icy_engine/core/icy_file.hpp>
 
 using namespace icy;

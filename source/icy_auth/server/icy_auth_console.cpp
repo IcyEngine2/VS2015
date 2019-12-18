@@ -2,9 +2,9 @@
 #include <icy_engine/core/icy_array.hpp>
 #include <icy_engine/core/icy_json.hpp>
 #include <icy_engine/parser/icy_parser_cmd.hpp>
-#include "auth_console.hpp"
-#include "auth_config.hpp"
-#include "auth_database.hpp"
+#include "icy_auth_console.hpp"
+#include "icy_auth_config.hpp"
+#include "icy_auth_database.hpp"
 
 using namespace icy;
 

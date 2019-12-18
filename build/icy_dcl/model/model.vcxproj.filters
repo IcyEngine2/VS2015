@@ -15,7 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\..\source\icy_dcl\core\icy_dcl_core_main.cpp">
+    <ClCompile Include="..\..\..\source\icy_dcl\model\icy_dcl_model_main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

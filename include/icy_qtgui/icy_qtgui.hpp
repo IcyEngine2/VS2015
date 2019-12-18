@@ -87,12 +87,11 @@ namespace icy
         gui_model_view m_view;
         base_type m_base;
     };
-
-
+    
     class gui_queue : public event_queue
     {
         enum { tag };
-        error_type initialize(icy::heap& heap) noexcept;
+        error_type initialize() noexcept;
     public:
         gui_queue(decltype(tag)) noexcept
         {
@@ -106,16 +105,20 @@ namespace icy
         {
             if (m_system)
                 m_system->release();
+#if ICY_QTGUI_STATIC
+            ;
+#else
             m_library.shutdown();
+#endif
         }
         static error_type create(shared_ptr<gui_queue>& queue, gui_system& gui) noexcept
         {
             return make_shared(queue, tag, gui);
         }
-        static error_type create(shared_ptr<gui_queue>& queue, icy::heap& heap) noexcept
+        static error_type create(shared_ptr<gui_queue>& queue) noexcept
         {
             ICY_ERROR(make_shared(queue, tag));
-            if (const auto error = queue->initialize(heap))
+            if (const auto error = queue->initialize())
             {
                 queue = nullptr;
                 return error;
@@ -192,32 +195,36 @@ namespace icy
             ICY_GUI_ERROR(m_system->bind(action, menu));
         }
     private:
+#if ICY_QTGUI_STATIC
+
+#else
 #if _DEBUG
         library m_library = "icy_qtguid"_lib;
 #else
         library m_library = "icy_qtgui"_lib;
 #endif
+#endif
         gui_system* m_system = nullptr;
     };
  }
 
-inline icy::error_type icy::gui_queue::initialize(icy::heap& heap) noexcept
+inline icy::error_type icy::gui_queue::initialize() noexcept
 {
     if (m_system)
         m_system->release();
     m_system = nullptr;
-    ICY_ERROR(m_library.initialize());
 
+#if ICY_QTGUI_STATIC
+    ICY_GUI_ERROR(icy_gui_system_create(ICY_GUI_VERSION, &m_system));    
+#else
+    ICY_ERROR(m_library.initialize());
     if (const auto func = ICY_FIND_FUNC(m_library, icy_gui_system_create))
     {
-        global_heap_type gheap;
-        gheap.realloc = [](const void* ptr, size_t size, void* user) { return static_cast<icy::heap*>(user)->realloc(ptr, size); };
-        gheap.memsize = [](const void* ptr, void* user) { return static_cast<icy::heap*>(user)->memsize(ptr); };
-        gheap.user = &heap;
-        const auto err = func(ICY_GUI_VERSION, gheap, &m_system);
+        const auto err = func(ICY_GUI_VERSION, &m_system);
         ICY_GUI_ERROR(err);
     }
     else
         return make_stdlib_error(std::errc::function_not_supported);
+#endif
     return{};
 }

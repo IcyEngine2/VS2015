@@ -9,7 +9,18 @@ extern icy::string_view to_string(const text text) noexcept;
 enum class text : uint32_t
 {
     none,
+    version_client,
+    version_server,
+    progress_total,
+    progress_citem,
+    network,
     connect,
-    disconnect,
-    server,
+    update,
+    upload,
+    project,
+    open,
+    close,
+    create,
+    save,
+    options,
 };
