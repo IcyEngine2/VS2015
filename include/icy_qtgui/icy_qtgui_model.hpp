@@ -32,6 +32,13 @@ namespace icy
     {
         view,
         edit,
+        check,
+    };
+    enum class gui_check_state : uint32_t
+    {
+        unchecked,
+        partial,
+        checked,
     };
     struct gui_model_view
     {

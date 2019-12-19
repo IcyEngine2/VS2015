@@ -16,7 +16,7 @@
 #endif
 #endif
 
-#define ICY_GUI_VERSION 0x0005'0001
+#define ICY_GUI_VERSION 0x0005'0002
 
 #pragma warning(push)
 #pragma warning(disable:4201)
@@ -312,7 +312,7 @@ namespace icy
     {
         ICY_GUI_ERROR(var.initialize(alloc, user, str.bytes().data(), str.bytes().size(), gui_variant_type::lstring));
     }
-    template<typename T>
+    template<typename T, typename = std::enable_if_t<std::is_trivially_destructible<T>::value>>
     inline uint32_t make_variant(gui_variant& var, const realloc_func alloc, void* const user, const T& data) noexcept
     {
         static_assert(std::is_trivially_destructible<T>::value, "INVALID STRUCT VARIANT TYPE");

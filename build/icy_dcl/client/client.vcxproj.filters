@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Source Files\utility">
+      <UniqueIdentifier>{d13d9679-9f77-434b-880f-adf0c4045dbb}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\..\source\icy_dcl\client\icy_dcl_client_main.cpp">
@@ -24,7 +27,10 @@
     <ClCompile Include="..\..\..\source\icy_dcl\client\icy_dcl_client_core.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\source\icy_dcl\client\icy_dcl_client_menu.cpp">
+    <ClCompile Include="..\..\..\source\icy_engine\utility\icy_database.cpp">
+      <Filter>Source Files\utility</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_dcl\client\icy_dcl_client_menu_bar.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -35,13 +41,10 @@
     <ClInclude Include="..\..\..\source\icy_dcl\client\icy_dcl_client_core.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\source\icy_dcl\client\icy_dcl_client_menu.hpp">
+    <ClInclude Include="..\..\..\source\icy_dcl\client\icy_dcl_client_tools.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\include\icy_engine\core\icy_new.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\Qt5\qtbase\src\gui\kernel\qwindowsysteminterface_p.h">
+    <ClInclude Include="..\..\..\source\icy_dcl\client\icy_dcl_client_menu_bar.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

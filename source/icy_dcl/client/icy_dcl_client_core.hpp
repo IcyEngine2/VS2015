@@ -2,10 +2,12 @@
 
 #include <icy_engine/core/icy_event.hpp>
 #include <icy_engine/core/icy_json.hpp>
+#include <icy_qtgui/icy_qtgui.hpp>
 
 using icy::operator""_s;
 
 static constexpr auto dcl_client_max_progress = 10'000u;
+
 
 class dcl_client_config
 {
@@ -15,8 +17,10 @@ public:
         static constexpr icy::string_view hostname = "Hostname"_s;
         static constexpr icy::string_view username = "Username"_s;
         static constexpr icy::string_view password = "Password"_s;  
-        static constexpr icy::string_view file_path = "File Path"_s;
-        static constexpr icy::string_view file_size = "File Size"_s;
+        static constexpr icy::string_view system_path = "System Project Path"_s;
+        static constexpr icy::string_view system_size = "System Project Size"_s;
+        static constexpr icy::string_view user_path = "User Project Path"_s;
+        static constexpr icy::string_view user_size = "User Project Size"_s;
     };
 public:
     icy::error_type from_json(const icy::json& input) noexcept;
@@ -26,76 +30,79 @@ public:
     icy::string hostname;
     uint64_t username = 0;
     icy::string password;
-    icy::string file_path;
-    size_t file_size = 0;
+    icy::string system_path;
+    icy::string user_path;
+    size_t system_size = 0;
+    size_t user_size = 0;
 };
-
-namespace dcl_event_type
+class dcl_client_network_model : public icy::gui_model
 {
-    static constexpr auto config = icy::event_user(0x00);
-    using msg_config = dcl_client_config;
-
-    static constexpr auto network_connect = icy::event_user(0x01);
-    struct msg_network_connect
+public:
+    struct col
     {
-        enum class state : uint32_t
+        enum : uint32_t
         {
-            none,
-            request,    //  gui -> main (button click)
-            cancel,     //  gui -> main (window close)
-            append_log, //  main -> gui
+            time,
+            message,
+            error,
         };
-        state state = state::none;
-        icy::string text;
     };
-
-    static constexpr auto network_update = icy::event_user(0x02);
-    struct msg_network_update
+public:
+    uint32_t data(const icy::gui_node node, const icy::gui_role role, icy::gui_variant& value) const noexcept override;
+    icy::error_type data(const icy::gui_node node, const icy::gui_role role, icy::string& str) const noexcept;
+private:
+    struct data_type
     {
-        enum class state : uint32_t
-        {
-            none,
-            request,    //  gui -> main (button click)
-            cancel,     //  gui -> main (window close)
-            append_log, //  main -> gui
-        };
-        state state = state::none;
-        uint64_t version_client = 0;
-        uint64_t version_server = 0;
-        uint64_t progress_total = 0;
-        uint64_t progress_citem = 0;
-        icy::string text;
+        icy::clock_type::time_point time;
+        icy::string message;
+        icy::string error;
     };
-
-    static constexpr auto network_upload = icy::event_user(0x03);
-    struct msg_network_upload
+private:
+    icy::array<data_type> m_data;
+};
+class dcl_client_upload_model : public icy::gui_model
+{
+public:
+    uint32_t data(const icy::gui_node node, const icy::gui_role role, icy::gui_variant& value) const noexcept;
+private:
+    struct data_type
     {
-        enum class state : uint32_t
-        {
-            none,
-            request,    //  gui -> main (button click)
-            cancel,     //  gui -> main (window close)
-            append_log, //  main -> gui
-        };
-        state state = state::none;
-        icy::string desc;
+        icy::gui_check_state check = icy::gui_check_state::unchecked;
+        icy::guid guid;
+        icy::string name;
     };
+private:
+    icy::array<data_type> m_data;
+};
+struct dcl_client_state : dcl_client_config
+{
+    uint64_t version_client = 0;
+    uint64_t version_server = 0;
+    uint64_t bytesize_current = 0;
+    uint64_t bytesize_maximum = 0;
+    dcl_client_network_model connect_network_model;
+    dcl_client_network_model update_network_model;
+    dcl_client_network_model upload_network_model;
+    dcl_client_upload_model upload_data_model;
+    icy::string upload_message;
+};
+namespace dcl_event_type
+{ 
+    static constexpr auto network_connect_begin     =   icy::event_user(0x01);
+    static constexpr auto network_connect_cancel    =   icy::event_user(0x02);
+    static constexpr auto network_update_begin      =   icy::event_user(0x03);
+    static constexpr auto network_update_changed    =   icy::event_user(0x04);
+    static constexpr auto network_update_cancel     =   icy::event_user(0x05);
+    static constexpr auto network_upload_begin      =   icy::event_user(0x06);
+    static constexpr auto network_upload_changed    =   icy::event_user(0x07);
+    static constexpr auto network_upload_cancel     =   icy::event_user(0x08);
     
-    static constexpr auto project_open = icy::event_user(0x04);
-    struct msg_project_open 
-    {
-        icy::string file;
-    };
+    static constexpr auto project_request_open      =   icy::event_user(0x0A);
+    static constexpr auto project_request_close     =   icy::event_user(0x0B);
+    static constexpr auto project_request_create    =   icy::event_user(0x0C);
+    static constexpr auto project_request_save      =   icy::event_user(0x0D);
+    static constexpr auto project_opened            =   icy::event_user(0x0E);
+    static constexpr auto project_closed            =   icy::event_user(0x0F);
 
-    static constexpr auto project_close = icy::event_user(0x05);
-    using msg_project_close = std::integral_constant<uint64_t, project_close>;
-
-    static constexpr auto project_create = icy::event_user(0x06);
-    struct msg_project_create
-    {
-        icy::string file;
-    };
-
-    static constexpr auto project_save = icy::event_user(0x07);
-    using msg_project_save = std::integral_constant<uint64_t, project_save>;
+    struct msg_project_request_open     { icy::string filename; };
 }

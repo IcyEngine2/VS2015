@@ -11,8 +11,6 @@ enum class text : uint32_t
     none,
     version_client,
     version_server,
-    progress_total,
-    progress_citem,
     network,
     connect,
     update,
@@ -23,4 +21,7 @@ enum class text : uint32_t
     create,
     save,
     options,
+    error_open_project,
+    error_create_project,
+    ok,
 };

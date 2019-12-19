@@ -9,12 +9,16 @@ namespace icy
     struct gui_model_view;
     struct gui_event;
     
-    enum class gui_layout : uint32_t
+    enum class gui_widget_flag : uint32_t
     {
         none,
-        hbox = 0x01,
-        vbox = 0x02,
-        grid = 0x03,
+
+        layout_hbox =   0x01,
+        layout_vbox =   0x02,
+        layout_grid =   0x03,
+
+        auto_insert =   0x04,
+        read_only   =   0x08,
     };
     enum class gui_widget_type : uint32_t
     {
@@ -73,7 +77,7 @@ namespace icy
         virtual void release() noexcept = 0;
         virtual uint32_t wake() noexcept = 0;
         virtual uint32_t loop(event_type& type, gui_event& args) noexcept = 0;
-        virtual uint32_t create(gui_widget& widget, const gui_widget_type type, const gui_layout layout, const gui_widget parent) noexcept = 0;
+        virtual uint32_t create(gui_widget& widget, const gui_widget_type type, const gui_widget parent, const gui_widget_flag flags = gui_widget_flag::none) noexcept = 0;
         virtual uint32_t create(gui_action& action, const string_view text) noexcept = 0;
         virtual uint32_t initialize(gui_model_view& view, gui_model_base& base) noexcept = 0;
         virtual uint32_t insert(const gui_widget widget, const uint32_t x, const uint32_t y, const uint32_t dx, const uint32_t dy) noexcept = 0;
@@ -81,9 +85,18 @@ namespace icy
         virtual uint32_t show(const gui_widget widget, const bool value) noexcept = 0;
         virtual uint32_t text(const gui_widget widget, const string_view text) noexcept = 0;
         virtual uint32_t bind(const gui_action action, const gui_widget menu) noexcept = 0;
+        virtual uint32_t enable(const gui_action action, const bool value) noexcept = 0;
     protected:
         ~gui_system() noexcept = default;
     };
+    inline gui_widget_flag operator|(const gui_widget_flag lhs, const gui_widget_flag rhs) noexcept
+    {
+        return gui_widget_flag(uint32_t(lhs) | uint32_t(rhs));
+    }
+    inline bool operator&(const gui_widget_flag lhs, const gui_widget_flag rhs) noexcept
+    {
+        return !!(uint32_t(lhs) & uint32_t(rhs));
+    }
 }
 
 extern "C" uint32_t ICY_QTGUI_API icy_gui_system_create(const int version, icy::gui_system** system) noexcept;

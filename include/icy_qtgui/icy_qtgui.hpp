@@ -152,9 +152,9 @@ namespace icy
                 }
             }
         }
-        error_type create(gui_widget& widget, const gui_widget_type type, const gui_layout layout = gui_layout::none, const gui_widget parent = {}) noexcept
+        error_type create(gui_widget& widget, const gui_widget_type type, const gui_widget parent, const gui_widget_flag flags = gui_widget_flag::none) noexcept
         {
-            ICY_GUI_ERROR(m_system->create(widget, type, layout, parent));
+            ICY_GUI_ERROR(m_system->create(widget, type, parent, flags));
         }
         error_type create(gui_action& action, const string_view text = {}) noexcept
         {
@@ -189,6 +189,10 @@ namespace icy
         error_type text(const gui_widget widget, const string_view text) noexcept
         {
             ICY_GUI_ERROR(m_system->text(widget, text));
+        }
+        error_type enable(const gui_action action, const bool value) noexcept
+        {
+            ICY_GUI_ERROR(m_system->enable(action, value));
         }
         error_type bind(const gui_action action, const gui_widget menu) noexcept
         {
