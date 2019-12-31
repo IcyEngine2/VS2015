@@ -1,6 +1,6 @@
 #pragma once
 
-#include "icy_event.hpp"
+#include <icy_engine/core/icy_event.hpp>
 
 struct HWND__;
 

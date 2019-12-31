@@ -1,5 +1,6 @@
 bin
 obj
 lib
+dat
 *.vs
 build/test

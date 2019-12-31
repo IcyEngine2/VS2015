@@ -4,7 +4,7 @@
 
 using namespace icy;
 
-error_type http_system::launch(network_system& network, const http_config& config) noexcept
+error_type http_system::launch(network_system_tcp& network, const http_config& config) noexcept
 {
     if (!config.max_conn || !config.port)
         return make_stdlib_error(std::errc::invalid_argument);
@@ -16,7 +16,7 @@ error_type http_system::launch(network_system& network, const http_config& confi
 	auto done = false;
 	ICY_SCOPE_EXIT{ if (!done) shutdown(); };
 
-	auto clients = allocator_type::allocate<network_connection>(config.max_conn);
+	auto clients = allocator_type::allocate<network_tcp_connection>(config.max_conn);
 	if (!clients)
 		return make_stdlib_error(std::errc::not_enough_memory);
 	ICY_SCOPE_EXIT
@@ -31,7 +31,7 @@ error_type http_system::launch(network_system& network, const http_config& confi
 	for (auto k = 0u; k < config.max_conn; ++k)
 		allocator_type::construct(clients + k, network_connection_type::http);
 	
-	ICY_ERROR(network.launch(config.port, network_socket_type::TCP, config.addr_type, config.max_conn));
+	ICY_ERROR(network.launch(config.port, config.addr_type, config.max_conn));
 	for (auto k = 0u; k < config.max_conn; ++k)
 	{
 		clients[k].timeout(config.timeout);
@@ -47,7 +47,7 @@ error_type http_thread::loop(http_event& event, bool& exit) noexcept
 {
 	while (true)
 	{
-		network_reply reply;
+		network_tcp_reply reply;
 		ICY_ERROR(m_system.m_network->loop(reply, exit));
 		if (exit)
 			break;

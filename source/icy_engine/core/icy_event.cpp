@@ -21,8 +21,7 @@ private:
             event = pop();
             if (event)
                 break;
-
-            m_cvar.wait(m_mutex, timeout);
+            ICY_ERROR(m_cvar.wait(m_mutex, timeout));
         }
         return {};
     }

@@ -1,8 +1,6 @@
 #include <icy_engine/core/icy_string.hpp>
 #include <icy_engine/core/icy_array.hpp>
 #include <icy_engine/core/icy_map.hpp>
-#define NOMINMAX
-#define WIN32_MEAN_AND_LEAN
 #include <guiddef.h>
 #include <Windows.h>
 #define snscanf _snscanf_s

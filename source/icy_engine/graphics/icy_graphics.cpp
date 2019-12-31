@@ -1,42 +1,13 @@
-#include <icy_engine/icy_adapter.hpp>
-#include <icy_engine/icy_string.hpp>
-#include <icy_engine/icy_array.hpp>
-#include <icy_engine/icy_display.hpp>
-#include <icy_engine/icy_utility.hpp>
-#include "icy_com.hpp"
+#include <icy_engine/core/icy_array.hpp>
+#include <icy_engine/utility/icy_com.hpp>
+#include "icy_adapter.hpp"
+#include "icy_system.hpp"
 #include <dxgi1_6.h>
 #include <dxgidebug.h>
 #include <d3d12.h>
 #include <d3d11_4.h>
 
 using namespace icy;
-
-class adapter::data_type
-{
-public:
-    error_type initialize(const com_ptr<IDXGIAdapter> adapter, const adapter_flag flags) noexcept;
-    IDXGIAdapter& adapter() const noexcept
-    {
-        return *m_adapter;
-    }
-    string_view name() const noexcept
-    {
-        return m_name;
-    }
-    adapter_flag flags() const noexcept
-    {
-        return m_flags;
-    }
-    error_type msaa_d3d11(array<uint32_t>& array) noexcept;
-    error_type msaa_d3d12(array<uint32_t>& array) noexcept;
-    std::atomic<uint32_t> ref = 1;
-private:
-    library m_lib_dxgi = "dxgi"_lib;
-    library m_lib_debug = "dxgidebug"_lib;
-    com_ptr<IDXGIAdapter> m_adapter;
-    adapter_flag m_flags = adapter_flag::none;
-    string m_name;
-};
 
 error_type adapter::data_type::initialize(const com_ptr<IDXGIAdapter> adapter, const adapter_flag flags) noexcept
 {
@@ -212,27 +183,6 @@ adapter::~adapter() noexcept
         any_system_shutdown(data);
 }
 
-namespace icy
-{
-    error_type display_create_d3d12(const adapter& adapter, const display_flag flags, shared_ptr<display>& output) noexcept;
-    error_type display_create_d3d11(const adapter&, const display_flag, shared_ptr<display>&) noexcept
-    {
-        return make_stdlib_error(std::errc::function_not_supported);
-    }
-}
-
-error_type display::create(shared_ptr<display>& output, const adapter& adapter, const display_flag flags) noexcept
-{
-    if (!adapter.data)
-        return make_stdlib_error(std::errc::invalid_argument);
-
-    if (adapter.data->flags() & adapter_flag::d3d12)
-        return display_create_d3d12(adapter, flags, output);
-    else if (adapter.data->flags() & adapter_flag::d3d11)
-        return display_create_d3d11(adapter, flags, output);
-    else
-        return make_stdlib_error(std::errc::invalid_argument);
-}
 error_type adapter::data_type::msaa_d3d12(array<uint32_t>& quality) noexcept
 {
     quality.clear();
@@ -296,4 +246,24 @@ error_type adapter::data_type::msaa_d3d11(array<uint32_t>& quality) noexcept
         return make_stdlib_error(std::errc::function_not_supported);
     }
     return {};
+}
+
+
+namespace icy
+{
+    error_type display_create_d3d12(const adapter&, const display_flag, shared_ptr<display>&) noexcept;
+    error_type display_create_d3d11(const adapter&, const display_flag, shared_ptr<display>&) noexcept;
+}
+
+error_type display::create(shared_ptr<display>& output, const adapter& adapter, const display_flag flags) noexcept
+{
+    if (!adapter.data)
+        return make_stdlib_error(std::errc::invalid_argument);
+
+    if (adapter.data->flags() & adapter_flag::d3d12)
+        return display_create_d3d12(adapter, flags, output);
+    else if (adapter.data->flags() & adapter_flag::d3d11)
+        return display_create_d3d11(adapter, flags, output);
+    else
+        return make_stdlib_error(std::errc::invalid_argument);
 }

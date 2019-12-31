@@ -16,6 +16,12 @@ namespace icy
     private:
         thread_system* m_prev = nullptr;
     };
+    enum class thread_state : uint32_t
+    {
+        none,
+        run,
+        done,
+    };
     class thread
     {
     public:
@@ -32,7 +38,7 @@ namespace icy
         static size_t cores() noexcept;
     public:
         unsigned index() const noexcept;
-        bool running() const noexcept;
+        thread_state state() const noexcept;
         error_type error() const noexcept;
         void exit(const error_type error) noexcept;
         void quit() noexcept

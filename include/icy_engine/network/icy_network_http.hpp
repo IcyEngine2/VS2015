@@ -22,7 +22,7 @@ namespace icy
 			return m_conn->address();
 		}
 	private:
-		network_connection* m_conn = nullptr;
+		network_tcp_connection* m_conn = nullptr;
 	};
 	class http_thread
 	{
@@ -96,15 +96,15 @@ namespace icy
 		{
 			shutdown();
 		}
-		error_type launch(network_system& network, const http_config& config) noexcept;
+		error_type launch(network_system_tcp& network, const http_config& config) noexcept;
 		void shutdown() noexcept;
         const http_config& config() const noexcept
         {
             return m_config;
         }
 	private:
-		network_system* m_network = nullptr;
-		network_connection* m_clients = nullptr;
+		network_system_tcp* m_network = nullptr;
+		network_tcp_connection* m_clients = nullptr;
 		http_config m_config;
 		std::atomic<size_t> m_cores = 0;
 	};

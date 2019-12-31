@@ -136,7 +136,7 @@ struct thread::data_type
         {
             {
                 ICY_LOCK_GUARD(lock);
-                running = false;
+                state = thread_state::done;
             }
             cvar.wake();
             WaitForSingleObject(handle, INFINITE);
@@ -151,7 +151,7 @@ struct thread::data_type
     }
     mutex lock;
     cvar cvar;
-    bool running = false;
+    thread_state state = thread_state::none;
     uint32_t index = 0u;
     uint32_t source = 0u;
     HANDLE handle = nullptr;
@@ -175,14 +175,14 @@ unsigned thread::index() const noexcept
 {
     return m_data ? m_data->index : 0;
 }
-bool thread::running() const noexcept
+thread_state thread::state() const noexcept
 {
     if (m_data)
     {
         ICY_LOCK_GUARD(m_data->lock);
-        return m_data->running;
+        return m_data->state;
     }
-    return false;
+    return thread_state::none;
 }
 error_type thread::error() const noexcept
 {
@@ -199,7 +199,7 @@ void thread::exit(const error_type error) noexcept
     {
         ICY_LOCK_GUARD(m_data->lock);
         m_data->error = error;
-        m_data->running = false;
+        m_data->state = thread_state::done;
     }
 }
 error_type thread::wait() noexcept
@@ -236,13 +236,13 @@ error_type thread::launch() noexcept
         g_this_thread = thr;
         {
             ICY_LOCK_GUARD(thr->m_data->lock);
-            thr->m_data->running = true;
+            thr->m_data->state = thread_state::run;
         }
         thr->m_data->cvar.wake();
         const auto error = thr->run();
         {
             ICY_LOCK_GUARD(thr->m_data->lock);
-            thr->m_data->running = false;
+            thr->m_data->state = thread_state::done;
             thr->m_data->error = error;
         }
         thr->m_data->cvar.wake();
@@ -257,7 +257,7 @@ error_type thread::launch() noexcept
         ICY_ERROR(m_data->cvar.wait(m_data->lock));
         ICY_LOCK_GUARD(m_data->lock);
         ICY_ERROR(m_data->error);
-        if (m_data->running)
+        if (m_data->state != thread_state::none)
             break;
     }
     success = true;

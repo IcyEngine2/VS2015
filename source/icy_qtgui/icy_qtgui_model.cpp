@@ -11,7 +11,6 @@
 
 using namespace icy;
 
-
 extern uint32_t qtgui_model_bind(const QModelIndex& index, const gui_widget& widget);
 extern QAbstractItemModel* qtgui_model_create(QObject& root, gui_model_base& base);
 extern QVariant qtgui_make_variant(const gui_variant& var);
@@ -73,6 +72,7 @@ enum class qtgui_event_type : uint32_t
     bind,
     sort,
     update,
+    clear,
 };
 class qtgui_event : public QEvent
 {
@@ -104,7 +104,8 @@ public:
         { return static_cast<qtgui_model*>(model.ptr)->bind(node, widget); };
         vtbl.update = [](const gui_model_view model, const gui_node node)
         { return static_cast<qtgui_model*>(model.ptr)->update(node); };
-
+        vtbl.clear = [](const gui_model_view model)
+        { return static_cast<qtgui_model*>(model.ptr)->clear(); };
         base.assign(vtbl);
     }
     ~qtgui_model() noexcept
@@ -142,6 +143,7 @@ public:
         }
         ICY_CATCH;
     }
+    uint32_t clear() noexcept;
 private:
     bool event(QEvent* event) override;
     QModelIndex index(int row, int col, const QModelIndex& parent) const override;
@@ -166,8 +168,22 @@ private:
     }
     std::errc process_update(const qtgui_event& event)
     {
-        const auto index = event.node ? createIndex(event.node.row, event.node.col, event.node.idx) : QModelIndex();
-        emit dataChanged(index, index);
+        if (event.node.idx)
+        {
+            const auto index = event.node ? createIndex(event.node.row, event.node.col, event.node.idx) : QModelIndex();
+            emit dataChanged(index, index);
+        }
+        else
+        {
+            beginResetModel();            
+            endResetModel();
+        }
+       return {};
+    }
+    std::errc process_clear(const qtgui_event& event)
+    {
+        beginResetModel();
+        endResetModel();
         return {};
     }
 private:
@@ -200,6 +216,21 @@ uint32_t qtgui_model::init(gui_node& node) noexcept
     }
     ICY_CATCH;
 }
+uint32_t qtgui_model::clear() noexcept
+{
+    try
+    {
+        {
+            QMutexLocker lk(&m_lock);
+            m_data.clear();
+            m_data.push_back(qtgui_node());
+        }
+        const auto event = new qtgui_event(gui_node(), qtgui_event_type::clear);
+        qApp->postEvent(this, event);
+        return 0;
+    }
+    ICY_CATCH;
+}
 bool qtgui_model::event(QEvent* event)
 {
     if (event->type() >= QEvent::Type::User && event->type() < QEvent::Type::MaxUser)
@@ -208,7 +239,6 @@ bool qtgui_model::event(QEvent* event)
         const auto type = static_cast<qtgui_event_type>(event->type() - QEvent::Type::User);
         QMutexLocker lk(&m_lock);
         const auto& gui_event = *static_cast<qtgui_event*>(event);
-
 
         switch (type)
         {
@@ -222,6 +252,10 @@ bool qtgui_model::event(QEvent* event)
 
         case qtgui_event_type::update:
             error = process_update(gui_event);
+            break;
+
+        case qtgui_event_type::clear:
+            error = process_clear(gui_event);
             break;
 
         default:
@@ -317,46 +351,52 @@ QVariant qtgui_make_variant(const gui_variant& var)
 }
 std::errc qtgui_make_variant(const QVariant& qvar, gui_variant& var)
 {
-    auto ok = true;
+    auto ok = false;
     switch (qvar.type())
     {
-        case QVariant::Type::Bool:
-            var = qvar.toBool();
-            break;
-        
-        case QVariant::Type::Char:
-        case QVariant::Type::Int:
-        case QVariant::Type::LongLong:
-            var = qvar.toLongLong(&ok);
-            break;
-
-        case QVariant::Type::UInt:
-        case QVariant::Type::ULongLong:
-            var = qvar.toULongLong(&ok);
-            break;
-
-        case QVariant::Type::Double:
-            var = qvar.toDouble(&ok);
-            break;
-
-        case QVariant::Type::String:
+    case QVariant::Type::ModelIndex:
+    {
+        ok = true;
+        auto index = qvar.toModelIndex();
+        gui_node node;
+        if (index.isValid())
         {
-            const auto str = qvar.toString();
-            const auto bytes = str.toUtf8();
-            if (bytes.size() < gui_variant::max_length)
-            {
-                var = string_view(bytes);
-            }
-            else
-            {
-                if (const auto error = var.initialize(detail::global_heap.realloc,
-                    detail::global_heap.user, bytes.data(), bytes.size(), gui_variant_type::lstring))
-                {
-                    return static_cast<std::errc>(error);
-                }
-            }
-            break;
+            node.row = index.row();
+            node.col = index.column();
+            node.par = index.parent().internalId();
+            node.idx = index.internalId();
         }
+        var = node;
+        break;
+    }
+
+    case QVariant::Type::Bool:
+        ok = true;
+        var = qvar.toBool();
+        break;
+
+    case QVariant::Type::Char:
+    case QVariant::Type::Int:
+    case QVariant::Type::LongLong:
+        var = qvar.toLongLong(&ok);
+        break;
+
+    case QVariant::Type::UInt:
+    case QVariant::Type::ULongLong:
+        var = qvar.toULongLong(&ok);
+        break;
+
+    case QVariant::Type::Double:
+        var = qvar.toDouble(&ok);
+        break;
+
+    case QVariant::Type::String:
+    {
+        ok = true;
+        const auto str = qvar.toString();
+        const auto bytes = str.toUtf8();
+        return std::errc(make_variant(var, string_view(bytes)).code);
+    }
     }
     if (!ok)
         return std::errc::invalid_argument;

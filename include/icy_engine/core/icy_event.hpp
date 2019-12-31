@@ -18,7 +18,7 @@ namespace icy
             bitcnt_con  =   0x03,
             bitcnt_win  =   0x06,
             bitcnt_dsp  =   0x02,
-            bitcnt_gui  =   0x02,
+            bitcnt_gui  =   0x04,
 
             bitcnt_usr  =   0x20,
         };
@@ -88,6 +88,8 @@ namespace icy
 
             gui_action              =   1ui64   <<  (offset_gui + 0x00),    //  action index
             gui_update              =   1ui64   <<  (offset_gui + 0x01),    //  widget index + variant
+            gui_context             =   1ui64   <<  (offset_gui + 0x02),    //  widget(view) + node
+            gui_select              =   1ui64   <<  (offset_gui + 0x03),    //  widget(view) + node
             gui_any                 =   mask_gui,
 
             user                    =   1ui64   <<  (offset_usr + 0x00),

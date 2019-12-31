@@ -7,7 +7,7 @@
 #include <d2d1_3helper.h>
 #include <dwrite_3.h>
 #pragma warning(pop)
-#include "../../external/src/nanosvg/nanosvg.h"
+#include "nanosvg.h"
 using namespace icy;
 
 #define ICY_DWRITE_ERROR(HR) if (const auto hr_ = HR){ m_error = make_system_error(hr_); return hr_; }
@@ -391,7 +391,7 @@ error_type render_svg_geometry::data_type::initialize(const render_d2d_matrix& t
     ICY_ERROR(to_string(text, str));
 
     NSVGimage* image = nullptr;
-    if (const auto error = nsvgParse(str.bytes().data(), &image))
+    if (const auto error = nsvgParse(const_cast<char*>(str.bytes().data()), &image))
         return make_stdlib_error(static_cast<std::errc>(error));
     ICY_SCOPE_EXIT{ nsvgDelete(image); };
 
@@ -720,4 +720,4 @@ static void* nsvg__realloc(void* ptr, size_t size)
 {
 	return g_alloc->realloc(ptr, size, g_alloc->user);
 }
-#include "../../external/src/nanosvg/nanosvg.h"
+#include "nanosvg.h"

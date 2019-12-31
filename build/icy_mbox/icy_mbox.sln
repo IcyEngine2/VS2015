@@ -1,0 +1,84 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29411.108
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_mbox_server", "icy_mbox_server\icy_mbox_server.vcxproj", "{1DFDD079-D8E1-41C6-9A33-EFDC4C3FC096}"
+	ProjectSection(ProjectDependencies) = postProject
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC} = {B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}
+		{4D337F45-E466-4650-9782-63FAEA81F1B1} = {4D337F45-E466-4650-9782-63FAEA81F1B1}
+		{9902EF57-99B8-4977-B390-8C1CB00E9688} = {9902EF57-99B8-4977-B390-8C1CB00E9688}
+		{3CE5E45C-FA8F-4368-86EF-3B91526FA07B} = {3CE5E45C-FA8F-4368-86EF-3B91526FA07B}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_mbox_client", "icy_mbox_client\icy_mbox_client.vcxproj", "{3CE5E45C-FA8F-4368-86EF-3B91526FA07B}"
+	ProjectSection(ProjectDependencies) = postProject
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC} = {B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}
+		{9902EF57-99B8-4977-B390-8C1CB00E9688} = {9902EF57-99B8-4977-B390-8C1CB00E9688}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "core", "..\icy_engine\core\core.vcxproj", "{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "network", "..\icy_engine\network\network.vcxproj", "{9902EF57-99B8-4977-B390-8C1CB00E9688}"
+	ProjectSection(ProjectDependencies) = postProject
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC} = {B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_qtgui", "..\icy_qtgui\icy_qtgui.vcxproj", "{4D337F45-E466-4650-9782-63FAEA81F1B1}"
+	ProjectSection(ProjectDependencies) = postProject
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC} = {B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_mbox_test", "icy_mbox_test\icy_mbox_test.vcxproj", "{45411011-E38F-479D-80CD-38D70BE1FD79}"
+	ProjectSection(ProjectDependencies) = postProject
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC} = {B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}
+		{2529D4F5-C845-4B41-B789-4FCFFF27B9BA} = {2529D4F5-C845-4B41-B789-4FCFFF27B9BA}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "graphics", "..\icy_engine\graphics\graphics.vcxproj", "{2529D4F5-C845-4B41-B789-4FCFFF27B9BA}"
+	ProjectSection(ProjectDependencies) = postProject
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC} = {B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1DFDD079-D8E1-41C6-9A33-EFDC4C3FC096}.Debug|x64.ActiveCfg = Debug|x64
+		{1DFDD079-D8E1-41C6-9A33-EFDC4C3FC096}.Debug|x64.Build.0 = Debug|x64
+		{1DFDD079-D8E1-41C6-9A33-EFDC4C3FC096}.Release|x64.ActiveCfg = Release|x64
+		{1DFDD079-D8E1-41C6-9A33-EFDC4C3FC096}.Release|x64.Build.0 = Release|x64
+		{3CE5E45C-FA8F-4368-86EF-3B91526FA07B}.Debug|x64.ActiveCfg = Debug|x64
+		{3CE5E45C-FA8F-4368-86EF-3B91526FA07B}.Debug|x64.Build.0 = Debug|x64
+		{3CE5E45C-FA8F-4368-86EF-3B91526FA07B}.Release|x64.ActiveCfg = Release|x64
+		{3CE5E45C-FA8F-4368-86EF-3B91526FA07B}.Release|x64.Build.0 = Release|x64
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}.Debug|x64.ActiveCfg = Debug|x64
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}.Debug|x64.Build.0 = Debug|x64
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}.Release|x64.ActiveCfg = Release|x64
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}.Release|x64.Build.0 = Release|x64
+		{9902EF57-99B8-4977-B390-8C1CB00E9688}.Debug|x64.ActiveCfg = Debug|x64
+		{9902EF57-99B8-4977-B390-8C1CB00E9688}.Debug|x64.Build.0 = Debug|x64
+		{9902EF57-99B8-4977-B390-8C1CB00E9688}.Release|x64.ActiveCfg = Release|x64
+		{9902EF57-99B8-4977-B390-8C1CB00E9688}.Release|x64.Build.0 = Release|x64
+		{4D337F45-E466-4650-9782-63FAEA81F1B1}.Debug|x64.ActiveCfg = Debug|x64
+		{4D337F45-E466-4650-9782-63FAEA81F1B1}.Debug|x64.Build.0 = Debug|x64
+		{4D337F45-E466-4650-9782-63FAEA81F1B1}.Release|x64.ActiveCfg = Release|x64
+		{4D337F45-E466-4650-9782-63FAEA81F1B1}.Release|x64.Build.0 = Release|x64
+		{45411011-E38F-479D-80CD-38D70BE1FD79}.Debug|x64.ActiveCfg = Debug|x64
+		{45411011-E38F-479D-80CD-38D70BE1FD79}.Debug|x64.Build.0 = Debug|x64
+		{45411011-E38F-479D-80CD-38D70BE1FD79}.Release|x64.ActiveCfg = Release|x64
+		{45411011-E38F-479D-80CD-38D70BE1FD79}.Release|x64.Build.0 = Release|x64
+		{2529D4F5-C845-4B41-B789-4FCFFF27B9BA}.Debug|x64.ActiveCfg = Debug|x64
+		{2529D4F5-C845-4B41-B789-4FCFFF27B9BA}.Debug|x64.Build.0 = Debug|x64
+		{2529D4F5-C845-4B41-B789-4FCFFF27B9BA}.Release|x64.ActiveCfg = Release|x64
+		{2529D4F5-C845-4B41-B789-4FCFFF27B9BA}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {3F60C343-066E-4216-B9DC-A2AAB90A0938}
+	EndGlobalSection
+EndGlobal

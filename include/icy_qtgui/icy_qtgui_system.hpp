@@ -16,9 +16,7 @@ namespace icy
         layout_hbox =   0x01,
         layout_vbox =   0x02,
         layout_grid =   0x03,
-
         auto_insert =   0x04,
-        read_only   =   0x08,
     };
     enum class gui_widget_type : uint32_t
     {
@@ -27,6 +25,8 @@ namespace icy
         window,
         vsplitter,
         hsplitter,
+        tabs,
+        frame,
 
         //  -- text --
 
@@ -69,6 +69,14 @@ namespace icy
         dialog_input_double,
     };
 
+    struct gui_widget_args_keys
+    {
+        static constexpr string_view layout = "Layout"_s;
+        static constexpr string_view stretch = "Stretch"_s;
+        static constexpr string_view row = "Row"_s;
+        static constexpr string_view col = "Col"_s;
+    };
+
     class gui_system
 	{
 	public:
@@ -80,12 +88,15 @@ namespace icy
         virtual uint32_t create(gui_widget& widget, const gui_widget_type type, const gui_widget parent, const gui_widget_flag flags = gui_widget_flag::none) noexcept = 0;
         virtual uint32_t create(gui_action& action, const string_view text) noexcept = 0;
         virtual uint32_t initialize(gui_model_view& view, gui_model_base& base) noexcept = 0;
-        virtual uint32_t insert(const gui_widget widget, const uint32_t x, const uint32_t y, const uint32_t dx, const uint32_t dy) noexcept = 0;
+        virtual uint32_t insert(const gui_widget widget, const gui_insert args) noexcept = 0;
         virtual uint32_t insert(const gui_widget widget, const gui_action action) noexcept = 0;
         virtual uint32_t show(const gui_widget widget, const bool value) noexcept = 0;
         virtual uint32_t text(const gui_widget widget, const string_view text) noexcept = 0;
         virtual uint32_t bind(const gui_action action, const gui_widget menu) noexcept = 0;
         virtual uint32_t enable(const gui_action action, const bool value) noexcept = 0;
+        virtual uint32_t modify(const gui_widget widget, const string_view args) noexcept = 0;
+        virtual uint32_t destroy(const gui_widget widget) noexcept = 0;
+        virtual uint32_t destroy(const gui_action action) noexcept = 0;
     protected:
         ~gui_system() noexcept = default;
     };

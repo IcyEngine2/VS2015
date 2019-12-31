@@ -160,9 +160,9 @@ namespace icy
     struct file_name
     {
         file_name(const string_view file) noexcept;
-        string_view dir;
-        string_view nam;
-        string_view ext;
+        string_view directory;
+        string_view name;
+        string_view extension;
     };
 
     error_type make_directory(const string_view path) noexcept;

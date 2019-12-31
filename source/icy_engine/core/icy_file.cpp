@@ -1,9 +1,9 @@
 #include <icy_engine/core/icy_file.hpp>
 #include <icy_engine/core/icy_array.hpp>
 #include <icy_engine/core/icy_string.hpp>
+#include <icy_engine/utility/icy_com.hpp>
 #include <Windows.h>
 #include <Shobjidl.h>
-#include "icy_com.hpp"
 
 using namespace icy;
 
@@ -418,13 +418,13 @@ file_name::file_name(const string_view file) noexcept
         {
             if (chr == chr_dot)
             {
-                ext = string_view(ptr + k, ptr + len);
+                extension = string_view(ptr + k, ptr + len);
                 state = find_delim;
             }
             else if (chr == chr_delim_0 || chr == chr_delim_1)
             {
-                nam = string_view(ptr + k + 1, ptr + len);
-                dir = string_view(ptr, ptr + k + 1);
+                name = string_view(ptr + k + 1, ptr + len);
+                directory = string_view(ptr, ptr + k + 1);
                 return;
             }
         }
@@ -432,16 +432,16 @@ file_name::file_name(const string_view file) noexcept
         {
             if (chr == chr_delim_0 || chr == chr_delim_1)
             {
-                nam = string_view(ptr + k + 1, ext.bytes().data());
-                dir = string_view(ptr, ptr + k + 1);
+                name = string_view(ptr + k + 1, extension.bytes().data());
+                directory = string_view(ptr, ptr + k + 1);
                 return;
             }
         }
     }
-    if (ext.empty())
-        nam = file;
+    if (extension.empty())
+        name = file;
     else
-        nam = string_view(ptr, ext.bytes().data());
+        name = string_view(ptr, extension.bytes().data());
 }
 
 error_type icy::make_directory(const string_view path) noexcept

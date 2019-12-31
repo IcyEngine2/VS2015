@@ -19,6 +19,7 @@
 #define ICY_SCOPE_SUCCESS ICY_SCOPE_SUCCESS_EX [&]()
 #define ICY_STATIC_NAMESPACE_BEG namespace {
 #define ICY_STATIC_NAMESPACE_END }
+#define ICY_DECLARE_INJECT_FUNC(X) extern "C" __declspec(dllexport) unsigned __stdcall X(icy::inject_args* args)
 #define ICY_ASSERT(EXPR, MESSAGE) \
     { static_assert(std::is_same<decltype(MESSAGE[0]), const char&>::value,\
     "ASSERTION BUG"); assert(MESSAGE && EXPR); }
@@ -525,7 +526,7 @@ namespace icy
         {
 
         }
-        guid(const unsigned long x0, const unsigned long x1) noexcept : x0(x0), x1(x1)
+        guid(const uint64_t x0, const uint64_t x1) noexcept : x0(x0), x1(x1)
         {
 
         }
@@ -647,6 +648,8 @@ namespace icy
     error_type console_read_line(string& str, bool& exit) noexcept;
     error_type console_read_key(key& key) noexcept;
     error_type win32_parse_cargs(array<string>& args) noexcept;
+    error_type computer_name(string& str) noexcept;
+    error_type process_name(string& str) noexcept;
 
     class library
     {
@@ -684,11 +687,41 @@ namespace icy
     {
         return library(name);
     }
+
+    struct inject_args
+    {
+        error_type error;
+        size_t len = 0;
+        char str[1];
+    };
+
+    struct rectangle
+    {
+        rectangle() noexcept : x(0), y(0), w(0), h(0)
+        {
+
+        }
+        uint32_t x;
+        uint32_t y;
+        uint32_t w;
+        uint32_t h;
+    };
 }
 
 #if !defined _CONSOLE
 struct HINSTANCE__;
+#if _USRDLL
+enum class dll_main : uint32_t
+{
+    process_attach = 1,
+    process_detach = 0,
+    thread_attach = 2,
+    thread_detach = 3,
+};
+#define main() __stdcall DllMain(HINSTANCE__*, dll_main source, void*)
+#else
 #define main() __stdcall wWinMain(HINSTANCE__*, HINSTANCE__*, wchar_t*, int)
+#endif
 namespace icy
 {
     HINSTANCE__* win32_instance() noexcept;

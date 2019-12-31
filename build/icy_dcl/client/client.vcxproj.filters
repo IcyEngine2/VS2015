@@ -21,9 +21,6 @@
     <ClCompile Include="..\..\..\source\icy_dcl\client\icy_dcl_client_main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\source\icy_dcl\client\icy_dcl_client_text_enUS.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\..\source\icy_dcl\client\icy_dcl_client_core.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -31,6 +28,36 @@
       <Filter>Source Files\utility</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\source\icy_dcl\client\icy_dcl_client_menu_bar.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_dcl\icy_dcl.cpp">
+      <Filter>Source Files\utility</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_dcl\icy_dcl_dbase.cpp">
+      <Filter>Source Files\utility</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_dcl\client\icy_dcl_client_explorer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_dcl\client\icy_dcl_client_tools.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_dcl\client\icy_dcl_client_view_directory.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_dcl\client\icy_dcl_client_view_users.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_dcl\client\icy_dcl_client_properties.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_dcl\client\icy_dcl_client_text_enUS.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_dcl\client\icy_dcl_client_rename2.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_dcl\client\icy_dcl_locale_model.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -47,5 +74,28 @@
     <ClInclude Include="..\..\..\source\icy_dcl\client\icy_dcl_client_menu_bar.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\source\icy_dcl\icy_dcl_dbase.hpp">
+      <Filter>Source Files\utility</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\icy_dcl\client\icy_dcl_client_view_directory.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\icy_dcl\client\icy_dcl_client_view_users.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\icy_dcl\client\icy_dcl_client_explorer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\icy_dcl\client\icy_dcl_client_properties.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\icy_dcl\client\icy_dcl_client_rename.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="..\..\..\icy_types.natvis">
+      <Filter>Resource Files</Filter>
+    </Natvis>
   </ItemGroup>
 </Project>

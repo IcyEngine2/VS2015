@@ -1,9 +1,12 @@
-#include <icy_qtgui/icy_qtgui.hpp>
+#include <icy_qtgui/icy_qtgui_system.hpp>
+#include <icy_qtgui/icy_qtgui_model.hpp>
 #include <QtCore/qtimer.h>
 #include <QtCore/qmutex.h>
 #include <QtCore/qthread.h>
 #include <QtCore/qplugin.h>
+#include <QtCore/qqueue.h>
 #include <QtCore/qthreadpool.h>
+#include <QtCore/qjsondocument.h>
 #include <QtGui/qevent.h>
 #include <QtWidgets/qapplication.h>
 #include <QtWidgets/qstylefactory.h>
@@ -21,6 +24,7 @@
 #include <QtWidgets/qsplitter.h>
 #include <QtWidgets/qcombobox.h>
 #include <QtWidgets/qabstractitemview.h>
+#include <QtWidgets/qheaderview.h>
 #include <QtWidgets/qlistview.h>
 #include <QtWidgets/qtreeview.h>
 #include <QtWidgets/qtableview.h>
@@ -95,24 +99,26 @@ struct qtgui_event_node
     event_type type = event_type::none; 
     gui_event args;
 };
-QLayout* make_layout(const gui_widget_flag layout, QWidget& parent)
+QLayout* make_layout(gui_widget_flag flags, QWidget& parent)
 {
-    switch (layout)
+    const auto layout = uint32_t(flags) & uint32_t(gui_widget_flag::layout_grid);
+    switch (gui_widget_flag(layout))
     {
-    case gui_widget_flag::layout_grid:
-        return new QGridLayout(&parent);
-    case gui_widget_flag::layout_hbox:
+    case icy::gui_widget_flag::layout_hbox:
         return new QHBoxLayout(&parent);
-    case gui_widget_flag::layout_vbox:
+    case icy::gui_widget_flag::layout_vbox:
         return new QVBoxLayout(&parent);
+    case icy::gui_widget_flag::layout_grid:
+        return new QGridLayout(&parent);
     default:
         return nullptr;
-    }
+    }    
 }
 QString make_string(const string_view str)
 {
     return QString::fromUtf8(str.bytes().data(), static_cast<int>(str.bytes().size()));
 }
+
 enum class qtgui_event_type : uint32_t
 {
     none,
@@ -125,7 +131,11 @@ enum class qtgui_event_type : uint32_t
     bind_action,
     bind_widget,
     enable_action,
+    modify_widget,
+    destroy_widget,
+    destroy_action,
 };
+
 class qtgui_event_create_widget : public QEvent
 {
 public:
@@ -157,18 +167,15 @@ public:
 class qtgui_event_insert_widget : public QEvent
 {
 public:
-    qtgui_event_insert_widget(const gui_widget widget, const uint32_t x, const uint32_t y, const uint32_t dx, const uint32_t dy) :
+    qtgui_event_insert_widget(const gui_widget widget, gui_insert args) :
         QEvent(static_cast<QEvent::Type>(QEvent::User + static_cast<uint32_t>(qtgui_event_type::insert_widget))),
-        widget(widget), x(x), y(y), dx(dx), dy(dy)
+        widget(widget), args(args)
     {
 
     }
 public:
     const gui_widget widget;
-    const uint32_t x;
-    const uint32_t y;
-    const uint32_t dx;
-    const uint32_t dy;
+    const gui_insert args;
 };
 class qtgui_event_insert_action : public QEvent
 {
@@ -235,7 +242,6 @@ public:
     const gui_action action;
     const bool value;
 };
-
 class qtgui_event_bind_widget : public QEvent
 {
 public:
@@ -248,6 +254,43 @@ public:
 public:
     const gui_widget widget;
     const QModelIndex index;
+};
+class qtgui_event_modify_widget : public QEvent
+{
+public:
+    qtgui_event_modify_widget(const gui_widget widget, QVariantMap&& args) :
+        QEvent(static_cast<QEvent::Type>(QEvent::User + static_cast<uint32_t>(qtgui_event_type::modify_widget))),
+        widget(widget), args(std::move(args))
+    {
+
+    }
+public:
+    const gui_widget widget;
+    const QVariantMap args;
+};
+class qtgui_event_destroy_widget : public QEvent
+{
+public:
+    qtgui_event_destroy_widget(const gui_widget widget) : 
+        QEvent(static_cast<QEvent::Type>(QEvent::User + static_cast<uint32_t>(qtgui_event_type::destroy_widget))),
+        widget(widget)
+    {
+
+    }
+public:
+    const gui_widget widget;
+};
+class qtgui_event_destroy_action : public QEvent
+{
+public:
+    qtgui_event_destroy_action(const gui_action action) :
+        QEvent(static_cast<QEvent::Type>(QEvent::User + static_cast<uint32_t>(qtgui_event_type::destroy_action))),
+        action(action)
+    {
+
+    }
+public:
+    const gui_action action;
 };
 class qtgui_splitter : public QSplitter
 {
@@ -265,12 +308,15 @@ private:
     uint32_t create(gui_widget& widget, const gui_widget_type type, const gui_widget parent, const gui_widget_flag flags) noexcept override;
     uint32_t create(gui_action& action, const string_view text) noexcept override;
     uint32_t initialize(gui_model_view& view, gui_model_base& base) noexcept override;
-    uint32_t insert(const gui_widget widget, const uint32_t x, const uint32_t y, const uint32_t dx, const uint32_t dy) noexcept override;
+    uint32_t insert(const gui_widget widget, const gui_insert args) noexcept override;
     uint32_t insert(const gui_widget widget, const gui_action action) noexcept override;
     uint32_t show(const gui_widget widget, const bool value) noexcept override;
     uint32_t text(const gui_widget widget, const string_view text) noexcept override;
     uint32_t bind(const gui_action action, const gui_widget widget) noexcept override;
     uint32_t enable(const gui_action action, const bool value) noexcept override;
+    uint32_t modify(const gui_widget widget, const string_view args) noexcept override;
+    uint32_t destroy(const gui_widget widget) noexcept override;
+    uint32_t destroy(const gui_action action) noexcept override;
 private:
     std::errc process(const qtgui_event_create_widget& event);
     std::errc process(const qtgui_event_create_action& event);
@@ -281,12 +327,17 @@ private:
     std::errc process(const qtgui_event_bind_action& event);
     std::errc process(const qtgui_event_bind_widget& event);
     std::errc process(const qtgui_event_enable_action& event);
+    std::errc process(const qtgui_event_modify_widget& event);
+    std::errc process(const qtgui_event_destroy_widget& event);
+    std::errc process(const qtgui_event_destroy_action& event);
 private:
     detail::intrusive_mpsc_queue m_queue;
     QWidget m_root;
     QMutex m_lock;
     QList<QWidget*> m_widgets;
     QList<QAction*> m_actions;
+    QQueue<uint64_t> m_free_widgets;
+    QQueue<uint64_t> m_free_actions;
 };
 ICY_STATIC_NAMESPACE_END
 
@@ -312,12 +363,31 @@ bool qtgui_system::notify(QObject* object, QEvent* event) noexcept
             if (event->type() == QEvent::Type::Close && qobject_cast<QMainWindow*>(object))
             {
                 event->ignore();
+
+                const auto index = object->property(qtgui_property_name).toULongLong();
+                
+                auto node_0 = new qtgui_event_node;
+                node_0->type = event_type::window_close;
+                node_0->args.widget.index = index;
+                m_queue.push(node_0);
+
+                auto node_1 = new qtgui_event_node;
+                node_1->type = event_type::gui_action;
+                node_1->args.widget.index = index;
+                m_queue.push(node_1);
+
+                qtgui_exit();
+                return 0;
+            }
+            else if (event->type() == QEvent::Type::Close && qobject_cast<QMenu*>(object))
+            {
                 auto node = new qtgui_event_node;
-                node->type = event_type::window_close;
                 node->args.widget.index = object->property(qtgui_property_name).toULongLong();
+                node->type = event_type::gui_action;
                 m_queue.push(node);
                 qtgui_exit();
-                return {};
+                output = QApplication::notify(object, event);
+                return 0;
             }
             else if (event->type() == QEvent::Type::Quit)
             {
@@ -364,6 +434,18 @@ bool qtgui_system::notify(QObject* object, QEvent* event) noexcept
                 else if (type == qtgui_event_type::enable_action)
                 {
                     error = process(*static_cast<qtgui_event_enable_action*>(event));
+                }
+                else if (type == qtgui_event_type::modify_widget)
+                {
+                    error = process(*static_cast<qtgui_event_modify_widget*>(event));
+                }
+                else if (type == qtgui_event_type::destroy_widget)
+                {
+                    error = process(*static_cast<qtgui_event_destroy_widget*>(event));
+                }
+                else if (type == qtgui_event_type::destroy_action)
+                {
+                    error = process(*static_cast<qtgui_event_destroy_action*>(event));
                 }
                 else
                 {
@@ -423,8 +505,16 @@ uint32_t qtgui_system::create(gui_widget& widget, const gui_widget_type type, co
     {
         {
             QMutexLocker lk(&m_lock);
-            m_widgets.push_back(nullptr);
-            widget.index = static_cast<uint64_t>(m_widgets.size() - 1);
+            auto index = m_widgets.size();
+            if (m_free_widgets.empty())
+            {
+                m_widgets.push_back(nullptr);
+            }
+            else
+            {
+                index = m_free_widgets.takeFirst();
+            }
+            widget.index = uint64_t(index);
         }
         const auto event = new qtgui_event_create_widget(widget, type, parent, flags);
         qApp->postEvent(this, event);
@@ -437,9 +527,17 @@ uint32_t qtgui_system::create(gui_action& action, const string_view text) noexce
     try
     {
         {
-            QMutexLocker lk(&m_lock);
-            m_actions.push_back(nullptr);
-            action.index = static_cast<uint64_t>(m_actions.size() - 1);
+            QMutexLocker lk(&m_lock); 
+            auto index = m_actions.size();
+            if (m_free_actions.empty())
+            {
+                m_actions.push_back(nullptr);
+            }
+            else
+            {
+                index = m_free_actions.takeFirst();
+            }
+            action.index = uint64_t(index);
         }
         const auto event = new qtgui_event_create_action(action, make_string(text));
         qApp->postEvent(this, event);
@@ -458,11 +556,11 @@ uint32_t qtgui_system::initialize(gui_model_view& view, gui_model_base& base) no
     ICY_CATCH;
     return {};
 }
-uint32_t qtgui_system::insert(const gui_widget widget, const uint32_t x, const uint32_t y, const uint32_t dx, const uint32_t dy) noexcept
+uint32_t qtgui_system::insert(const gui_widget widget, const gui_insert args) noexcept
 {
     try
     {
-        const auto event = new qtgui_event_insert_widget(widget, x, y, dx, dy);
+        const auto event = new qtgui_event_insert_widget(widget, args);
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
@@ -518,6 +616,38 @@ uint32_t qtgui_system::enable(const gui_action action, const bool value) noexcep
     ICY_CATCH;
     return {};
 }
+uint32_t qtgui_system::modify(const gui_widget widget, const string_view args) noexcept
+{
+    try
+    {
+        auto doc = QJsonDocument::fromJson(QByteArray(args.bytes().data(), int(args.bytes().size())));
+        const auto event = new qtgui_event_modify_widget(widget, doc.toVariant().toMap());
+        qApp->postEvent(this, event);
+    }
+    ICY_CATCH;
+    return {};
+}
+uint32_t qtgui_system::destroy(const gui_widget widget) noexcept
+{
+    try
+    {
+        const auto event = new qtgui_event_destroy_widget(widget);
+        qApp->postEvent(this, event);
+    }
+    ICY_CATCH;
+    return {};
+}
+uint32_t qtgui_system::destroy(const gui_action action) noexcept
+{
+    try
+    {
+        const auto event = new qtgui_event_destroy_action(action);
+        qApp->postEvent(this, event);
+    }
+    ICY_CATCH;
+    return {};
+}
+
 std::errc qtgui_system::process(const qtgui_event_create_widget& event)
 {
     if (event.widget.index >= m_widgets.size())
@@ -532,10 +662,10 @@ std::errc qtgui_system::process(const qtgui_event_create_widget& event)
         parent = parent_window->centralWidget();
 
     const auto index = event.widget.index;
-    const auto update_func = [this, index](const QVariant& var)
+    const auto func = [this, index](const QVariant& var, const event_type type)
     {
         auto node = new qtgui_event_node;
-        node->type = event_type::gui_update;
+        node->type = type;
         node->args.widget.index = index;
         const auto cerr = qtgui_make_variant(var, node->args.data);
         m_queue.push(node);
@@ -569,19 +699,25 @@ std::errc qtgui_system::process(const qtgui_event_create_widget& event)
         widget = new qtgui_splitter(Qt::Horizontal, parent);
         break;
 
+    case gui_widget_type::tabs:
+        widget = new QTabWidget(parent);
+        break;
+
     case gui_widget_type::label:
         widget = new QLabel(parent);
+        break;
+
+    case gui_widget_type::frame:
+        widget = new QFrame(parent);
+        make_layout(event.flags, *widget);
         break;
 
     case gui_widget_type::line_edit:
     {
         const auto line_edit = new QLineEdit(parent);
         widget = line_edit;
-        if (event.flags & gui_widget_flag::read_only)
-            line_edit->setReadOnly(true);
-
         QObject::connect(line_edit, &QLineEdit::editingFinished,
-            [update_func, line_edit]() { update_func(line_edit->text()); });
+            [func, line_edit]() { func(line_edit->text(), event_type::gui_update); });
         break;
     }
 
@@ -589,18 +725,15 @@ std::errc qtgui_system::process(const qtgui_event_create_widget& event)
     {
         const auto text_edit = new QTextEdit(parent);
         widget = text_edit;
-        if (event.flags & gui_widget_flag::read_only)
-            text_edit->setReadOnly(true);
-
         QObject::connect(text_edit, &QTextEdit::textChanged,
-            [update_func, text_edit]() { update_func(text_edit->toPlainText()); });
+            [func, text_edit]() { func(text_edit->toPlainText(), event_type::gui_update); });
         break;
     }
 
     case gui_widget_type::menu:
         widget = new QMenu(parent);
         break;
-
+    
     case gui_widget_type::menubar:
         widget = new QMenuBar(parent);
         if (parent_window)
@@ -612,7 +745,14 @@ std::errc qtgui_system::process(const qtgui_event_create_widget& event)
         const auto combo_box = new QComboBox(parent);
         widget = combo_box;
         QObject::connect(combo_box, static_cast<void(QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
-            [update_func](const int index) { update_func(index); });
+            [combo_box, func](const int index)
+            {
+                if (const auto model = combo_box->model())
+                {
+                    const auto modelIndex = model->index(index, 0, combo_box->rootModelIndex());
+                    func(modelIndex, event_type::gui_select);
+                }
+            });
         break;
     }
 
@@ -621,12 +761,21 @@ std::errc qtgui_system::process(const qtgui_event_create_widget& event)
         break;
 
     case gui_widget_type::tree_view:
-        widget = new QTreeView(parent);
+    {
+        const auto view = new QTreeView(parent);
+        widget = view;
+        view->header()->setHidden(true);
         break;
+    }
 
     case gui_widget_type::grid_view:
-        widget = new QTableView(parent);
+    {
+        const auto view = new QTableView(parent);
+        widget = view;
+        view->horizontalHeader()->setHidden(true);
+        view->verticalHeader()->setHidden(true);
         break;
+    }
 
     case gui_widget_type::message:
         widget = new QMessageBox(parent);
@@ -657,11 +806,11 @@ std::errc qtgui_system::process(const qtgui_event_create_widget& event)
             dialog->setAcceptMode(QFileDialog::AcceptMode::AcceptSave);
 
         QObject::connect(dialog, &QInputDialog::finished,
-            [update_func, dialog](int result) 
+            [func, dialog](int result) 
             {
                 const auto files = dialog->selectedFiles();
                 if (result && !files.empty())
-                    update_func(files.first()); 
+                    func(files.first(), event_type::gui_select); 
             });
         widget = dialog;
         break;
@@ -685,24 +834,24 @@ std::errc qtgui_system::process(const qtgui_event_create_widget& event)
         {
             dialog->setOption(QInputDialog::InputDialogOption::UsePlainTextEditForTextInput);
             QObject::connect(dialog, &QInputDialog::finished,
-                [update_func, dialog](int result) { if (result) update_func(dialog->textValue()); });
+                [func, dialog](int result) { if (result) func(dialog->textValue(), event_type::gui_update); });
         }
         else if (event.wtype == gui_widget_type::dialog_input_integer)
         {
             dialog->setInputMode(QInputDialog::InputMode::IntInput);
             QObject::connect(dialog, &QInputDialog::finished,
-                [update_func, dialog](int result) { if (result) update_func(dialog->intValue()); });
+                [func, dialog](int result) { if (result) func(dialog->intValue(), event_type::gui_update); });
         }
         else if (event.wtype == gui_widget_type::dialog_input_double)
         {
             dialog->setInputMode(QInputDialog::InputMode::DoubleInput);
             QObject::connect(dialog, &QInputDialog::finished,
-                [update_func, dialog](int result) { if (result) update_func(dialog->doubleValue()); });
+                [func, dialog](int result) { if (result) func(dialog->doubleValue(), event_type::gui_update); });
         }
         else
         {
             QObject::connect(dialog, &QInputDialog::finished,
-                [update_func, dialog](int result) { if (result) update_func(dialog->textValue()); });
+                [func, dialog](int result) { if (result) func(dialog->textValue(), event_type::gui_update); });
         }
         widget = dialog;
         break;
@@ -713,7 +862,25 @@ std::errc qtgui_system::process(const qtgui_event_create_widget& event)
     }
 
     if (const auto dialog = qobject_cast<QDialog*>(widget))
+    {
         dialog->setModal(true);
+    }
+    else if (const auto view = qobject_cast<QAbstractItemView*>(widget))
+    {
+        view->setContextMenuPolicy(Qt::ContextMenuPolicy::CustomContextMenu);
+        view->setSelectionBehavior(QAbstractItemView::SelectionBehavior::SelectRows);
+        QObject::connect(view, &QAbstractItemView::customContextMenuRequested, 
+            [view, func](const QPoint& point){ func(view->indexAt(point), event_type::gui_context); });        
+    }
+    else if (const auto tabs = qobject_cast<QTabWidget*>(parent))
+    {
+        tabs->addTab(widget, QString::number(tabs->count()));
+    }
+    else if (const auto button = qobject_cast<QAbstractButton*>(widget))
+    {
+        QObject::connect(button, &QAbstractButton::clicked, 
+            [button, func](bool checked) { func(checked, event_type::gui_update); });
+    }
 
     if (event.flags & gui_widget_flag::auto_insert)
     {
@@ -760,7 +927,7 @@ std::errc qtgui_system::process(const qtgui_event_insert_widget& event)
 
     if (const auto grid = qobject_cast<QGridLayout*>(parent->layout()))
     {
-        grid->addWidget(widget, event.y, event.x, event.dy, event.dx);
+        grid->addWidget(widget, event.args.y, event.args.x, event.args.dy, event.args.dx);
     }
     else if (const auto box = qobject_cast<QBoxLayout*>(parent->layout()))
     {
@@ -815,7 +982,7 @@ std::errc qtgui_system::process(const qtgui_event_show& event)
 
     if (const auto menu = qobject_cast<QMenu*>(widget))
         menu->move(QCursor::pos());
-
+    
     widget->setVisible(event.value);
     return {};
 }
@@ -831,6 +998,22 @@ std::errc qtgui_system::process(const qtgui_event_text& event)
     if (const auto message = qobject_cast<QMessageBox*>(widget))
     {
         message->setText(event.text);
+    }
+    else if (const auto label = qobject_cast<QLabel*>(widget))
+    {
+        label->setText(event.text);
+    }
+    else if (const auto lineEdit = qobject_cast<QLineEdit*>(widget))
+    {
+        lineEdit->setText(event.text);
+    }
+    else if (const auto textEdit = qobject_cast<QTextEdit*>(widget))
+    {
+        textEdit->setText(event.text);
+    }
+    else if (const auto button = qobject_cast<QPushButton*>(widget))
+    {
+        button->setText(event.text);
     }
     else
     {
@@ -865,11 +1048,23 @@ std::errc qtgui_system::process(const qtgui_event_bind_widget& event)
     if (!widget)
         return std::errc::invalid_argument;
 
+    const auto index = event.widget.index;
     const auto model = const_cast<QAbstractItemModel*>(event.index.model());
     if (const auto view = qobject_cast<QAbstractItemView*>(widget))
     {
         view->setModel(model);
         view->setRootIndex(event.index.internalId() ? event.index : QModelIndex());
+
+        QObject::connect(view->selectionModel(), &QItemSelectionModel::currentChanged, 
+            [this, index](const QModelIndex& modelIndex)
+            {
+                auto node = new qtgui_event_node;
+                node->type = event_type::gui_select;
+                node->args.widget.index = index;
+                const auto cerr = qtgui_make_variant(modelIndex, node->args.data);
+                m_queue.push(node);
+                qtgui_exit(cerr);
+            });
     }
     else if (const auto combo = qobject_cast<QComboBox*>(widget))
     {
@@ -892,6 +1087,104 @@ std::errc qtgui_system::process(const qtgui_event_enable_action& event)
     action->setEnabled(event.value);
     return {};
 }
+std::errc qtgui_system::process(const qtgui_event_modify_widget& event)
+{
+    if (event.widget.index >= m_widgets.size())
+        return std::errc::invalid_argument;
+
+    const auto widget = m_widgets[event.widget.index];
+    if (!widget)
+        return std::errc::invalid_argument;
+
+    const auto func = [](const QVariantMap& map, const string_view key)
+    {
+        const auto find = map.constFind(make_string(key));
+        if (find != map.end())
+            return find->toMap();
+        else
+            return QVariantMap();
+    };
+    
+    const auto argsLayout = func(event.args, gui_widget_args_keys::layout);
+    if (!argsLayout.isEmpty())
+    {
+        const auto argsStretch = func(argsLayout, gui_widget_args_keys::stretch);
+
+        QLayout* layout = nullptr;
+        if (const auto window = qobject_cast<QMainWindow*>(widget))
+            layout = window->centralWidget() ? window->centralWidget()->layout() : nullptr;
+        else
+            layout = widget->layout();
+
+        if (const auto box = qobject_cast<QBoxLayout*>(layout))
+        {
+            for (auto it = argsStretch.begin(); it != argsStretch.end(); ++it)
+            {
+                auto keyOk = false;
+                auto valOk = false;
+                const auto key = it.key().toInt(&keyOk);
+                const auto val = it.value().toInt(&valOk);
+                if (keyOk && valOk)
+                    box->setStretch(key, val);
+            }
+        }
+        else if (const auto grid = qobject_cast<QGridLayout*>(layout))
+        {
+            const auto argsRow = func(argsStretch, gui_widget_args_keys::row);
+            const auto argsCol = func(argsStretch, gui_widget_args_keys::col);
+            for (auto it = argsRow.begin(); it != argsRow.end(); ++it)
+            {
+                auto keyOk = false;
+                auto valOk = false;
+                const auto key = it.key().toInt(&keyOk);
+                const auto val = it.value().toInt(&valOk);
+                if (keyOk && valOk)
+                    grid->setRowStretch(key, val);
+            }
+            for (auto it = argsCol.begin(); it != argsCol.end(); ++it)
+            {
+                auto keyOk = false;
+                auto valOk = false;
+                const auto key = it.key().toInt(&keyOk);
+                const auto val = it.value().toInt(&valOk);
+                if (keyOk && valOk)
+                    grid->setColumnStretch(key, val);
+            }
+        }        
+    }
+    return {};
+}
+std::errc qtgui_system::process(const qtgui_event_destroy_widget& event)
+{
+    if (event.widget.index >= m_widgets.size())
+        return std::errc::invalid_argument;
+
+    const auto widget = m_widgets[event.widget.index];
+    if (!widget)
+        return std::errc::invalid_argument;
+
+    widget->deleteLater();
+    m_widgets[event.widget.index] = nullptr;
+    m_free_widgets.push_back(event.widget.index);
+
+    return {};
+}
+std::errc qtgui_system::process(const qtgui_event_destroy_action& event)
+{
+    if (event.action.index >= m_actions.size())
+        return std::errc::invalid_argument;
+
+    const auto action = m_actions[event.action.index];
+    if (!action)
+        return std::errc::invalid_argument;
+
+    action->deleteLater();
+    m_actions[event.action.index] = nullptr;
+    m_free_actions.push_back(event.action.index);
+
+    return {};
+}
+
 
 uint32_t qtgui_model_bind(const QModelIndex& index, const gui_widget& widget)
 {
@@ -921,7 +1214,7 @@ uint32_t ICY_QTGUI_API icy_gui_system_create(const int version, gui_system** sys
     {
         const auto ptr = __wargv[0];
         const auto len = wcslen(ptr);
-        WideCharToMultiByte(65001, 0, ptr, len, path, _countof(path) - 1);
+        WideCharToMultiByte(65001, 0, ptr, int(len), path, _countof(path) - 1);
     }
     else if (__argc && __argv)
     {

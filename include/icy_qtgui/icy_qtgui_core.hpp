@@ -3,6 +3,7 @@
 #include <icy_engine/core/icy_string_view.hpp>
 #include <icy_engine/core/icy_atomic.hpp>
 #include <icy_engine/core/icy_memory.hpp>
+#include <icy_engine/core/icy_string.hpp>
 
 #define ICY_GUI_ERROR(X) if (const auto error = (X)) return make_stdlib_error(static_cast<std::errc>(error)); return {};
 
@@ -16,7 +17,7 @@
 #endif
 #endif
 
-#define ICY_GUI_VERSION 0x0005'0002
+#define ICY_GUI_VERSION 0x0005'0003
 
 #pragma warning(push)
 #pragma warning(disable:4201)
@@ -33,9 +34,37 @@ namespace icy
         sstring     =   0x05,
         lstring     =   0x06,
         array       =   0x07,
-        user        =   0x08,
+        guid        =   0x08,
+        node        =   0x09,
+        user        =   0x0A,
     };
-    
+    enum
+    {
+        gui_model_max_row = (1 << 0x10),
+        gui_model_max_col = (1 << 0x08),
+        gui_model_max_idx = (1 << 0x14),
+    };
+    struct gui_node
+    {
+        gui_node() : idx(0), par(0), row(0), col(0)
+        {
+
+        }
+        gui_node(uint64_t par, uint64_t row, uint64_t col) noexcept : par(par), row(row), col(col)
+        {
+
+        }
+        explicit operator bool() const noexcept
+        {
+            return !!idx;
+        }
+        uint64_t idx : 0x14;
+        uint64_t par : 0x14;
+        uint64_t row : 0x10;
+        uint64_t col : 0x08;
+    };
+    static_assert(0x14 + 0x14 + 0x10 + 0x08 == 0x40 && sizeof(gui_node) == sizeof(uint64_t), "INVALID GUI NODE SIZE");
+
     class gui_variant
     {
     public:
@@ -43,6 +72,7 @@ namespace icy
         using sinteger_type = int64_t;
         using uinteger_type = uint64_t;
         using floating_type = double;
+        using node_type = gui_node;
         struct buffer_type
         {
             buffer_type(icy::realloc_func alloc, void* user, size_t size) noexcept : alloc(alloc), user(user), size(size), ref(1)
@@ -73,6 +103,10 @@ namespace icy
             new (m_data) decltype(value)(value);
         }
         gui_variant(const floating_type value) noexcept : m_type(static_cast<char>(gui_variant_type::floating))
+        {
+            new (m_data) decltype(value)(value);
+        }
+        gui_variant(const gui_node value) noexcept : m_type(static_cast<char>(gui_variant_type::node))
         {
             new (m_data) decltype(value)(value);
         }
@@ -218,6 +252,13 @@ namespace icy
             }
             return 0;
         }
+        gui_node as_node() const noexcept
+        {
+            if (type() == gui_variant_type::node)
+                return m_node;
+            else
+                return {};            
+        }
         template<typename T> const T* as_user() const noexcept
         {
             if (type() == gui_variant_type::user)
@@ -301,6 +342,7 @@ namespace icy
             sinteger_type m_sinteger;
             uinteger_type m_uinteger;
             floating_type m_floating;
+            node_type m_node;
             buffer_type* m_buffer;
         };
     };
@@ -310,7 +352,21 @@ namespace icy
     }
     inline error_type make_variant(gui_variant& var, const realloc_func alloc, void* const user, const string_view str) noexcept
     {
-        ICY_GUI_ERROR(var.initialize(alloc, user, str.bytes().data(), str.bytes().size(), gui_variant_type::lstring));
+        ICY_GUI_ERROR(var.initialize(alloc, user, 
+            str.bytes().data(), str.bytes().size(), gui_variant_type::lstring));
+    }
+    inline error_type make_variant(gui_variant& var, const string_view str) noexcept
+    {
+        if (str.bytes().size() > gui_variant::max_length)
+        {
+            ICY_GUI_ERROR(var.initialize(detail::global_heap.realloc, detail::global_heap.user,
+                str.bytes().data(), str.bytes().size(), gui_variant_type::lstring));
+        }
+        else
+        {
+            var = str;
+        }
+        return {};
     }
     template<typename T, typename = std::enable_if_t<std::is_trivially_destructible<T>::value>>
     inline uint32_t make_variant(gui_variant& var, const realloc_func alloc, void* const user, const T& data) noexcept
@@ -338,6 +394,23 @@ namespace icy
     {
         gui_widget widget;
         gui_variant data;
+    };
+    struct gui_insert
+    {
+        gui_insert() noexcept = default;
+        gui_insert(const uint32_t x, const uint32_t y) noexcept : x(x), y(y)
+        {
+
+        }
+        gui_insert(const uint32_t x, const uint32_t y, const uint32_t dx, const uint32_t dy) noexcept :
+            x(x), y(y), dx(dx), dy(dy)
+        {
+
+        }
+        uint32_t x = 0;
+        uint32_t y = 0;
+        uint32_t dx = 1;
+        uint32_t dy = 1;
     };
 }
 

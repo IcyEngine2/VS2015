@@ -27,6 +27,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "jpeg", "jpeg\jpeg.vcxproj",
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "tga", "tga\tga.vcxproj", "{A6425F4D-FA45-4D1E-8E00-BF4ECE20BA00}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "minhook", "minhook\minhook.vcxproj", "{432F9A74-73EA-490C-A1F9-326A67583793}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -69,6 +71,10 @@ Global
 		{A6425F4D-FA45-4D1E-8E00-BF4ECE20BA00}.Debug|x64.Build.0 = Debug|x64
 		{A6425F4D-FA45-4D1E-8E00-BF4ECE20BA00}.Release|x64.ActiveCfg = Release|x64
 		{A6425F4D-FA45-4D1E-8E00-BF4ECE20BA00}.Release|x64.Build.0 = Release|x64
+		{432F9A74-73EA-490C-A1F9-326A67583793}.Debug|x64.ActiveCfg = Debug|x64
+		{432F9A74-73EA-490C-A1F9-326A67583793}.Debug|x64.Build.0 = Debug|x64
+		{432F9A74-73EA-490C-A1F9-326A67583793}.Release|x64.ActiveCfg = Release|x64
+		{432F9A74-73EA-490C-A1F9-326A67583793}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

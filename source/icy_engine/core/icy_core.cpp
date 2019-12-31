@@ -454,7 +454,15 @@ error_type cvar::wait(mutex& mutex, const duration_type timeout) noexcept
         ms_timeout(timeout));
     mutex.unlock();
     if (!sleep)
-        ICY_ERROR(last_system_error());
+    {
+        if (const auto error = last_system_error())
+        {
+            if (error == make_system_error(make_system_error_code(ERROR_TIMEOUT)))
+                return make_stdlib_error(std::errc::timed_out);
+            else
+                return error;
+        }
+    }
     return {};
 }
 
@@ -571,4 +579,31 @@ error_type icy::create_guid(guid& guid) noexcept
         return make_stdlib_error(std::errc::function_not_supported);
     }
     return {};
+}
+
+error_type icy::computer_name(string& str) noexcept
+{
+    const auto format = COMPUTER_NAME_FORMAT::ComputerNameDnsFullyQualified;
+    auto size = 0ul;
+    if (!GetComputerNameExW(format, nullptr, &size))
+    {
+        const auto error = last_system_error();
+        if (error == make_system_error(make_system_error_code(ERROR_MORE_DATA)))
+            ;
+        else
+            return error;
+    }
+    array<wchar_t> wname;
+    ICY_ERROR(wname.resize(size));
+    if (!GetComputerNameExW(format, wname.data(), &size))
+        return last_system_error();
+
+    ICY_ERROR(to_string(wname, str));
+    return{};
+}
+error_type icy::process_name(string& str) noexcept
+{
+    wchar_t buffer[4096];
+    auto length = GetModuleFileNameW(nullptr, buffer, _countof(buffer));
+    return to_string(const_array_view<wchar_t>(buffer, length), str);
 }

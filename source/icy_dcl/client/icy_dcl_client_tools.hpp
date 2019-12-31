@@ -16,9 +16,10 @@ private:
     };
 private:
     icy::gui_widget m_widget;
-    button_type m_back;
-    button_type m_forward;
+    button_type m_bck;
+    button_type m_fwd;
     button_type m_undo;
     button_type m_redo;
+    button_type m_save;
     icy::gui_widget m_filter;
 };

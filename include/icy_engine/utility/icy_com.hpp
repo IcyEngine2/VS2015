@@ -13,7 +13,13 @@ namespace icy
 		template<typename U>
 		com_ptr(const com_ptr<U>& rhs, std::true_type) noexcept : m_ptr{ rhs.m_ptr }
 		{
-			if (m_ptr) m_ptr->AddRef();
+#if CINTERFACE
+            if (m_ptr)
+                m_ptr->lpVtbl->AddRef(m_ptr);
+#else
+			if (m_ptr) 
+                m_ptr->AddRef();
+#endif
 		}
 		template<typename U>
 		com_ptr(com_ptr<U>&& rhs, std::true_type) noexcept : m_ptr{ rhs.m_ptr }
@@ -23,17 +29,30 @@ namespace icy
 		template<typename U>
 		com_ptr(const com_ptr<U>& rhs, std::false_type) noexcept
 		{
-			if (rhs)
-				rhs->QueryInterface(&m_ptr);
+#if CINTERFACE
+            if (rhs)
+                rhs->lpVtbl->QueryInterface(rhs, &m_ptr);
+#else
+            if (rhs)
+                rhs->QueryInterface(&m_ptr);
+#endif
 		}
 		template<typename U>
 		com_ptr(com_ptr<U>&& rhs, std::false_type) noexcept
 		{
+#if CINTERFACE
+            if (rhs && SUCCEEDED(rhs->lpVtbl->QueryInterface(rhs, &m_ptr)))
+            {
+                rhs->lpVtbl->Release(rhs);
+                rhs.m_ptr = nullptr;
+            }
+#else
 			if (rhs && SUCCEEDED(rhs->QueryInterface(&m_ptr)))
 			{
 				rhs->Release();
 				rhs.m_ptr = nullptr;
 			}
+#endif
 		}
 	public:
 		com_ptr() noexcept : m_ptr{ nullptr }
@@ -42,7 +61,13 @@ namespace icy
 		}
 		explicit com_ptr(T* const ptr) noexcept : m_ptr{ ptr }
 		{
-			if (ptr) ptr->AddRef();
+#if CINTERFACE
+            if (m_ptr)
+                m_ptr->lpVtbl->AddRef(m_ptr);
+#else
+            if (m_ptr)
+                m_ptr->AddRef();
+#endif
 		}
 		template<typename U>
 		com_ptr(const com_ptr<U>& rhs) noexcept :
@@ -62,7 +87,13 @@ namespace icy
 		}
 		com_ptr(const com_ptr& rhs) noexcept : m_ptr{ rhs.m_ptr }
 		{
-			if (rhs.m_ptr) m_ptr->AddRef();
+#if CINTERFACE
+            if (rhs.m_ptr)
+                m_ptr->lpVtbl->AddRef(m_ptr);
+#else
+            if (rhs.m_ptr)
+                m_ptr->AddRef();
+#endif
 		}
 		com_ptr(com_ptr&& rhs) noexcept : m_ptr{ rhs.m_ptr }
 		{
@@ -104,7 +135,11 @@ namespace icy
 		{
 			if (m_ptr)
 			{
+#if CINTERFACE
+                m_ptr->lpVtbl->Release(m_ptr);
+#else
 				m_ptr->Release();
+#endif
 				m_ptr = nullptr;
 			}
 		}

@@ -2,9 +2,56 @@
 
 #include "icy_qtgui_system.hpp"
 #include "icy_qtgui_model.hpp"
+#include <icy_engine/core/icy_map.hpp>
 
 namespace icy
 {
+    struct gui_widget_args
+    {
+        error_type insert(const string_view key, gui_widget_args*& val) noexcept
+        {
+            string str;
+            auto it = map.end();
+            ICY_ERROR(to_string(key, str));            
+            ICY_ERROR(map.insert(std::move(str), gui_widget_args(), &it));
+            val = &it->value;
+            return {};
+        }
+        error_type insert(const string_view key, const string_view value) noexcept
+        {
+            string str;
+            gui_widget_args val;
+            ICY_ERROR(to_string(key, str));
+            ICY_ERROR(to_string(value, val.value));
+            ICY_ERROR(map.insert(std::move(str), std::move(val)));
+            return {};
+        }
+        string value;
+        map<string, gui_widget_args> map;
+    };
+    inline error_type to_string(const gui_widget_args& args, string& str) noexcept
+    {
+        if (args.map.empty())
+        {
+            ICY_ERROR(str.appendf("\"%1\"", string_view(args.value)));
+        }
+        else
+        {
+            ICY_ERROR(str.append("{"_s));
+            auto first = true;
+            for (auto&& pair : args.map)
+            {
+                string val;
+                ICY_ERROR(to_string(pair.value, val));
+                ICY_ERROR(str.appendf("%1\"%2\": %3", first ? ""_s : ","_s, string_view(pair.key), string_view(val)));
+                first = false;
+            }
+            ICY_ERROR(str.append("}"_s));
+        }
+        return {};
+    }
+    
+
     class gui_queue;
     class gui_model
     {
@@ -42,6 +89,12 @@ namespace icy
             if (!m_vtbl.update)
                 return make_stdlib_error(std::errc::function_not_supported);
             ICY_GUI_ERROR(m_vtbl.update(m_view, node));
+        }
+        error_type clear() noexcept
+        {
+            if (!m_vtbl.clear)
+                return make_stdlib_error(std::errc::function_not_supported);
+            ICY_GUI_ERROR(m_vtbl.clear(m_view));
         }
     private:
         class base_type : public gui_model_base
@@ -144,9 +197,7 @@ namespace icy
                 if (const auto error = m_system->loop(type, args))
                     return make_stdlib_error(static_cast<std::errc>(error));
 
-                if (type == event_type::window_close 
-                    || type == event_type::gui_action 
-                    || type == event_type::gui_update)
+                if (type == event_type::window_close || (type & event_type::gui_any))
                 {
                     ICY_ERROR(event::post(this, type, args));
                 }
@@ -166,21 +217,13 @@ namespace icy
                 return make_stdlib_error(std::errc::invalid_argument);                
             ICY_GUI_ERROR(m_system->initialize(model->m_view, model->m_base));
         }
-        error_type insert(const gui_widget widget, const uint32_t x, const uint32_t y, const uint32_t dx, const uint32_t dy) noexcept
+        error_type insert(const gui_widget widget, const gui_insert args = {}) noexcept
         {
-            ICY_GUI_ERROR(m_system->insert(widget, x, y, dx, dy));
+            ICY_GUI_ERROR(m_system->insert(widget, args));
         }
         error_type insert(const gui_widget widget, const gui_action action) noexcept
         {
             ICY_GUI_ERROR(m_system->insert(widget, action));
-        }
-        error_type insert(const gui_widget widget, const uint32_t x, const uint32_t y) noexcept
-        {
-            return insert(widget, x, y, 1, 1);
-        }
-        error_type insert(const gui_widget widget) noexcept
-        {
-            return insert(widget, 0, 0, 1, 1);
         }
         error_type show(const gui_widget widget, const bool value) noexcept
         {
@@ -197,6 +240,55 @@ namespace icy
         error_type bind(const gui_action action, const gui_widget menu) noexcept
         {
             ICY_GUI_ERROR(m_system->bind(action, menu));
+        }
+        error_type modify(const gui_widget widget, const string_view args) noexcept
+        {
+            ICY_GUI_ERROR(m_system->modify(widget, args));
+        }
+        error_type exec(const gui_widget widget, gui_action& action) noexcept
+        {
+            ICY_ERROR(show(widget, true));
+            
+            shared_ptr<event_loop> loop;
+            ICY_ERROR(event_loop::create(loop, event_type::gui_action | event_type::window_close));
+            
+            auto timeout = max_timeout;
+            while (true)
+            {
+                event event;
+                if (const auto error = loop->loop(event, timeout))
+                {
+                    if (error == make_stdlib_error(std::errc::timed_out))
+                        break;
+                    return error;
+                }
+
+                if (event->type == event_type::global_quit)
+                    break;
+
+                if (event->type == event_type::gui_action)
+                {
+                    const auto& event_data = event->data<gui_event>();
+                    if (const auto index = event_data.data.as_uinteger())
+                    {
+                        action.index = index;
+                        break;
+                    }
+                    else if (event_data.widget == widget)
+                    {
+                        timeout = {};
+                    }
+                }
+            }
+            return {};
+        }
+        error_type destroy(const gui_widget widget) noexcept
+        {
+            ICY_GUI_ERROR(m_system->destroy(widget));
+        }
+        error_type destroy(const gui_action action) noexcept
+        {
+            ICY_GUI_ERROR(m_system->destroy(action));
         }
     private:
 #if ICY_QTGUI_STATIC

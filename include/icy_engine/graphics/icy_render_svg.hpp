@@ -1,8 +1,8 @@
 #pragma once
 
-#include "icy_array.hpp"
-#include "icy_color.hpp"
-#include "icy_string.hpp"
+#include <icy_engine/core/icy_array.hpp>
+#include <icy_engine/core/icy_color.hpp>
+#include <icy_engine/core/icy_string.hpp>
 #include "icy_render_math.hpp"
 
 namespace icy

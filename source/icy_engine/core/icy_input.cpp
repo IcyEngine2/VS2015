@@ -1,13 +1,124 @@
-#pragma once
-
-#include <icy_engine/icy_input.hpp>
-#include <icy_engine/icy_string.hpp>
-#include <icy_engine/icy_win32.hpp>
-#include <icy_engine/icy_utility.hpp>
+#include <icy_engine/core/icy_input.hpp>
+#include <icy_engine/core/icy_string.hpp>
 #include <Windows.h>
 #include <windowsx.h>
 
 using namespace icy;
+
+ICY_STATIC_NAMESPACE_BEG
+struct key_pair
+{
+    string_view str;
+    key key;
+};
+const key_pair key_array[104] =
+{
+    { "Backspace"_s, key::back },
+    { "Tab"_s, key::tab },
+    { "Enter"_s, key::enter },
+    { "Pause"_s, key::pause },
+    { "Caps Lock"_s, key::caps_lock },
+    { "Esc"_s, key::esc },
+    { "Space"_s, key::space },
+    { "PgUp"_s, key::page_up },
+    { "PgDown"_s, key::page_down },
+    { "End"_s, key::end },
+    { "Home"_s, key::home },
+    { "Left"_s, key::left },
+    { "Up"_s, key::up },
+    { "Right"_s, key::right },
+    { "Down"_s, key::down },
+    { "Print Screen"_s, key::print_screen },
+    { "Insert"_s, key::insert },
+    { "Delete"_s, key::del },
+    { "Left Win"_s, key::left_win },
+    { "Right Win"_s, key::right_win },
+    { "Num *"_s, key::num_mul },
+    { "Num +"_s, key::num_add },
+    { "Num ,"_s, key::num_separator },
+    { "Num -"_s, key::num_sub },
+    { "Num ."_s, key::num_decimal },
+    { "Num /"_s, key::num_div },
+    { "Num Enter"_s, key::num_enter },
+    { "Num Lock"_s, key::num_lock },
+    { "Scr Lock"_s, key::scr_lock },
+    { "left shift"_s, key::left_shift },
+    { "right shift"_s, key::right_shift },
+    { "left ctrl"_s, key::left_ctrl },
+    { "right ctrl"_s, key::right_ctrl },
+    { "left Alt"_s, key::left_alt },
+    { "right Alt"_s, key::right_alt },
+    { ":"_s, key::colon },
+    { "+"_s, key::plus },
+    { ","_s, key::comma },
+    { "-"_s, key::minus },
+    { "."_s, key::period },
+    { "/"_s, key::slash },
+    { "~"_s, key::tilde },
+    { "["_s, key::bracket_open },
+    { "\\"_s, key::back_slash },
+    { "]"_s, key::bracket_close },
+    { "\""_s, key::quote },
+    { "Num 0"_s, key::num_0 },
+    { "Num 1"_s, key::num_1 },
+    { "Num 2"_s, key::num_2 },
+    { "Num 3"_s, key::num_3 },
+    { "Num 4"_s, key::num_4 },
+    { "Num 5"_s, key::num_5 },
+    { "Num 6"_s, key::num_6 },
+    { "Num 7"_s, key::num_7 },
+    { "Num 8"_s, key::num_8 },
+    { "Num 9"_s, key::num_9 },
+    { "0"_s, key::_0 },
+    { "1"_s, key::_1 },
+    { "2"_s, key::_2 },
+    { "3"_s, key::_3 },
+    { "4"_s, key::_4 },
+    { "5"_s, key::_5 },
+    { "6"_s, key::_6 },
+    { "7"_s, key::_7 },
+    { "8"_s, key::_8 },
+    { "9"_s, key::_9 },
+    { "A"_s, key::a },
+    { "B"_s, key::b },
+    { "C"_s, key::c },
+    { "D"_s, key::d },
+    { "E"_s, key::e },
+    { "F"_s, key::f },
+    { "G"_s, key::g },
+    { "H"_s, key::h },
+    { "I"_s, key::i },
+    { "J"_s, key::j },
+    { "K"_s, key::k },
+    { "L"_s, key::l },
+    { "M"_s, key::m },
+    { "N"_s, key::n },
+    { "O"_s, key::o },
+    { "P"_s, key::p },
+    { "Q"_s, key::q },
+    { "R"_s, key::r },
+    { "S"_s, key::s },
+    { "T"_s, key::t },
+    { "U"_s, key::u },
+    { "V"_s, key::v },
+    { "W"_s, key::w },
+    { "X"_s, key::x },
+    { "Y"_s, key::y },
+    { "Z"_s, key::z },
+    { "F1"_s, key::F1 },
+    { "F2"_s, key::F2 },
+    { "F3"_s, key::F3 },
+    { "F4"_s, key::F4 },
+    { "F5"_s, key::F5 },
+    { "F6"_s, key::F6 },
+    { "F7"_s, key::F7 },
+    { "F8"_s, key::F8 },
+    { "F9"_s, key::F9 },
+    { "F10"_s, key::F10 },
+    { "F11"_s, key::F11 },
+    { "F12"_s, key::F12 },
+};
+ICY_STATIC_NAMESPACE_END
 
 key icy::detail::scan_vk_to_key(uint16_t vkey, uint16_t scan, const bool isE0) noexcept
 {
@@ -28,7 +139,7 @@ key icy::detail::scan_vk_to_key(uint16_t vkey, uint16_t scan, const bool isE0) n
 	auto key = icy::key(vkey);
 	switch (vkey)
 	{
-	case VK_CONTROL:    key = isE0 ? key::right_ctl     : key::left_ctl;    break;
+	case VK_CONTROL:    key = isE0 ? key::right_ctrl    : key::left_ctrl;   break;
 	case VK_MENU:       key = isE0 ? key::right_alt		: key::left_alt;    break;
 	case VK_INSERT:     key = isE0 ? key::insert		: key::num_0;       break;
 	case VK_DELETE:     key = isE0 ? key::del			: key::num_decimal; break;
@@ -53,7 +164,7 @@ uint16_t icy::detail::from_winapi(key_message& msg, const size_t wParam, const p
 		(lParam >> 31) & 0x01 ? key_event::release :
 		(lParam >> 30) & 0x01 ? key_event::hold :
 		key_event::press;
-	msg = key_message(key, event, msg.ctl, msg.alt, msg.shf);
+	msg = key_message(key, event, msg.ctrl, msg.alt, msg.shift);
 	return LOWORD(lParam);
 }
 uint16_t icy::detail::from_winapi(key_message& key, const MSG& msg, const std::bitset<256> & buffer) noexcept
@@ -63,9 +174,9 @@ uint16_t icy::detail::from_winapi(key_message& key, const MSG& msg, const std::b
 void icy::detail::from_winapi(mouse_message& mouse, const uint32_t offset_x, const uint32_t offset_y, const uint32_t msg, const size_t wParam, const ptrdiff_t lParam, const std::bitset<256> & buffer) noexcept
 {
 	const auto word = LOWORD(wParam);
-	mouse.lt = (word & MK_LBUTTON) ? 1 : 0;
-	mouse.rt = (word & MK_RBUTTON) ? 1 : 0;
-	mouse.md = (word & MK_MBUTTON) ? 1 : 0;
+	mouse.left = (word & MK_LBUTTON) ? 1 : 0;
+	mouse.right = (word & MK_RBUTTON) ? 1 : 0;
+	mouse.mid = (word & MK_MBUTTON) ? 1 : 0;
 	mouse.x1 = (word & MK_XBUTTON1) ? 1 : 0;
 	mouse.x2 = (word & MK_XBUTTON2) ? 1 : 0;
 
@@ -108,18 +219,18 @@ void icy::detail::from_winapi(mouse_message& mouse, const uint32_t offset_x, con
 			break;
 		}
 
-		mouse.button = mouse_button::lt;
+		mouse.button = mouse_button::left;
 		switch (msg)
 		{
 		case WM_RBUTTONDOWN:
 		case WM_RBUTTONUP:
 		case WM_RBUTTONDBLCLK:
-			mouse.button = mouse_button::rt;
+			mouse.button = mouse_button::right;
 			break;
 		case WM_MBUTTONDOWN:
 		case WM_MBUTTONUP:
 		case WM_MBUTTONDBLCLK:
-			mouse.button = mouse_button::md;
+			mouse.button = mouse_button::mid;
 			break;
 		case WM_XBUTTONDOWN:
 		case WM_XBUTTONUP:
@@ -160,20 +271,20 @@ tagMSG icy::detail::to_winapi(const mouse_message& mouse) noexcept
 	uint32_t map[mouse_button::_total][mouse_event::_total]{};
 	static const bool _init_once = [&map]
 	{
-		map[mouse_button::lt][mouse_event::btn_press] = WM_LBUTTONDOWN;
-		map[mouse_button::lt][mouse_event::btn_hold] = WM_LBUTTONDOWN;
-		map[mouse_button::lt][mouse_event::btn_release] = WM_LBUTTONUP;
-		map[mouse_button::lt][mouse_event::btn_double] = WM_LBUTTONDBLCLK;
+		map[mouse_button::left][mouse_event::btn_press] = WM_LBUTTONDOWN;
+		map[mouse_button::left][mouse_event::btn_hold] = WM_LBUTTONDOWN;
+		map[mouse_button::left][mouse_event::btn_release] = WM_LBUTTONUP;
+		map[mouse_button::left][mouse_event::btn_double] = WM_LBUTTONDBLCLK;
 
-		map[mouse_button::rt][mouse_event::btn_press] = WM_RBUTTONDOWN;
-		map[mouse_button::rt][mouse_event::btn_hold] = WM_RBUTTONDOWN;
-		map[mouse_button::rt][mouse_event::btn_release] = WM_RBUTTONUP;
-		map[mouse_button::rt][mouse_event::btn_double] = WM_RBUTTONDBLCLK;
+		map[mouse_button::right][mouse_event::btn_press] = WM_RBUTTONDOWN;
+		map[mouse_button::right][mouse_event::btn_hold] = WM_RBUTTONDOWN;
+		map[mouse_button::right][mouse_event::btn_release] = WM_RBUTTONUP;
+		map[mouse_button::right][mouse_event::btn_double] = WM_RBUTTONDBLCLK;
 
-		map[mouse_button::md][mouse_event::btn_press] = WM_MBUTTONDOWN;
-		map[mouse_button::md][mouse_event::btn_hold] = WM_MBUTTONDOWN;
-		map[mouse_button::md][mouse_event::btn_release] = WM_MBUTTONUP;
-		map[mouse_button::md][mouse_event::btn_double] = WM_MBUTTONDBLCLK;
+		map[mouse_button::mid][mouse_event::btn_press] = WM_MBUTTONDOWN;
+		map[mouse_button::mid][mouse_event::btn_hold] = WM_MBUTTONDOWN;
+		map[mouse_button::mid][mouse_event::btn_release] = WM_MBUTTONUP;
+		map[mouse_button::mid][mouse_event::btn_double] = WM_MBUTTONDBLCLK;
 
 		map[mouse_button::x1][mouse_event::btn_press] = WM_XBUTTONDOWN;
 		map[mouse_button::x1][mouse_event::btn_hold] = WM_XBUTTONDOWN;
@@ -191,17 +302,17 @@ tagMSG icy::detail::to_winapi(const mouse_message& mouse) noexcept
 	auto msg = MSG{};
 	msg.lParam = MAKELONG(mouse.point.x, mouse.point.y);
 
-	const auto shf = uint32_t(mouse.shf != 0);
-	const auto ctl = uint32_t(mouse.ctl != 0);
+	const auto shift = uint32_t(mouse.shift != 0);
+	const auto ctrl = uint32_t(mouse.ctrl != 0);
 
 	msg.wParam = 0
-		| (mouse.lt << 0)
-		| (mouse.rt << 1)
-		| (mouse.md << 4)
+		| (mouse.left << 0)
+		| (mouse.right << 1)
+		| (mouse.mid << 4)
 		| (mouse.x1 << 5)
 		| (mouse.x2 << 6)
-		| (shf << 2)
-		| (ctl << 3);
+		| (shift << 2)
+		| (ctrl << 3);
 
 	switch (mouse.event)
 	{
@@ -240,7 +351,7 @@ tagMSG icy::detail::to_winapi(const input_message& input) noexcept
 	}
 	return{};
 }
-error_type icy::to_string(const key_message& key, string& str)
+error_type icy::to_string(const key_message& key, string& str) noexcept
 {
 	if (key.key == key::none) 
 		return {};
@@ -249,134 +360,26 @@ error_type icy::to_string(const key_message& key, string& str)
 	{
 		if (const auto mod = key_mod{ val })
 		{
-			if (!mod.lt())
+			if (!mod.left())
 			{
-				ICY_ERROR(str.append("rt "_s));
+				ICY_ERROR(str.append("right "_s));
 			}
-			else if (!mod.rt())
+			else if (!mod.right())
 			{
-				ICY_ERROR(str.append("lt "_s));
+				ICY_ERROR(str.append("left "_s));
 			}
 			ICY_ERROR(str.append(string));
 			ICY_ERROR(str.append(" + "_s));
 		}
 		return {};
 	};
-	ICY_ERROR(func(key.ctl, "Ctrl"_s));
-	ICY_ERROR(func(key.shf, "Shift"_s));
+	ICY_ERROR(func(key.ctrl, "Ctrl"_s));
+	ICY_ERROR(func(key.shift, "Shift"_s));
 	ICY_ERROR(func(key.alt, "Alt"_s));
-	for (auto&& pair : detail::key_array)
+	for (auto&& pair : key_array)
 	{
-		if (pair.second == key.key)
-			return str.append(pair.first);
+		if (pair.key == key.key)
+			return str.append(pair.str);
 	}
 	return make_stdlib_error(std::errc::invalid_argument);
 }
-
-const icy::detail::key_pair icy::detail::key_array[104] =
-{
-	{ "Backspace"_s, key::back },
-	{ "Tab"_s, key::tab },
-	{ "Enter"_s, key::enter },
-	{ "Pause"_s, key::pause },
-	{ "Caps Lock"_s, key::caps_lock },
-	{ "Esc"_s, key::esc },
-	{ "Space"_s, key::space },
-	{ "PgUp"_s, key::page_up },
-	{ "PgDown"_s, key::page_down },
-	{ "End"_s, key::end },
-	{ "Home"_s, key::home },
-	{ "Left"_s, key::left },
-	{ "Up"_s, key::up },
-	{ "Right"_s, key::right },
-	{ "Down"_s, key::down },
-	{ "Print Screen"_s, key::print_screen },
-	{ "Insert"_s, key::insert },
-	{ "Delete"_s, key::del },
-	{ "Left Win"_s, key::left_win },
-	{ "Right Win"_s, key::right_win },
-	{ "Num *"_s, key::num_mul },
-	{ "Num +"_s, key::num_add },
-	{ "Num ,"_s, key::num_separator },
-	{ "Num -"_s, key::num_sub },
-	{ "Num ."_s, key::num_decimal },
-	{ "Num /"_s, key::num_div },
-	{ "Num Enter"_s, key::num_enter },
-	{ "Num Lock"_s, key::num_lock },
-	{ "Scr Lock"_s, key::scr_lock },
-	{ "lt shf"_s, key::left_shf },
-	{ "rt shf"_s, key::right_shf },
-	{ "lt ctl"_s, key::left_ctl },
-	{ "rt ctl"_s, key::right_ctl },
-	{ "lt Alt"_s, key::left_alt },
-	{ "rt Alt"_s, key::right_alt },
-	{ ":"_s, key::colon },
-	{ "+"_s, key::plus },
-	{ ","_s, key::comma },
-	{ "-"_s, key::minus },
-	{ "."_s, key::period },
-	{ "/"_s, key::slash },
-	{ "~"_s, key::tilde },
-	{ "["_s, key::bracket_open },
-	{ "\\"_s, key::back_slash },
-	{ "]"_s, key::bracket_close },
-	{ "\""_s, key::quote },
-	{ "Num 0"_s, key::num_0 },
-	{ "Num 1"_s, key::num_1 },
-	{ "Num 2"_s, key::num_2 },
-	{ "Num 3"_s, key::num_3 },
-	{ "Num 4"_s, key::num_4 },
-	{ "Num 5"_s, key::num_5 },
-	{ "Num 6"_s, key::num_6 },
-	{ "Num 7"_s, key::num_7 },
-	{ "Num 8"_s, key::num_8 },
-	{ "Num 9"_s, key::num_9 },
-	{ "0"_s, key::_0 },
-	{ "1"_s, key::_1 },
-	{ "2"_s, key::_2 },
-	{ "3"_s, key::_3 },
-	{ "4"_s, key::_4 },
-	{ "5"_s, key::_5 },
-	{ "6"_s, key::_6 },
-	{ "7"_s, key::_7 },
-	{ "8"_s, key::_8 },
-	{ "9"_s, key::_9 },
-	{ "A"_s, key::a },
-	{ "B"_s, key::b },
-	{ "C"_s, key::c },
-	{ "D"_s, key::d },
-	{ "E"_s, key::e },
-	{ "F"_s, key::f },
-	{ "G"_s, key::g },
-	{ "H"_s, key::h },
-	{ "I"_s, key::i },
-	{ "J"_s, key::j },
-	{ "K"_s, key::k },
-	{ "L"_s, key::l },
-	{ "M"_s, key::m },
-	{ "N"_s, key::n },
-	{ "O"_s, key::o },
-	{ "P"_s, key::p },
-	{ "Q"_s, key::q },
-	{ "R"_s, key::r },
-	{ "S"_s, key::s },
-	{ "T"_s, key::t },
-	{ "U"_s, key::u },
-	{ "V"_s, key::v },
-	{ "W"_s, key::w },
-	{ "X"_s, key::x },
-	{ "Y"_s, key::y },
-	{ "Z"_s, key::z },
-	{ "F1"_s, key::F1 },
-	{ "F2"_s, key::F2 },
-	{ "F3"_s, key::F3 },
-	{ "F4"_s, key::F4 },
-	{ "F5"_s, key::F5 },
-	{ "F6"_s, key::F6 },
-	{ "F7"_s, key::F7 },
-	{ "F8"_s, key::F8 },
-	{ "F9"_s, key::F9 },
-	{ "F10"_s, key::F10 },
-	{ "F11"_s, key::F11 },
-	{ "F12"_s, key::F12 },
-};
