@@ -15,24 +15,12 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\include\icy_qtgui\icy_qtgui_model.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\include\icy_qtgui\icy_qtgui_system.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\include\icy_qtgui\icy_qtgui.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\include\icy_qtgui\icy_qtgui_core.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\source\icy_qtgui\icy_qtgui_model.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\source\icy_qtgui\icy_qtgui_system.cpp">
+    <ClCompile Include="..\..\source\icy_qtgui\icy_qtgui.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

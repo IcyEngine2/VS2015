@@ -29,7 +29,7 @@ namespace icy
 	public:
 		http_thread(http_system& system) noexcept;
 		~http_thread() noexcept;
-		error_type loop(http_event& event, bool& exit) noexcept;
+		error_type loop(http_event& event, uint32_t& code) noexcept;
 		error_type reply(http_event& event, const http_response& response, const const_array_view<uint8_t> bytes) noexcept;
 	private:
 		http_system& m_system;

@@ -69,6 +69,7 @@ int main()
 error_type mbox_application::init() noexcept
 {
     ICY_ERROR(window::create(m_window, window_flags::quit_on_close));
+    ICY_ERROR(m_window->rename("Icy MBox Test v1.0"_s));
     ICY_ERROR(m_display.init(*m_window->handle()));
     return {};
 }

@@ -42,16 +42,17 @@ namespace mbox
         command(const command&) = delete;
         void* _unused;
         int version;
-        command_type type;
-        icy::guid uid;
-        command_arg_type arg;
+        icy::guid proc_uid;
+        command_type cmd_type;
+        icy::guid cmd_uid;
+        command_arg_type arg_type;
         union
         {
             icy::rectangle rectangle;
             struct
             {
                 size_t size;
-                char bytes[1];
+                char bytes[sizeof(command_info) - sizeof(size_t)];
             } binary;
             command_info info;
         };

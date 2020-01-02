@@ -177,7 +177,7 @@ error_type window_data::initialize(const window_flags flags) noexcept
     
     win32_set_window_longptr(m_hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
     win32_set_window_longptr(m_hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(proc));
-    filter(event_type::window_close | event_type::window_rename);
+    filter(event_type::window_close | event_type::window_rename | event_type::display_refresh);
     return {};
 }
 LRESULT WINAPI window_data::proc(const HWND hwnd, const UINT msg, const WPARAM wparam, const LPARAM lparam) noexcept

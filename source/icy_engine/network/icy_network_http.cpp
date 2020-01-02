@@ -43,13 +43,13 @@ error_type http_system::launch(network_system_tcp& network, const http_config& c
 	done = true;
 	return {};
 }
-error_type http_thread::loop(http_event& event, bool& exit) noexcept
+error_type http_thread::loop(http_event& event, uint32_t& code) noexcept
 {
 	while (true)
 	{
 		network_tcp_reply reply;
-		ICY_ERROR(m_system.m_network->loop(reply, exit));
-		if (exit)
+		ICY_ERROR(m_system.m_network->loop(reply, code));
+		if (code)
 			break;
 
 		//event.event = network_request_type::disconnect;
@@ -156,7 +156,7 @@ void http_system::shutdown() noexcept
 	{
 		while (m_cores.load() != 0)
 		{
-			m_network->stop();
+			m_network->stop(network_code_exit);
             SwitchToThread();
 		}
 	}

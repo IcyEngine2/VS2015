@@ -1,9 +1,581 @@
 #pragma once
 
-#include "icy_qtgui_system.hpp"
-#include "icy_qtgui_model.hpp"
+#include <icy_engine/core/icy_string_view.hpp>
+#include <icy_engine/core/icy_atomic.hpp>
+#include <icy_engine/core/icy_memory.hpp>
+#include <icy_engine/core/icy_string.hpp>
+#include <icy_engine/core/icy_event.hpp>
 #include <icy_engine/core/icy_map.hpp>
 
+#define ICY_GUI_ERROR(X) if (const auto error = (X)) return make_stdlib_error(static_cast<std::errc>(error)); return {};
+
+#if ICY_QTGUI_STATIC
+#define ICY_QTGUI_API
+#else
+#ifdef ICY_QTGUI_EXPORTS
+#define ICY_QTGUI_API __declspec(dllexport)
+#else
+#define ICY_QTGUI_API __declspec(dllimport)
+#endif
+#endif
+
+#define ICY_GUI_VERSION 0x0006'0001
+
+#pragma warning(push)
+#pragma warning(disable:4201)
+
+namespace icy
+{
+    enum class gui_variant_type : uint8_t
+    {
+        none        =   0x00,
+        boolean     =   0x01,
+        sinteger    =   0x02,
+        uinteger    =   0x03,
+        floating    =   0x04,
+        sstring     =   0x05,
+        lstring     =   0x06,
+        array       =   0x07,
+        node        =   0x08,
+        user        =   0x09,
+    };
+    enum class gui_check_state : uint32_t
+    {
+        unchecked,
+        partial,
+        checked,
+    };
+    enum class gui_widget_flag : uint32_t
+    {
+        none,
+
+        layout_hbox = 0x01,
+        layout_vbox = 0x02,
+        layout_grid = 0x03,
+        auto_insert = 0x04,
+    };
+    enum class gui_widget_type : uint32_t
+    {
+        none,
+
+        window,
+        vsplitter,
+        hsplitter,
+        tabs,
+        frame,
+
+        //  -- text --
+
+        label,
+        line_edit,
+        text_edit,
+
+        //  -- menu --
+
+        menu,
+        menubar,
+
+        //  -- model view --
+
+        combo_box,
+        list_view,
+        tree_view,
+        grid_view,
+
+        //  -- utility --
+
+        message,
+        progress,
+
+        //  --  buttons --
+
+        text_button,
+        tool_button,
+
+        //  --  dialogs --
+
+        dialog_open_file,
+        dialog_save_file,
+        dialog_select_directory,
+        dialog_select_color,
+        dialog_select_font,
+        dialog_input_line,
+        dialog_input_text,
+        dialog_input_integer,
+        dialog_input_double,
+    };
+    
+    class gui_node : public detail::rel_ops<gui_node>
+    {
+    public:
+        struct data_type
+        {
+            virtual void add_ref() noexcept = 0;
+            virtual void release() noexcept = 0;
+            virtual gui_node parent() const noexcept = 0;
+            virtual int32_t row() const noexcept = 0;
+            virtual int32_t col() const noexcept = 0;
+            virtual uint64_t model() const noexcept = 0;
+        };
+    public:
+        gui_node() noexcept = default;
+        gui_node(const gui_node& rhs) noexcept : _ptr(rhs._ptr)
+        {
+            if (_ptr)
+                _ptr->add_ref();
+        }
+        ~gui_node() noexcept
+        {
+            if (_ptr)
+                _ptr->release();
+        }
+        ICY_DEFAULT_COPY_ASSIGN(gui_node);
+        explicit operator bool() const noexcept
+        {
+            return !!_ptr;
+        }
+        gui_node parent() const noexcept
+        {
+            if (_ptr)
+                return _ptr->parent();
+            return gui_node();
+        }
+        size_t row() const noexcept
+        {
+            if (_ptr)
+                return size_t(_ptr->row());
+            else
+                return SIZE_MAX;
+        }
+        size_t col() const noexcept
+        {
+            if (_ptr)
+                return size_t(_ptr->col());
+            else
+                return SIZE_MAX;
+        }
+        int compare(const gui_node& rhs) const noexcept
+        {
+            return icy::compare(_ptr, rhs._ptr);
+        }
+        uint64_t model() const noexcept
+        {
+            if (_ptr)
+                return _ptr->model();
+            return 0;
+        }
+    public:
+        data_type* _ptr = nullptr;
+    };
+
+    class gui_variant
+    {
+    public:
+        using boolean_type = bool;
+        using sinteger_type = int64_t;
+        using uinteger_type = uint64_t;
+        using floating_type = double;
+        using node_type = gui_node;
+        struct buffer_type
+        {
+            buffer_type(icy::realloc_func alloc, void* user, size_t size) noexcept : alloc(alloc), user(user), size(size), ref(1)
+            {
+
+            }
+            const realloc_func alloc;
+            void* const user;
+            const size_t size;
+            std::atomic<uint32_t> ref;
+        };
+    public:
+        static constexpr size_t max_length = 15;
+        gui_variant() noexcept : m_data{}
+        {
+
+        }
+        gui_variant(const boolean_type value) noexcept : m_type(static_cast<char>(gui_variant_type::boolean))
+        {
+            new (m_data) decltype(value)(value);
+        }
+        gui_variant(const sinteger_type value) noexcept : m_type(static_cast<char>(gui_variant_type::sinteger))
+        {
+            new (m_data) decltype(value)(value);
+        }
+        gui_variant(const uinteger_type value) noexcept : m_type(static_cast<char>(gui_variant_type::uinteger))
+        {
+            new (m_data) decltype(value)(value);
+        }
+        gui_variant(const floating_type value) noexcept : m_type(static_cast<char>(gui_variant_type::floating))
+        {
+            new (m_data) decltype(value)(value);
+        }
+        gui_variant(const gui_node value) noexcept : m_type(static_cast<char>(gui_variant_type::node))
+        {
+            new (m_data) decltype(value)(value);
+        }
+        gui_variant(const string_view str) noexcept : m_data(), m_size(0), m_type(static_cast<char>(gui_variant_type::sstring))
+        {
+            const char* const beg = str.bytes().data();
+            auto ptr = beg;
+            auto it = str.begin();
+            while (true)
+            {
+                ptr = static_cast<const char*>(it);
+                if (it == str.end())
+                    break;
+                if (ptr - beg >= sizeof(m_data))
+                    break;
+                ++it;
+            }
+            memcpy(m_data, beg, m_size = ptr - beg);
+        }
+        gui_variant(const gui_variant& rhs) noexcept
+        {
+            memcpy(this, &rhs, sizeof(rhs));
+            switch (type())
+            {
+            case gui_variant_type::node:
+                m_node._ptr->add_ref();
+                break;
+
+            case gui_variant_type::lstring:
+            case gui_variant_type::array:
+            case gui_variant_type::user:
+                m_buffer->ref.fetch_add(1, std::memory_order_release);
+                break;
+            }
+        }
+        gui_variant(gui_variant&& rhs) noexcept
+        {
+            memcpy(this, &rhs, sizeof(rhs));
+            memset(&rhs, 0, sizeof(rhs));
+        }
+        ICY_DEFAULT_COPY_ASSIGN(gui_variant);
+        ICY_DEFAULT_MOVE_ASSIGN(gui_variant);
+        ~gui_variant() noexcept
+        {
+            switch (type())
+            {
+            case gui_variant_type::node:
+                m_node.~gui_node();
+                break;
+
+            case gui_variant_type::lstring:
+            case gui_variant_type::array:
+            case gui_variant_type::user:
+                if (m_buffer->ref.fetch_sub(1, std::memory_order_acq_rel) == 1)
+                    m_buffer->alloc(m_buffer, 0, m_buffer->user);
+                break;
+            }
+        }
+        gui_variant_type type() const noexcept
+        {
+            return static_cast<gui_variant_type>(m_type);
+        }
+        string_view as_string() const noexcept
+        {
+            if (type() == gui_variant_type::sstring)
+                return string_view(reinterpret_cast<const char*>(m_data), m_size);
+            else if (type() == gui_variant_type::lstring)
+                return string_view(reinterpret_cast<const char*>(m_buffer + 1), m_buffer->size);
+            else
+                return {};
+        }
+        boolean_type as_boolean() const noexcept
+        {
+            switch (type())
+            {
+            case gui_variant_type::none:
+                return false;
+
+            case gui_variant_type::boolean:
+                return m_boolean;
+
+            case gui_variant_type::sinteger:
+                return m_sinteger != 0;
+
+            case gui_variant_type::uinteger:
+                return m_uinteger != 0;
+
+            case gui_variant_type::floating:
+                return m_floating != 0;
+
+            case gui_variant_type::sstring:
+                return *m_data != 0;
+            }
+            return true;
+        }
+        sinteger_type as_sinteger() const noexcept
+        {
+            switch (type())
+            {
+            case gui_variant_type::boolean:
+                return m_boolean;
+
+            case gui_variant_type::sinteger:
+                return m_sinteger;
+
+            case gui_variant_type::uinteger:
+                return static_cast<sinteger_type>(m_uinteger);
+
+            case gui_variant_type::floating:
+                return static_cast<sinteger_type>(llround(m_floating));
+
+            case gui_variant_type::sstring:
+            case gui_variant_type::lstring:
+            {
+                auto str = as_string();
+                sinteger_type value = 0;
+                _snscanf_s(str.bytes().data(), str.bytes().size(), "%lli", &value);
+                return value;
+            }
+            }
+            return 0;
+        }
+        sinteger_type as_uinteger() const noexcept
+        {
+            return static_cast<uinteger_type>(as_sinteger());
+        }
+        floating_type as_floating() const noexcept
+        {
+            switch (type())
+            {
+            case gui_variant_type::boolean:
+                return m_boolean ? 1.0 : 0.0;
+
+            case gui_variant_type::sinteger:
+                return static_cast<floating_type>(m_sinteger);
+
+            case gui_variant_type::uinteger:
+                return static_cast<floating_type>(m_uinteger);
+
+            case gui_variant_type::floating:
+                return m_floating;
+
+            case gui_variant_type::sstring:
+            case gui_variant_type::lstring:
+            {
+                auto str = as_string();
+                floating_type value = 0;
+                _snscanf_s(str.bytes().data(), str.bytes().size(), "%lf", &value);
+                return value;
+            }
+            }
+            return 0;
+        }
+        gui_node as_node() const noexcept
+        {
+            if (type() == gui_variant_type::node)
+                return m_node;
+            else
+                return {};            
+        }
+        template<typename T> const T* as_user() const noexcept
+        {
+            if (type() == gui_variant_type::user)
+            {
+                if (m_buffer->size == sizeof(T))
+                    return reinterpret_cast<T*>(m_buffer + 1);
+            }
+            return nullptr;
+        }
+        template<typename T> T* as_user() noexcept
+        {
+            return const_cast<void*>(static_cast<const gui_variant*>(this)->user());
+        }
+        const void* data() const noexcept
+        {
+            switch (type())
+            {
+            case gui_variant_type::lstring:
+            case gui_variant_type::array:
+            case gui_variant_type::user:
+                return m_buffer + 1;
+            }
+            return nullptr;
+        }
+        void* data() noexcept
+        {
+            return const_cast<void*>(static_cast<const gui_variant*>(this)->data());
+        }
+        size_t size() const noexcept
+        {
+            switch (type())
+            {
+            case gui_variant_type::lstring:
+            case gui_variant_type::array:
+            case gui_variant_type::user:
+                return m_buffer->size;
+            }
+            return 0;
+        }
+        uint32_t initialize(const realloc_func alloc, void* const user, const char* const data, const size_t size, const gui_variant_type type) noexcept
+        {
+            switch (type)
+            {
+            case gui_variant_type::lstring:
+            case gui_variant_type::array:
+            case gui_variant_type::user:
+                break;
+            default:
+                return static_cast<uint32_t>(std::errc::invalid_argument);
+            };
+
+            if (!alloc)
+                return static_cast<uint32_t>(std::errc::invalid_argument);
+
+            union
+            {
+                void* memory;
+                char* bytes;
+            };
+            memory = alloc(nullptr, sizeof(buffer_type) + size, user);
+            if (!memory)
+                return static_cast<uint32_t>(std::errc::not_enough_memory);
+
+            this->~gui_variant();
+            m_buffer = new (memory) buffer_type(alloc, user, size);
+            memcpy(bytes + sizeof(buffer_type), data, size);
+            m_type = static_cast<char>(type);
+            m_size = 0;
+            return {};
+        }
+    private:
+        union
+        {
+            struct
+            {
+                uint8_t m_data[max_length];
+                uint8_t m_type : 0x04;
+                uint8_t m_size : 0x04;
+            };
+            boolean_type m_boolean;
+            sinteger_type m_sinteger;
+            uinteger_type m_uinteger;
+            floating_type m_floating;
+            node_type m_node;
+            buffer_type* m_buffer;
+        };
+    };
+    inline error_type make_variant(gui_variant& var, const realloc_func alloc, void* const user, const char* const data, const size_t size) noexcept
+    {
+        ICY_GUI_ERROR(var.initialize(alloc, user, data, size, gui_variant_type::array));
+    }
+    inline error_type make_variant(gui_variant& var, const realloc_func alloc, void* const user, const string_view str) noexcept
+    {
+        ICY_GUI_ERROR(var.initialize(alloc, user, 
+            str.bytes().data(), str.bytes().size(), gui_variant_type::lstring));
+    }
+    inline error_type make_variant(gui_variant& var, const string_view str) noexcept
+    {
+        if (str.bytes().size() > gui_variant::max_length)
+        {
+            ICY_GUI_ERROR(var.initialize(detail::global_heap.realloc, detail::global_heap.user,
+                str.bytes().data(), str.bytes().size(), gui_variant_type::lstring));
+        }
+        else
+        {
+            var = str;
+        }
+        return {};
+    }
+    template<typename T, typename = std::enable_if_t<std::is_trivially_destructible<T>::value>>
+    inline uint32_t make_variant(gui_variant& var, const realloc_func alloc, void* const user, const T& data) noexcept
+    {
+        static_assert(std::is_trivially_destructible<T>::value, "INVALID STRUCT VARIANT TYPE");
+        ICY_GUI_ERROR(var.initialize(alloc, user, &data, sizeof(data), gui_variant_type::user));
+    }
+    
+    inline gui_widget_flag operator|(const gui_widget_flag lhs, const gui_widget_flag rhs) noexcept
+    {
+        return gui_widget_flag(uint32_t(lhs) | uint32_t(rhs));
+    }
+    inline bool operator&(const gui_widget_flag lhs, const gui_widget_flag rhs) noexcept
+    {
+        return !!(uint32_t(lhs) & uint32_t(rhs));
+    }
+
+    struct gui_widget : detail::rel_ops<gui_widget>
+    {
+        int compare(const gui_widget rhs) const noexcept
+        {
+            return icy::compare(index, rhs.index);
+        }
+        uint64_t index = 0;
+    };
+    struct gui_action : detail::rel_ops<gui_action>
+    {
+        int compare(const gui_action rhs) const noexcept
+        {
+            return icy::compare(index, rhs.index);
+        }
+        uint64_t index = 0;
+    };
+    struct gui_event
+    {
+        gui_widget widget;
+        gui_variant data;
+    };
+    struct gui_insert
+    {
+        gui_insert() noexcept = default;
+        gui_insert(const uint32_t x, const uint32_t y) noexcept : x(x), y(y)
+        {
+
+        }
+        gui_insert(const uint32_t x, const uint32_t y, const uint32_t dx, const uint32_t dy) noexcept :
+            x(x), y(y), dx(dx), dy(dy)
+        {
+
+        }
+        uint32_t x = 0;
+        uint32_t y = 0;
+        uint32_t dx = 1;
+        uint32_t dy = 1;
+    };
+    struct gui_widget_args_keys
+    {
+        static constexpr string_view layout = "Layout"_s;
+        static constexpr string_view stretch = "Stretch"_s;
+        static constexpr string_view row = "Row"_s;
+        static constexpr string_view col = "Col"_s;
+    };
+
+    class gui_system
+    {
+    public:
+        gui_system() noexcept = default;
+        gui_system(const gui_system&) noexcept = delete;
+        virtual void release() noexcept = 0;
+        virtual uint32_t wake() noexcept = 0;
+        virtual uint32_t loop(event_type& type, gui_event& args) noexcept = 0;
+        virtual uint32_t create(gui_widget& widget, const gui_widget_type type, const gui_widget parent, const gui_widget_flag flags = gui_widget_flag::none) noexcept = 0;
+        virtual uint32_t create(gui_action& action, const string_view text) noexcept = 0;
+        virtual uint32_t create(gui_node& model_root) noexcept = 0;
+        virtual uint32_t insert(const gui_widget widget, const gui_insert args) noexcept = 0;
+        virtual uint32_t insert(const gui_widget widget, const gui_action action) noexcept = 0;
+        virtual uint32_t insert_rows(const gui_node parent, const size_t offset, const size_t count) noexcept = 0;
+        virtual uint32_t insert_cols(const gui_node parent, const size_t offset, const size_t count) noexcept = 0;
+        virtual uint32_t remove_rows(const gui_node parent, const size_t offset, const size_t count) noexcept = 0;
+        virtual uint32_t remove_cols(const gui_node parent, const size_t offset, const size_t count) noexcept = 0;
+        virtual gui_node node(const gui_node parent, const size_t row, const size_t col) noexcept = 0;
+        virtual uint32_t show(const gui_widget widget, const bool value) noexcept = 0;
+        virtual uint32_t text(const gui_widget widget, const string_view text) noexcept = 0;
+        virtual uint32_t text(const gui_node node, const string_view text) noexcept = 0;
+        virtual uint32_t bind(const gui_action action, const gui_widget menu) noexcept = 0;
+        virtual uint32_t bind(const gui_widget widget, const gui_node node) noexcept = 0;
+        virtual uint32_t enable(const gui_action action, const bool value) noexcept = 0;
+        virtual uint32_t modify(const gui_widget widget, const string_view args) noexcept = 0;
+        virtual uint32_t destroy(const gui_widget widget) noexcept = 0;
+        virtual uint32_t destroy(const gui_action action) noexcept = 0;
+        virtual uint32_t destroy(const gui_node root) noexcept = 0;
+        virtual uint32_t clear(const gui_node root) noexcept = 0;
+    protected:
+        ~gui_system() noexcept = default;
+    };
+}
+
+#ifndef ICY_QTGUI_BUILD
 namespace icy
 {
     struct gui_widget_args
@@ -12,7 +584,7 @@ namespace icy
         {
             string str;
             auto it = map.end();
-            ICY_ERROR(to_string(key, str));            
+            ICY_ERROR(to_string(key, str));
             ICY_ERROR(map.insert(std::move(str), gui_widget_args(), &it));
             val = &it->value;
             return {};
@@ -50,107 +622,17 @@ namespace icy
         }
         return {};
     }
-    
 
     class gui_queue;
-    class gui_model
-    {
-        friend gui_queue;
-    public: 
-        virtual int compare(const gui_node lhs, const gui_node rhs) const noexcept
-        {
-            return icy::compare(lhs.idx, rhs.idx);
-        }
-        virtual bool filter(const gui_node) const noexcept
-        {
-            return true;
-        }
-        virtual uint32_t data(const gui_node node, const gui_role role, gui_variant& value) const noexcept = 0;
-        error_type init(gui_node& node) noexcept
-        {
-            if (!m_vtbl.init)
-                return make_stdlib_error(std::errc::function_not_supported);
-            ICY_GUI_ERROR(m_vtbl.init(m_view, node));
-        }
-        error_type sort(const gui_node node) noexcept
-        {
-            if (!m_vtbl.sort)
-                return make_stdlib_error(std::errc::function_not_supported);
-            ICY_GUI_ERROR(m_vtbl.sort(m_view, node));
-        }
-        error_type bind(const gui_node node, const gui_widget& widget) noexcept
-        {
-            if (!m_vtbl.bind)
-                return make_stdlib_error(std::errc::function_not_supported);
-            ICY_GUI_ERROR(m_vtbl.bind(m_view, node, widget));
-        }
-        error_type update(const gui_node node) noexcept
-        {
-            if (!m_vtbl.update)
-                return make_stdlib_error(std::errc::function_not_supported);
-            ICY_GUI_ERROR(m_vtbl.update(m_view, node));
-        }
-        error_type clear() noexcept
-        {
-            if (!m_vtbl.clear)
-                return make_stdlib_error(std::errc::function_not_supported);
-            ICY_GUI_ERROR(m_vtbl.clear(m_view));
-        }
-    private:
-        class base_type : public gui_model_base
-        {
-        public:
-            base_type() noexcept = default;
-            base_type(const base_type&) = delete;
-            gui_model* self() noexcept
-            {
-                return reinterpret_cast<gui_model*>(reinterpret_cast<char*>(this) - offsetof(gui_model, m_base));
-            }
-            const gui_model* self() const noexcept
-            {
-                return const_cast<base_type*>(this)->self();
-            }
-            void assign(const vtbl_type& vtbl) noexcept override
-            {
-                self()->m_vtbl = vtbl;
-            }
-            void add_ref() noexcept override
-            {
-                char buffer[sizeof(shared_ptr<gui_model>)];
-                new (buffer) shared_ptr<gui_model>(make_shared_from_this(self()));
-            }
-            void release() noexcept
-            {
-                make_shared_from_this(self()).~shared_ptr();
-            }
-            int compare(const gui_node lhs, const gui_node rhs) const noexcept override
-            {
-                return self()->compare(lhs, rhs);
-            }
-            bool filter(const gui_node node) const noexcept override
-            {
-                return self()->filter(node);
-            }
-            uint32_t data(const gui_node node, const gui_role role, gui_variant& value) const noexcept override
-            {
-                return self()->data(node, role, value);
-            }
-        };
-        gui_model_base::vtbl_type m_vtbl;
-        gui_model_view m_view;
-        base_type m_base;
-    };
-    
+    //inline error_type create_gui(shared_ptr<gui_queue>& queue) noexcept;
+
     class gui_queue : public event_queue
     {
+        friend error_type create_gui(shared_ptr<gui_queue>& queue) noexcept;
         enum { tag };
         error_type initialize() noexcept;
     public:
         gui_queue(decltype(tag)) noexcept
-        {
-            event_queue::filter(event_type::global_quit);
-        }
-        gui_queue(decltype(tag), gui_system& gui) noexcept : m_system(&gui)
         {
             event_queue::filter(event_type::global_quit);
         }
@@ -163,20 +645,6 @@ namespace icy
 #else
             m_library.shutdown();
 #endif
-        }
-        static error_type create(shared_ptr<gui_queue>& queue, gui_system& gui) noexcept
-        {
-            return make_shared(queue, tag, gui);
-        }
-        static error_type create(shared_ptr<gui_queue>& queue) noexcept
-        {
-            ICY_ERROR(make_shared(queue, tag));
-            if (const auto error = queue->initialize())
-            {
-                queue = nullptr;
-                return error;
-            }
-            return {};
         }
         error_type signal(const event_data&) noexcept override
         {
@@ -207,15 +675,13 @@ namespace icy
         {
             ICY_GUI_ERROR(m_system->create(widget, type, parent, flags));
         }
-        error_type create(gui_action& action, const string_view text = {}) noexcept
+        error_type create(gui_action& action, const string_view text) noexcept
         {
             ICY_GUI_ERROR(m_system->create(action, text));
         }
-        error_type initialize(shared_ptr<gui_model> model) noexcept
+        error_type create(gui_node& root) noexcept
         {
-            if (!model)
-                return make_stdlib_error(std::errc::invalid_argument);                
-            ICY_GUI_ERROR(m_system->initialize(model->m_view, model->m_base));
+            ICY_GUI_ERROR(m_system->create(root));
         }
         error_type insert(const gui_widget widget, const gui_insert args = {}) noexcept
         {
@@ -225,6 +691,26 @@ namespace icy
         {
             ICY_GUI_ERROR(m_system->insert(widget, action));
         }
+        error_type insert_rows(const gui_node parent, const size_t offset, const size_t count) noexcept
+        {
+            ICY_GUI_ERROR(m_system->insert_rows(parent, offset, count));
+        }
+        error_type insert_cols(const gui_node parent, const size_t offset, const size_t count) noexcept
+        {
+            ICY_GUI_ERROR(m_system->insert_cols(parent, offset, count));
+        }
+        error_type remove_rows(const gui_node parent, const size_t offset, const size_t count) noexcept
+        {
+            ICY_GUI_ERROR(m_system->remove_rows(parent, offset, count));
+        }
+        error_type remove_cols(const gui_node parent, const size_t offset, const size_t count) noexcept
+        {
+            ICY_GUI_ERROR(m_system->remove_cols(parent, offset, count));
+        }
+        gui_node node(const gui_node parent, const size_t row, const size_t col) noexcept
+        {
+            return m_system->node(parent, row, col);
+        }
         error_type show(const gui_widget widget, const bool value) noexcept
         {
             ICY_GUI_ERROR(m_system->show(widget, value));
@@ -232,6 +718,10 @@ namespace icy
         error_type text(const gui_widget widget, const string_view text) noexcept
         {
             ICY_GUI_ERROR(m_system->text(widget, text));
+        }
+        error_type text(const gui_node node, const string_view text) noexcept
+        {
+            ICY_GUI_ERROR(m_system->text(node, text));
         }
         error_type enable(const gui_action action, const bool value) noexcept
         {
@@ -241,6 +731,10 @@ namespace icy
         {
             ICY_GUI_ERROR(m_system->bind(action, menu));
         }
+        error_type bind(const gui_widget widget, const gui_node node) noexcept
+        {
+            ICY_GUI_ERROR(m_system->bind(widget, node));
+        }
         error_type modify(const gui_widget widget, const string_view args) noexcept
         {
             ICY_GUI_ERROR(m_system->modify(widget, args));
@@ -248,10 +742,10 @@ namespace icy
         error_type exec(const gui_widget widget, gui_action& action) noexcept
         {
             ICY_ERROR(show(widget, true));
-            
+
             shared_ptr<event_loop> loop;
-            ICY_ERROR(event_loop::create(loop, event_type::gui_action | event_type::window_close));
-            
+            ICY_ERROR(event_loop::create(loop, event_type::gui_action));
+
             auto timeout = max_timeout;
             while (true)
             {
@@ -290,6 +784,14 @@ namespace icy
         {
             ICY_GUI_ERROR(m_system->destroy(action));
         }
+        error_type destroy(const gui_node root) noexcept
+        {
+            ICY_GUI_ERROR(m_system->destroy(root));
+        }
+        error_type clear(const gui_node root) noexcept
+        {
+            ICY_GUI_ERROR(m_system->clear(root));
+        }
     private:
 #if ICY_QTGUI_STATIC
 
@@ -302,8 +804,23 @@ namespace icy
 #endif
         gui_system* m_system = nullptr;
     };
- }
+    static error_type create_gui(shared_ptr<gui_queue>& queue) noexcept
+    {
+        ICY_ERROR(make_shared(queue, gui_queue::tag));
+        if (const auto error = queue->initialize())
+        {
+            queue = nullptr;
+            return error;
+        }
+        return {};
+    }
 
+}
+#endif
+
+extern "C" uint32_t ICY_QTGUI_API icy_gui_system_create(const int version, icy::gui_system * *system) noexcept;
+
+#ifndef ICY_QTGUI_BUILD
 inline icy::error_type icy::gui_queue::initialize() noexcept
 {
     if (m_system)
@@ -311,7 +828,7 @@ inline icy::error_type icy::gui_queue::initialize() noexcept
     m_system = nullptr;
 
 #if ICY_QTGUI_STATIC
-    ICY_GUI_ERROR(icy_gui_system_create(ICY_GUI_VERSION, &m_system));    
+    ICY_GUI_ERROR(icy_gui_system_create(ICY_GUI_VERSION, &m_system));
 #else
     ICY_ERROR(m_library.initialize());
     if (const auto func = ICY_FIND_FUNC(m_library, icy_gui_system_create))
@@ -324,3 +841,6 @@ inline icy::error_type icy::gui_queue::initialize() noexcept
 #endif
     return{};
 }
+#endif
+
+#pragma warning(pop) 

@@ -57,12 +57,13 @@ public:
             return make_stdlib_error(std::errc::not_enough_memory);
         return {};
     }
-	static error_type create(network_address& addr, const size_t addr_len, const sockaddr& addr_ptr) noexcept
+	static error_type create(network_address& addr, const network_socket_type sock_type, const size_t addr_len, const sockaddr& addr_ptr) noexcept
 	{
 		const auto new_addr = static_cast<sockaddr*>(icy::realloc(nullptr, addr_len));
 		if (!new_addr)
 			return make_stdlib_error(std::errc::not_enough_memory);
 
+        addr.m_sock_type = sock_type;
 		addr.m_addr_len = addr_len;		
 		if (addr_ptr.sa_family == AF_INET)
 			addr.m_addr_type = network_address_type::ip_v4;
@@ -84,7 +85,7 @@ public:
 			if (next->ai_socktype == SOCK_DGRAM)
 				new_addr.m_sock_type = network_socket_type::UDP;
 
-			if (const auto error = create(new_addr, next->ai_addrlen, *next->ai_addr))
+			if (const auto error = create(new_addr, query->sock_type, next->ai_addrlen, *next->ai_addr))
 			{
 				query->error = error;
 				break;
@@ -113,6 +114,7 @@ public:
 	error_type error;
 	array<network_address>* buffer = nullptr;
     decltype(&FreeAddrInfoExW) free = nullptr;
+    network_socket_type sock_type;
 };
 class icy::network_tcp_request
 {
@@ -453,6 +455,7 @@ error_type network_system_base::initialize() noexcept
     const auto wsa_startup = ICY_FIND_FUNC(m_library, WSAStartup);
     const auto wsa_ioctl = ICY_FIND_FUNC(m_library, WSAIoctl);
     network_func_cleanup = ICY_FIND_FUNC(m_library, WSACleanup);
+    //network_func_getsockname = ICY_FIND_FUNC(m_library, getsockname);
     
     if (!wsa_startup || !network_func_cleanup || !wsa_ioctl)
         return make_stdlib_error(std::errc::function_not_supported);
@@ -505,6 +508,33 @@ error_type network_system_base::initialize() noexcept
 }
 error_type network_system_base::address(const string_view host, const string_view port, const network_duration timeout, const network_socket_type type, array<network_address>& array) noexcept
 {
+   /* if (host.empty())
+    {
+        auto lib = "iphlpapi"_lib;
+        ICY_ERROR(lib.initialize());
+        const auto func_get_adapter_addr = ICY_FIND_FUNC(lib, GetAdaptersAddresses);
+        if (!func_get_adapter_addr)
+            return make_stdlib_error(std::errc::function_not_supported);
+
+        char buffer[64_kb];
+        unsigned long size = sizeof(buffer);
+        auto adapter = reinterpret_cast<PIP_ADAPTER_ADDRESSES>(buffer);
+        if (const auto error = func_get_adapter_addr(AF_UNSPEC,
+            GAA_FLAG_SKIP_UNICAST | GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST |
+            GAA_FLAG_SKIP_DNS_SERVER | GAA_FLAG_SKIP_FRIENDLY_NAME, nullptr, adapter, &size))
+        {
+            ICY_ERROR(make_system_error(make_system_error_code(error)));
+        }
+        for (auto unicast = adapter->FirstUnicastAddress; unicast; unicast = unicast->Next)
+        {
+            network_address next_addr;
+            ICY_ERROR(network_address_query::create(next_addr, m_sock_type, unicast->Address.iSockaddrLength, *unicast->Address.lpSockaddr));
+            ICY_ERROR(array.push_back(std::move(next_addr)));
+        }
+
+        return {};
+    }*/
+    
     const auto func_get_addr_info = ICY_FIND_FUNC(m_library, GetAddrInfoExW);
     const auto func_cancel_addr_info = ICY_FIND_FUNC(m_library, GetAddrInfoExCancel);
     const auto func_free_addr_info = ICY_FIND_FUNC(m_library, FreeAddrInfoExW);
@@ -538,6 +568,7 @@ error_type network_system_base::address(const string_view host, const string_vie
 	query.buffer = &array;
 	query.event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     query.free = func_free_addr_info;
+    query.sock_type = type;
 	if (!query.event)
 		return last_system_error();
 
@@ -613,17 +644,18 @@ error_type network_system_base::launch(const uint16_t port, const network_socket
             return last_system_error();
     }
 	m_socket = std::move(socket);
-	m_addr = addr_type;
+	m_addr_type = addr_type;
 	return {};
 }
-error_type network_system_base::stop() noexcept
+error_type network_system_base::stop(const uint32_t code) noexcept
 {
-    if (!PostQueuedCompletionStatus(m_iocp, 0, 0, nullptr))
+    ICY_ASSERT(code, "INVALID NETWORK CODE");
+    if (!PostQueuedCompletionStatus(m_iocp, code, 0, nullptr))
         return last_system_error();
     return {};
 }
 
-error_type network_system_tcp::connect(network_tcp_connection& conn, const network_address& address, const const_array_view<uint8_t> send) noexcept
+error_type network_system_tcp::connect(network_tcp_connection& conn, const network_address& address, const const_array_view<uint8_t> buffer) noexcept
 {
     if (!network_func_bind || !network_func_listen || !network_func_connect)
         return make_stdlib_error(std::errc::function_not_supported);
@@ -643,9 +675,7 @@ error_type network_system_tcp::connect(network_tcp_connection& conn, const netwo
 
 	ICY_ERROR(conn.make_timer());
 	network_tcp_request* ref = nullptr;
-	ICY_ERROR(network_tcp_request::create(network_request_type::connect, send.size(), conn, ref));
-	memcpy(ref->buffer, send.data(), send.size());
-
+	ICY_ERROR(network_tcp_request::create(network_request_type::connect, buffer.size(), conn, ref));
 	if (address.addr_type() == network_address_type::ip_v6)
 	{
 		sockaddr_in6 addr = {};
@@ -661,8 +691,8 @@ error_type network_system_tcp::connect(network_tcp_connection& conn, const netwo
 			return last_system_error();
 	}
 	auto bytes = 0ul;
-	if (!network_func_connect(conn.m_socket, address.data(), address.size(), ref->buffer, 
-		uint32_t(ref->capacity), &bytes, &ref->overlapped))
+    memcpy(ref->buffer, buffer.data(), buffer.size());
+	if (!network_func_connect(conn.m_socket, address.data(), address.size(), ref->buffer, uint32_t(ref->capacity), &bytes, &ref->overlapped))
 	{
 		const auto error = GetLastError();
 		if (error != WSA_IO_PENDING)
@@ -681,7 +711,7 @@ error_type network_system_tcp::accept(network_tcp_connection& conn) noexcept
 	if (!conn.m_socket)
 	{
 		conn.m_time = {};
-		ICY_ERROR(conn.m_socket.initialize(network_socket_type::TCP, m_addr));
+		ICY_ERROR(conn.m_socket.initialize(network_socket_type::TCP, m_addr_type));
 
 		const auto file = reinterpret_cast<HANDLE>(SOCKET(conn.m_socket));
 		conn.m_iocp = CreateIoCompletionPort(file, m_iocp, reinterpret_cast<ULONG_PTR>(&conn), 0);
@@ -690,7 +720,7 @@ error_type network_system_tcp::accept(network_tcp_connection& conn) noexcept
 	}
 
 	network_tcp_request* ref = nullptr;
-	const auto size = 2 * ((m_addr == network_address_type::ip_v6 ? sizeof(SOCKADDR_IN6) : sizeof(SOCKADDR_IN)) + 16);
+	const auto size = 2 * ((m_addr_type == network_address_type::ip_v6 ? sizeof(SOCKADDR_IN6) : sizeof(SOCKADDR_IN)) + 16);
 	ICY_ERROR(network_tcp_request::create(network_request_type::accept, size, conn, ref));
 	auto bytes = 0ul;
 	if (!network_func_accept(m_socket, conn.m_socket, ref->buffer, 0, 
@@ -733,7 +763,7 @@ error_type network_system_tcp::disconnect(network_tcp_connection& conn) noexcept
 	}
 	return {};
 }
-error_type network_system_tcp::loop(network_tcp_reply& reply, bool& exit, const network_duration timeout) noexcept
+error_type network_system_tcp::loop(network_tcp_reply& reply, uint32_t& code, const network_duration timeout) noexcept
 {
     if (!network_func_setsockopt || !network_func_sockaddr)
         return make_stdlib_error(std::errc::function_not_supported);
@@ -757,9 +787,9 @@ error_type network_system_tcp::loop(network_tcp_reply& reply, bool& exit, const 
             reply.type = network_request_type::timeout;
             ICY_LOCK_GUARD(reply.conn->m_lock);
         }
-        else
+        else // if (!entry.dwNumberOfBytesTransferred)
         {
-            exit = true;
+            code = entry.dwNumberOfBytesTransferred;
         }
         return {};
     }
@@ -794,7 +824,7 @@ error_type network_system_tcp::loop(network_tcp_reply& reply, bool& exit, const 
 		
 	if (request->type == network_request_type::accept)
 	{
-		const auto size = 2 * ((m_addr == network_address_type::ip_v6 ? sizeof(SOCKADDR_IN6) : sizeof(SOCKADDR_IN)) + 16);
+		const auto size = 2 * ((m_addr_type == network_address_type::ip_v6 ? sizeof(SOCKADDR_IN6) : sizeof(SOCKADDR_IN)) + 16);
 		if (network_func_setsockopt(conn->m_socket, SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT, reinterpret_cast<const char*>(&m_socket), sizeof(SOCKET)) == SOCKET_ERROR)
 		{
 			reply.error = last_system_error();
@@ -807,7 +837,7 @@ error_type network_system_tcp::loop(network_tcp_reply& reply, bool& exit, const 
 			auto size_rem = 0;
 			network_func_sockaddr(request->buffer, 0, uint32_t(size / 2), uint32_t(size / 2),
 				&addr_loc, &size_loc, &addr_rem, &size_rem);
-			reply.error = network_address_query::create(reply.conn->m_address, size_t(size_rem), *addr_rem);
+			reply.error = network_address_query::create(reply.conn->m_address, network_socket_type::TCP, size_t(size_rem), *addr_rem);
 			conn->m_time = network_clock::now();
 		}
 	}
@@ -868,6 +898,10 @@ error_type network_system_tcp::loop(network_tcp_reply& reply, bool& exit, const 
 	}
 	return {};
 }
+/*error_type network_system_tcp::address(network_address& addr) noexcept
+{
+    return network_address_query::create(addr, m_addr, network_socket_type::TCP, m_socket);
+}*/
 
 error_type network_system_udp::multicast(const network_address& address, const bool join) noexcept
 {
@@ -916,7 +950,7 @@ error_type network_system_udp::recv(const size_t capacity) noexcept
     auto request = make_unique<network_udp_request_ex>();
     request->type = network_request_type::recv;
     ICY_ERROR(request->bytes.resize(capacity));
-    ICY_ERROR(network_address_query::create(request->address, m_addr));
+    ICY_ERROR(network_address_query::create(request->address, m_addr_type));
     request->address_size = request->address.size();
     auto ptr = request.get();
     {
@@ -926,7 +960,7 @@ error_type network_system_udp::recv(const size_t capacity) noexcept
     ICY_ERROR(ptr->recv(m_socket));
     return {};
 }
-error_type network_system_udp::loop(network_udp_request& reply, bool& exit, const network_duration timeout) noexcept
+error_type network_system_udp::loop(network_udp_request& reply, uint32_t& exit, const network_duration timeout) noexcept
 {
     auto entry = OVERLAPPED_ENTRY{};
     auto count = 0ul;
@@ -945,7 +979,7 @@ error_type network_system_udp::loop(network_udp_request& reply, bool& exit, cons
 
     if (!entry.lpOverlapped)
     {
-        exit = true;
+        exit = entry.dwNumberOfBytesTransferred;
         return {};
     }
 
@@ -969,6 +1003,11 @@ error_type network_system_udp::loop(network_udp_request& reply, bool& exit, cons
     }
     return {};
 }
+/*error_type network_system_udp::address(network_address& addr) noexcept
+{
+    return network_address_query::create(addr, m_addr, network_socket_type::UDP, m_socket);
+}
+*/
 
 bool icy::is_network_error(const error_type error) noexcept
 {

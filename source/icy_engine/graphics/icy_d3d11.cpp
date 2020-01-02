@@ -126,7 +126,10 @@ error_type d3d11_display::loop(const duration_type timeout) noexcept
         m_device->GetImmediateContext(&context);
         //ID3D11RenderTargetView* rtv[] = { &m_chain.view() };
         //context->OMSetRenderTargets(_countof(rtv), rtv, nullptr);
-        float colors[] = { 0.5F, 0.7F, 0.2F, 1.0F };
+        auto fr = frame();
+
+
+        float colors[] = { 0.5F * (fr % 2000) / 2000, 0.3F * (fr % 1000) / 1000, 0.9F * (fr % 3000) / 3000, 1.0F };
         context->ClearRenderTargetView(&m_chain.view(), colors);
 
         //auto& buffer = m_buffers[m_frame.load(std::memory_order_acquire) % m_buffers.size()];

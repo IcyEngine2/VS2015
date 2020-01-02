@@ -1,5 +1,4 @@
-#include <icy_qtgui/icy_qtgui_system.hpp>
-#include <icy_qtgui/icy_qtgui_model.hpp>
+#include <icy_qtgui/icy_qtgui.hpp>
 #include <QtCore/qtimer.h>
 #include <QtCore/qmutex.h>
 #include <QtCore/qthread.h>
@@ -77,8 +76,6 @@ Q_IMPORT_PLUGIN(QWindowsIntegrationPlugin);
 
 using namespace icy;
 
-extern QAbstractItemModel* qtgui_model_create(QObject& root, gui_model_base& base);
-extern uint32_t qtgui_model_bind(const QModelIndex& index, const gui_widget& widget);
 extern QVariant qtgui_make_variant(const gui_variant& var);
 extern std::errc qtgui_make_variant(const QVariant& qvar, gui_variant& var);
 static auto qtgui_exit_code = std::errc(0);
@@ -89,7 +86,8 @@ extern void qtgui_exit(const std::errc code = std::errc(0))
     qApp->exit(1);
 }
 
-ICY_STATIC_NAMESPACE_BEG
+namespace icy {
+//ICY_STATIC_NAMESPACE_BEG
 static auto qtapp_argc = 0;
 static char** qtapp_argv = nullptr;
 static const auto qtgui_property_name = "user";
@@ -124,23 +122,31 @@ enum class qtgui_event_type : uint32_t
     none,
     create_widget,
     create_action,
+    create_model,
     insert_widget,
     insert_action,
+    insert_model_rows,
+    insert_model_cols,
+    remove_model_rows,
+    remove_model_cols,
     show,
-    text,
+    text_widget,
+    text_model,
     bind_action,
     bind_widget,
     enable_action,
     modify_widget,
     destroy_widget,
     destroy_action,
+    destroy_model,
+    clear_model,
 };
 
 class qtgui_event_create_widget : public QEvent
 {
 public:
     qtgui_event_create_widget(const gui_widget widget, const gui_widget_type wtype, const gui_widget parent, const gui_widget_flag flags) :
-        QEvent(static_cast<QEvent::Type>(QEvent::User + static_cast<uint32_t>(qtgui_event_type::create_widget))),
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::create_widget))),
         wtype(wtype), flags(flags), parent(parent), widget(widget)
     {
 
@@ -155,7 +161,7 @@ class qtgui_event_create_action : public QEvent
 {
 public:
     qtgui_event_create_action(const gui_action action, const QString text) : 
-        QEvent(static_cast<QEvent::Type>(QEvent::User + static_cast<uint32_t>(qtgui_event_type::create_action))), 
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::create_action))), 
         action(action), text(text)
     {
 
@@ -164,11 +170,23 @@ public:
     const gui_action action;
     const QString text;
 };
+class qtgui_event_create_model : public QEvent
+{
+public:
+    qtgui_event_create_model(const gui_node root) :
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::create_model))),
+        root(root)
+    {
+
+    }
+public:
+    const gui_node root;
+};
 class qtgui_event_insert_widget : public QEvent
 {
 public:
     qtgui_event_insert_widget(const gui_widget widget, gui_insert args) :
-        QEvent(static_cast<QEvent::Type>(QEvent::User + static_cast<uint32_t>(qtgui_event_type::insert_widget))),
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::insert_widget))),
         widget(widget), args(args)
     {
 
@@ -181,7 +199,7 @@ class qtgui_event_insert_action : public QEvent
 {
 public:
     qtgui_event_insert_action(const gui_widget widget, const gui_action action) :
-        QEvent(static_cast<QEvent::Type>(QEvent::User + static_cast<uint32_t>(qtgui_event_type::insert_action))), 
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::insert_action))), 
         widget(widget), action(action)
     {
 
@@ -190,11 +208,67 @@ public:
     const gui_widget widget;
     const gui_action action;
 };
+class qtgui_event_insert_model_rows : public QEvent
+{
+public:
+    qtgui_event_insert_model_rows(const gui_node node, const int offset, const int count) :
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::insert_model_rows))),
+        node(node), offset(offset), count(count)
+    {
+
+    }
+public:
+    const gui_node node;
+    const int offset;
+    const int count;
+};
+class qtgui_event_insert_model_cols : public QEvent
+{
+public:
+    qtgui_event_insert_model_cols(const gui_node node, const int offset, const int count) :
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::insert_model_cols))),
+        node(node), offset(offset), count(count)
+    {
+
+    }
+public:
+    const gui_node node;
+    const int offset;
+    const int count;
+};
+class qtgui_event_remove_model_rows : public QEvent
+{
+public:
+    qtgui_event_remove_model_rows(const gui_node node, const int offset, const int count) :
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::remove_model_rows))),
+        node(node), offset(offset), count(count)
+    {
+
+    }
+public:
+    const gui_node node;
+    const int offset;
+    const int count;
+};
+class qtgui_event_remove_model_cols : public QEvent
+{
+public:
+    qtgui_event_remove_model_cols(const gui_node node, const int offset, const int count) :
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::remove_model_cols))),
+        node(node), offset(offset), count(count)
+    {
+
+    }
+public:
+    const gui_node node;
+    const int offset;
+    const int count;
+};
 class qtgui_event_show : public QEvent
 {
 public:
     qtgui_event_show(const gui_widget widget, const bool value) : 
-        QEvent(static_cast<QEvent::Type>(QEvent::User + static_cast<uint32_t>(qtgui_event_type::show))), 
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::show))), 
         widget(widget), value(value)
     {
 
@@ -203,11 +277,11 @@ public:
     const gui_widget widget;
     const bool value;
 };
-class qtgui_event_text : public QEvent
+class qtgui_event_text_widget : public QEvent
 {
 public:
-    qtgui_event_text(const gui_widget widget, const QString text) :
-        QEvent(static_cast<QEvent::Type>(QEvent::User + static_cast<uint32_t>(qtgui_event_type::text))),
+    qtgui_event_text_widget(const gui_widget widget, const QString text) :
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::text_widget))),
         widget(widget), text(text)
     {
 
@@ -216,11 +290,24 @@ public:
     const gui_widget widget;
     const QString text;
 };
+class qtgui_event_text_model : public QEvent
+{
+public:
+    qtgui_event_text_model(const gui_node node, const QString text) :
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::text_model))),
+        node(node), text(text)
+    {
+
+    }
+public:
+    const gui_node node;
+    const QString text;
+};
 class qtgui_event_bind_action : public QEvent
 {
 public:
     qtgui_event_bind_action(const gui_action action, const gui_widget widget) :
-        QEvent(static_cast<QEvent::Type>(QEvent::User + static_cast<uint32_t>(qtgui_event_type::bind_action))),
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::bind_action))),
         action(action), widget(widget)
     {
 
@@ -229,11 +316,24 @@ public:
     const gui_action action;
     const gui_widget widget;
 };
+class qtgui_event_bind_widget : public QEvent
+{
+public:
+    qtgui_event_bind_widget(const gui_widget widget, const gui_node node) :
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::bind_widget))),
+        widget(widget), node(node)
+    {
+
+    }
+public:
+    const gui_widget widget;
+    const gui_node node;
+};
 class qtgui_event_enable_action : public QEvent
 {
 public:
     qtgui_event_enable_action(const gui_action action, const bool value) :
-        QEvent(static_cast<QEvent::Type>(QEvent::User + static_cast<uint32_t>(qtgui_event_type::enable_action))),
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::enable_action))),
         action(action), value(value)
     {
 
@@ -242,24 +342,11 @@ public:
     const gui_action action;
     const bool value;
 };
-class qtgui_event_bind_widget : public QEvent
-{
-public:
-    qtgui_event_bind_widget(const gui_widget widget, const QModelIndex& index) :
-        QEvent(static_cast<QEvent::Type>(QEvent::User + static_cast<uint32_t>(qtgui_event_type::bind_widget))),
-        widget(widget), index(index)
-    {
-
-    }
-public:
-    const gui_widget widget;
-    const QModelIndex index;
-};
 class qtgui_event_modify_widget : public QEvent
 {
 public:
     qtgui_event_modify_widget(const gui_widget widget, QVariantMap&& args) :
-        QEvent(static_cast<QEvent::Type>(QEvent::User + static_cast<uint32_t>(qtgui_event_type::modify_widget))),
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::modify_widget))),
         widget(widget), args(std::move(args))
     {
 
@@ -272,7 +359,7 @@ class qtgui_event_destroy_widget : public QEvent
 {
 public:
     qtgui_event_destroy_widget(const gui_widget widget) : 
-        QEvent(static_cast<QEvent::Type>(QEvent::User + static_cast<uint32_t>(qtgui_event_type::destroy_widget))),
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::destroy_widget))),
         widget(widget)
     {
 
@@ -284,7 +371,7 @@ class qtgui_event_destroy_action : public QEvent
 {
 public:
     qtgui_event_destroy_action(const gui_action action) :
-        QEvent(static_cast<QEvent::Type>(QEvent::User + static_cast<uint32_t>(qtgui_event_type::destroy_action))),
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::destroy_action))),
         action(action)
     {
 
@@ -292,9 +379,107 @@ public:
 public:
     const gui_action action;
 };
+class qtgui_event_destroy_model : public QEvent
+{
+public:
+    qtgui_event_destroy_model(const gui_node root) :
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::destroy_model))), root(root)
+    {
+
+    }
+public:
+    const gui_node root;
+};
+class qtgui_event_clear_model : public QEvent
+{
+public:
+    qtgui_event_clear_model(const gui_node root) :
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::clear_model))), root(root)
+    {
+
+    }
+public:
+    const gui_node root;
+};
 class qtgui_splitter : public QSplitter
 {
     using QSplitter::QSplitter;
+};
+class qtgui_node_data : public gui_node::data_type
+{
+public:
+    qtgui_node_data(const uint64_t model, const gui_node parent, const int32_t row, const int32_t col) noexcept :
+        m_model(model), m_parent(parent), m_row(row), m_col(col)
+    {
+
+    }
+private:
+    void add_ref() noexcept override 
+    {
+        m_ref.fetch_add(1, std::memory_order_release);
+    }
+    void release() noexcept override
+    {
+        if (m_ref.fetch_sub(1, std::memory_order_acq_rel) == 1)
+            delete this;
+    }
+    gui_node parent() const noexcept override
+    {
+        return m_parent;
+    }
+    int32_t row() const noexcept override
+    {
+        return m_row;
+    }
+    int32_t col() const noexcept override
+    {
+        return m_col;
+    }
+    uint64_t model() const noexcept override
+    {
+        return m_model;
+    }
+private:
+    std::atomic<uint32_t> m_ref = 1;
+    const uint64_t m_model;
+    const gui_node m_parent;
+    const int32_t m_row;
+    const int32_t m_col;
+};
+struct qtgui_node
+{
+    int32_t parent = 0;
+    int32_t row = 0;
+    int32_t col = 0;
+    int32_t rowCount = 0;
+    int32_t colCount = 0;
+    QString text;
+    std::vector<int32_t> nodes;
+};
+class qtgui_model : public QAbstractItemModel
+{
+public:
+    qtgui_model(QObject* const parent) : QAbstractItemModel(parent)
+    {
+        m_nodes.push_back(qtgui_node());        
+    }
+    QModelIndex index(const gui_node index) const;
+    gui_node node(const QModelIndex& qIndex) const;
+    QModelIndex index(int row, int column, const QModelIndex& parent) const override;
+    QModelIndex parent(const QModelIndex& index) const override;
+    int rowCount(const QModelIndex& index) const override;
+    int columnCount(const QModelIndex& index) const override;
+    QVariant data(const QModelIndex& index, int role) const override;
+    bool setData(const QModelIndex& index, const QVariant& var, int role) override;
+    bool insertRows(int row, int count, const QModelIndex& parent) override;
+    bool insertColumns(int column, int count, const QModelIndex& parent) override;
+    bool removeRows(int row, int count, const QModelIndex& parent) override;
+    bool removeColumns(int column, int count, const QModelIndex& parent) override;
+    void removeChild(const int32_t index);
+    void reset();
+private:
+    QList<qtgui_node> m_nodes;
+    QQueue<int32_t> m_free;
 };
 class qtgui_system : public gui_system, public QApplication
 {
@@ -307,37 +492,56 @@ private:
     uint32_t loop(event_type& type, gui_event& args) noexcept override;
     uint32_t create(gui_widget& widget, const gui_widget_type type, const gui_widget parent, const gui_widget_flag flags) noexcept override;
     uint32_t create(gui_action& action, const string_view text) noexcept override;
-    uint32_t initialize(gui_model_view& view, gui_model_base& base) noexcept override;
+    uint32_t create(gui_node& root) noexcept override;
     uint32_t insert(const gui_widget widget, const gui_insert args) noexcept override;
     uint32_t insert(const gui_widget widget, const gui_action action) noexcept override;
+    uint32_t insert_rows(const gui_node parent, const size_t offset, const size_t count) noexcept override;
+    uint32_t insert_cols(const gui_node parent, const size_t offset, const size_t count) noexcept override;
+    uint32_t remove_rows(const gui_node parent, const size_t offset, const size_t count) noexcept override;
+    uint32_t remove_cols(const gui_node parent, const size_t offset, const size_t count) noexcept override;
+    gui_node node(const gui_node parent, const size_t row, const size_t col) noexcept;
     uint32_t show(const gui_widget widget, const bool value) noexcept override;
     uint32_t text(const gui_widget widget, const string_view text) noexcept override;
+    uint32_t text(const gui_node node, const string_view text) noexcept override;
     uint32_t bind(const gui_action action, const gui_widget widget) noexcept override;
+    uint32_t bind(const gui_widget widget, const gui_node node) noexcept override;
     uint32_t enable(const gui_action action, const bool value) noexcept override;
     uint32_t modify(const gui_widget widget, const string_view args) noexcept override;
     uint32_t destroy(const gui_widget widget) noexcept override;
     uint32_t destroy(const gui_action action) noexcept override;
+    uint32_t destroy(const gui_node root) noexcept override;
+    uint32_t clear(const gui_node root) noexcept override;
 private:
     std::errc process(const qtgui_event_create_widget& event);
     std::errc process(const qtgui_event_create_action& event);
+    std::errc process(const qtgui_event_create_model& event);
     std::errc process(const qtgui_event_insert_widget& event);
     std::errc process(const qtgui_event_insert_action& event);
+    std::errc process(const qtgui_event_insert_model_rows& event);
+    std::errc process(const qtgui_event_insert_model_cols& event);
+    std::errc process(const qtgui_event_remove_model_rows& event);
+    std::errc process(const qtgui_event_remove_model_cols& event);
     std::errc process(const qtgui_event_show& event);
-    std::errc process(const qtgui_event_text& event);
+    std::errc process(const qtgui_event_text_widget& event);
+    std::errc process(const qtgui_event_text_model& event);
     std::errc process(const qtgui_event_bind_action& event);
     std::errc process(const qtgui_event_bind_widget& event);
     std::errc process(const qtgui_event_enable_action& event);
     std::errc process(const qtgui_event_modify_widget& event);
     std::errc process(const qtgui_event_destroy_widget& event);
     std::errc process(const qtgui_event_destroy_action& event);
+    std::errc process(const qtgui_event_destroy_model& event);
+    std::errc process(const qtgui_event_clear_model& event);
 private:
     detail::intrusive_mpsc_queue m_queue;
     QWidget m_root;
     QMutex m_lock;
     QList<QWidget*> m_widgets;
     QList<QAction*> m_actions;
+    QList<qtgui_model*> m_models;
     QQueue<uint64_t> m_free_widgets;
     QQueue<uint64_t> m_free_actions;
+    QQueue<uint64_t> m_free_models;
 };
 ICY_STATIC_NAMESPACE_END
 
@@ -345,6 +549,7 @@ qtgui_system::qtgui_system() : QApplication(qtapp_argc, qtapp_argv)
 {
     m_widgets.push_back(nullptr);
     m_actions.push_back(nullptr);
+    m_models.push_back(nullptr);
     const auto style = QStyleFactory::create("Fusion");
     QApplication::setStyle(style);
 }
@@ -399,57 +604,71 @@ bool qtgui_system::notify(QObject* object, QEvent* event) noexcept
                 auto error = static_cast<std::errc>(0);
                 const auto type = static_cast<qtgui_event_type>(event->type() - QEvent::Type::User);
                 QMutexLocker lk(&m_lock);
-                if (type == qtgui_event_type::create_widget)
+                switch (type)
                 {
+                case qtgui_event_type::create_widget:
                     error = process(*static_cast<qtgui_event_create_widget*>(event));
-                }
-                else if (type == qtgui_event_type::create_action)
-                {
+                    break;
+                case qtgui_event_type::create_action:
                     error = process(*static_cast<qtgui_event_create_action*>(event));
-                }
-                else if (type == qtgui_event_type::insert_widget)
-                {
+                    break;
+                case qtgui_event_type::create_model:
+                    error = process(*static_cast<qtgui_event_create_model*>(event));
+                    break;
+                case qtgui_event_type::insert_widget:
                     error = process(*static_cast<qtgui_event_insert_widget*>(event));
-                }
-                else if (type == qtgui_event_type::insert_action)
-                {
+                    break;
+                case qtgui_event_type::insert_action:
                     error = process(*static_cast<qtgui_event_insert_action*>(event));
-                }
-                else if (type == qtgui_event_type::show)
-                {
+                    break;
+                case qtgui_event_type::insert_model_rows:
+                    error = process(*static_cast<qtgui_event_insert_model_rows*>(event));
+                    break;
+                case qtgui_event_type::insert_model_cols:
+                    error = process(*static_cast<qtgui_event_insert_model_cols*>(event));
+                    break;
+                case qtgui_event_type::remove_model_rows:
+                    error = process(*static_cast<qtgui_event_remove_model_rows*>(event));
+                    break;
+                case qtgui_event_type::remove_model_cols:
+                    error = process(*static_cast<qtgui_event_remove_model_cols*>(event));
+                    break;
+                case qtgui_event_type::show:
                     error = process(*static_cast<qtgui_event_show*>(event));
-                }
-                else if (type == qtgui_event_type::text)
-                {
-                    error = process(*static_cast<qtgui_event_text*>(event));
-                }
-                else if (type == qtgui_event_type::bind_action)
-                {
+                    break;
+                case qtgui_event_type::text_widget:
+                    error = process(*static_cast<qtgui_event_text_widget*>(event));
+                    break;
+                case qtgui_event_type::text_model:
+                    error = process(*static_cast<qtgui_event_text_model*>(event));
+                    break;
+                case qtgui_event_type::bind_action:
                     error = process(*static_cast<qtgui_event_bind_action*>(event));
-                }
-                else if (type == qtgui_event_type::bind_widget)
-                {
+                    break;
+                case qtgui_event_type::bind_widget:
                     error = process(*static_cast<qtgui_event_bind_widget*>(event));
-                }
-                else if (type == qtgui_event_type::enable_action)
-                {
+                    break;
+                case qtgui_event_type::enable_action:
                     error = process(*static_cast<qtgui_event_enable_action*>(event));
-                }
-                else if (type == qtgui_event_type::modify_widget)
-                {
+                    break;
+                case qtgui_event_type::modify_widget:
                     error = process(*static_cast<qtgui_event_modify_widget*>(event));
-                }
-                else if (type == qtgui_event_type::destroy_widget)
-                {
+                    break;
+                case qtgui_event_type::destroy_widget:
                     error = process(*static_cast<qtgui_event_destroy_widget*>(event));
-                }
-                else if (type == qtgui_event_type::destroy_action)
-                {
+                    break;
+                case qtgui_event_type::destroy_action:
                     error = process(*static_cast<qtgui_event_destroy_action*>(event));
-                }
-                else
-                {
+                    break;
+                case qtgui_event_type::destroy_model:
+                    error = process(*static_cast<qtgui_event_destroy_model*>(event));
+                    break;
+                case qtgui_event_type::clear_model:
+                    error = process(*static_cast<qtgui_event_clear_model*>(event));
+                    break;
+                default:
                     error = std::errc::function_not_supported;
+                    break;
                 }
                 output = true;
                 return uint32_t(error);
@@ -545,16 +764,29 @@ uint32_t qtgui_system::create(gui_action& action, const string_view text) noexce
     }
     ICY_CATCH;
 }
-uint32_t qtgui_system::initialize(gui_model_view& view, gui_model_base& base) noexcept
+uint32_t qtgui_system::create(gui_node& root) noexcept
 {
     try
     {
-        auto model = qtgui_model_create(m_root, base);
-        model->moveToThread(qApp->thread());
-        view.ptr = model;
+        root = {};
+        {
+            QMutexLocker lk(&m_lock);
+            auto index = m_models.size();
+            if (m_free_models.empty())
+            {
+                m_models.push_back(nullptr);
+            }
+            else
+            {
+                index = m_free_models.takeFirst();
+            }
+            root._ptr = new qtgui_node_data(index, gui_node(), 0, 0);
+        }
+        const auto event = new qtgui_event_create_model(root);
+        qApp->postEvent(this, event);
+        return {};
     }
     ICY_CATCH;
-    return {};
 }
 uint32_t qtgui_system::insert(const gui_widget widget, const gui_insert args) noexcept
 {
@@ -576,6 +808,69 @@ uint32_t qtgui_system::insert(const gui_widget widget, const gui_action action) 
     ICY_CATCH;
     return {};
 }
+uint32_t qtgui_system::insert_rows(const gui_node parent, const size_t offset, const size_t count) noexcept
+{
+    try
+    {
+        if (!parent || offset >= INT32_MAX || count >= INT32_MAX)
+            return uint32_t(std::errc::invalid_argument);
+        const auto event = new qtgui_event_insert_model_rows(parent, int32_t(offset), int32_t(count));
+        qApp->postEvent(this, event);
+    }
+    ICY_CATCH;
+    return {};
+}
+uint32_t qtgui_system::insert_cols(const gui_node parent, const size_t offset, const size_t count) noexcept
+{
+    try
+    {
+        if (!parent || offset >= INT32_MAX || count >= INT32_MAX)
+            return uint32_t(std::errc::invalid_argument);
+        const auto event = new qtgui_event_insert_model_cols(parent, int32_t(offset), int32_t(count));
+        qApp->postEvent(this, event);
+    }
+    ICY_CATCH;
+    return {};
+}
+uint32_t qtgui_system::remove_rows(const gui_node parent, const size_t offset, const size_t count) noexcept
+{
+    try
+    {
+        if (!parent || offset >= INT32_MAX || count >= INT32_MAX)
+            return uint32_t(std::errc::invalid_argument);
+        const auto event = new qtgui_event_remove_model_rows(parent, int32_t(offset), int32_t(count));
+        qApp->postEvent(this, event);
+    }
+    ICY_CATCH;
+    return {};
+}
+uint32_t qtgui_system::remove_cols(const gui_node parent, const size_t offset, const size_t count) noexcept
+{
+    try
+    {
+        if (!parent || offset >= INT32_MAX || count >= INT32_MAX)
+            return uint32_t(std::errc::invalid_argument);
+        const auto event = new qtgui_event_remove_model_rows(parent, int32_t(offset), int32_t(count));
+        qApp->postEvent(this, event);
+    }
+    ICY_CATCH;
+    return {};
+}
+gui_node qtgui_system::node(const gui_node parent, const size_t row, const size_t col) noexcept
+{
+    try
+    {
+        if (!parent || row >= INT32_MAX || col >= INT32_MAX)
+            return {};
+        gui_node node;
+        node._ptr = new qtgui_node_data(parent.model(), parent, uint32_t(row), uint32_t(col));
+        return node;
+    }
+    catch (...)
+    {
+        return {};
+    }
+}
 uint32_t qtgui_system::show(const gui_widget widget, const bool value) noexcept
 {
     try
@@ -590,7 +885,17 @@ uint32_t qtgui_system::text(const gui_widget widget, const string_view text) noe
 {
     try
     {
-        const auto event = new qtgui_event_text(widget, make_string(text));
+        const auto event = new qtgui_event_text_widget(widget, make_string(text));
+        qApp->postEvent(this, event);
+    }
+    ICY_CATCH;
+    return {};
+}
+uint32_t qtgui_system::text(const gui_node node, const string_view text) noexcept
+{
+    try
+    {
+        const auto event = new qtgui_event_text_model(node, make_string(text));
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
@@ -601,6 +906,16 @@ uint32_t qtgui_system::bind(const gui_action action, const gui_widget widget) no
     try
     {
         const auto event = new qtgui_event_bind_action(action, widget);
+        qApp->postEvent(this, event);
+    }
+    ICY_CATCH;
+    return {};
+}
+uint32_t qtgui_system::bind(const gui_widget widget, const gui_node node) noexcept
+{
+    try
+    {
+        const auto event = new qtgui_event_bind_widget(widget, node);
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
@@ -647,6 +962,27 @@ uint32_t qtgui_system::destroy(const gui_action action) noexcept
     ICY_CATCH;
     return {};
 }
+uint32_t qtgui_system::destroy(const gui_node root) noexcept
+{
+    try
+    {
+        const auto event = new qtgui_event_destroy_model(root);
+        qApp->postEvent(this, event);
+    }
+    ICY_CATCH;
+    return {};
+}
+uint32_t qtgui_system::clear(const gui_node root) noexcept
+{
+    try
+    {
+        const auto event = new qtgui_event_clear_model(root);
+        qApp->postEvent(this, event);
+    }
+    ICY_CATCH;
+    return {};
+}
+
 
 std::errc qtgui_system::process(const qtgui_event_create_widget& event)
 {
@@ -912,6 +1248,16 @@ std::errc qtgui_system::process(const qtgui_event_create_action& event)
         });
     return {};
 }
+std::errc qtgui_system::process(const qtgui_event_create_model& event)
+{
+    if (event.root.model() >= m_models.size())
+        return std::errc::invalid_argument;
+
+    auto model = new qtgui_model(&m_root);
+    model->setProperty(qtgui_property_name, event.root.model());
+    m_models[event.root.model()] = model;
+    return {};
+}
 std::errc qtgui_system::process(const qtgui_event_insert_widget& event)
 {
     if (event.widget.index >= m_widgets.size())
@@ -971,6 +1317,62 @@ std::errc qtgui_system::process(const qtgui_event_insert_action& event)
     }
     return {};
 }
+std::errc qtgui_system::process(const qtgui_event_insert_model_rows& event)
+{
+    if (event.node.model() >= m_models.size())
+        return std::errc::invalid_argument;
+
+    const auto model = m_models[event.node.model()];
+    if (!model)
+        return std::errc::invalid_argument;
+
+    if (!model->insertRows(event.offset, event.count, model->index(event.node)))
+        return std::errc::invalid_argument;
+    
+    return {};
+}
+std::errc qtgui_system::process(const qtgui_event_insert_model_cols& event)
+{
+    if (event.node.model() >= m_models.size())
+        return std::errc::invalid_argument;
+
+    const auto model = m_models[event.node.model()];
+    if (!model)
+        return std::errc::invalid_argument;
+
+    if (!model->insertColumns(event.offset, event.count, model->index(event.node)))
+        return std::errc::invalid_argument;
+
+    return {};
+}
+std::errc qtgui_system::process(const qtgui_event_remove_model_rows& event)
+{
+    if (event.node.model() >= m_models.size())
+        return std::errc::invalid_argument;
+
+    const auto model = m_models[event.node.model()];
+    if (!model)
+        return std::errc::invalid_argument;
+
+    if (!model->removeRows(event.offset, event.count, model->index(event.node)))
+        return std::errc::invalid_argument;
+
+    return {};
+}
+std::errc qtgui_system::process(const qtgui_event_remove_model_cols& event)
+{
+    if (event.node.model() >= m_models.size())
+        return std::errc::invalid_argument;
+
+    const auto model = m_models[event.node.model()];
+    if (!model)
+        return std::errc::invalid_argument;
+
+    if (!model->removeColumns(event.offset, event.count, model->index(event.node)))
+        return std::errc::invalid_argument;
+
+    return {};
+}
 std::errc qtgui_system::process(const qtgui_event_show& event)
 {
     if (event.widget.index >= m_widgets.size())
@@ -986,7 +1388,7 @@ std::errc qtgui_system::process(const qtgui_event_show& event)
     widget->setVisible(event.value);
     return {};
 }
-std::errc qtgui_system::process(const qtgui_event_text& event)
+std::errc qtgui_system::process(const qtgui_event_text_widget& event)
 {
     if (event.widget.index >= m_widgets.size())
         return std::errc::invalid_argument;
@@ -1021,6 +1423,21 @@ std::errc qtgui_system::process(const qtgui_event_text& event)
     }
     return {};
 }
+std::errc qtgui_system::process(const qtgui_event_text_model& event)
+{
+    if (event.node.model() >= m_models.size())
+        return std::errc::invalid_argument;
+
+    const auto model = m_models[event.node.model()];
+    if (!model)
+        return std::errc::invalid_argument;
+
+    const auto qIndex = model->index(event.node);
+    if (!model->setData(qIndex, event.text, Qt::ItemDataRole::DisplayRole))
+        return std::errc::invalid_argument;
+
+    return {};
+}
 std::errc qtgui_system::process(const qtgui_event_bind_action& event)
 {
     if (event.widget.index >= m_widgets.size() ||
@@ -1041,35 +1458,44 @@ std::errc qtgui_system::process(const qtgui_event_bind_action& event)
 }
 std::errc qtgui_system::process(const qtgui_event_bind_widget& event)
 {
-    if (event.widget.index >= m_widgets.size())
+    if (event.widget.index >= m_widgets.size() ||
+        event.node.model() >= m_models.size())
         return std::errc::invalid_argument;
 
     const auto widget = m_widgets[event.widget.index];
-    if (!widget)
+    const auto model = m_models[event.node.model()];
+    if (!widget || !model)
         return std::errc::invalid_argument;
 
-    const auto index = event.widget.index;
-    const auto model = const_cast<QAbstractItemModel*>(event.index.model());
     if (const auto view = qobject_cast<QAbstractItemView*>(widget))
     {
+        const auto widgetIndex = event.widget.index;
+        const auto modelIndex = event.node.model();
         view->setModel(model);
-        view->setRootIndex(event.index.internalId() ? event.index : QModelIndex());
+        view->setRootIndex(model->index(event.node));
 
         QObject::connect(view->selectionModel(), &QItemSelectionModel::currentChanged, 
-            [this, index](const QModelIndex& modelIndex)
+            [this, widgetIndex, model](const QModelIndex& qIndex)
             {
-                auto node = new qtgui_event_node;
-                node->type = event_type::gui_select;
-                node->args.widget.index = index;
-                const auto cerr = qtgui_make_variant(modelIndex, node->args.data);
-                m_queue.push(node);
-                qtgui_exit(cerr);
+                auto node = new (std::nothrow) qtgui_event_node;
+                if (!node)
+                {
+                    qtgui_exit(std::errc::not_enough_memory);
+                }
+                else
+                {
+                    node->type = event_type::gui_select;
+                    node->args.widget.index = widgetIndex;
+                    node->args.data = model->node(qIndex);
+                    m_queue.push(node);
+                    qtgui_exit();
+                }
             });
     }
     else if (const auto combo = qobject_cast<QComboBox*>(widget))
     {
         combo->setModel(model);
-        combo->setRootModelIndex(event.index.internalId() ? event.index : QModelIndex());
+        combo->setRootModelIndex(model->index(event.node));
     }
     else
         return std::errc::invalid_argument;
@@ -1184,17 +1610,356 @@ std::errc qtgui_system::process(const qtgui_event_destroy_action& event)
 
     return {};
 }
-
-
-uint32_t qtgui_model_bind(const QModelIndex& index, const gui_widget& widget)
+std::errc qtgui_system::process(const qtgui_event_destroy_model& event)
 {
-    try
+    if (event.root.model() >= m_models.size())
+        return std::errc::invalid_argument;
+
+    const auto model = m_models[event.root.model()];
+    if (!model)
+        return std::errc::invalid_argument;
+
+    model->deleteLater();
+    m_models[event.root.model()] = nullptr;
+    m_free_models.push_back(event.root.model());
+    return {};
+}
+std::errc qtgui_system::process(const qtgui_event_clear_model& event)
+{
+    if (event.root.model() >= m_models.size())
+        return std::errc::invalid_argument;
+
+    const auto model = m_models[event.root.model()];
+    if (!model)
+        return std::errc::invalid_argument;
+
+    model->reset();
+    return {};
+}
+
+QModelIndex qtgui_model::index(const gui_node gui_index) const
+{
+    if (!gui_index.parent())
+        return QModelIndex();
+    return index(int32_t(gui_index.row()), int32_t(gui_index.col()), qtgui_model::index(gui_index.parent()));
+}
+QModelIndex qtgui_model::index(int row, int column, const QModelIndex& parent) const
+{
+    const auto& parentNode = m_nodes[parent.internalId()];
+    if (row >= 0 && row < parentNode.rowCount && column >= 0 && column < parentNode.colCount)
+        return QAbstractItemModel::createIndex(row, column, parentNode.nodes[row * parentNode.colCount + column]);
+    else
+        return QModelIndex();    
+}
+QModelIndex qtgui_model::parent(const QModelIndex& index) const
+{
+    const auto& node = m_nodes[index.internalId()];
+    if (!node.parent)
+        return QModelIndex();
+
+    const auto& parentNode = m_nodes[node.parent];
+    return QAbstractItemModel::createIndex(parentNode.row, parentNode.col, node.parent);
+}
+int qtgui_model::rowCount(const QModelIndex& index) const
+{
+    return m_nodes[index.internalId()].rowCount;
+}
+int qtgui_model::columnCount(const QModelIndex& index) const
+{
+    return m_nodes[index.internalId()].colCount;
+}
+QVariant qtgui_model::data(const QModelIndex& index, int role) const
+{
+    if (role == Qt::ItemDataRole::DisplayRole)
+        return m_nodes[index.internalId()].text;
+    return QVariant();
+}
+bool qtgui_model::setData(const QModelIndex& index, const QVariant& var, int role)
+{
+    if (role == Qt::ItemDataRole::DisplayRole)
     {
-        const auto event = new qtgui_event_bind_widget(widget, index);
-        qApp->sendEvent(qApp, event);
-        return {};
+        m_nodes[index.internalId()].text = var.toString();
+        return true;
     }
-    ICY_CATCH;
+    return false;
+}
+void qtgui_model::removeChild(const int32_t index)
+{
+    m_free.push_back(index);
+    for (auto&& node : m_nodes[index].nodes)
+        removeChild(node);
+    m_nodes[index] = {};
+}
+bool qtgui_model::insertRows(int row, int count, const QModelIndex& parent)
+{
+    if (count < 0 || row < 0)
+        return false;
+    auto& node = m_nodes[parent.internalId()];
+    auto r0 = std::min(node.rowCount, row);
+    auto r1 = r0 + count;
+    if (r1 == r0)
+        return true;
+
+    QAbstractItemModel::beginInsertRows(parent, r0, r1 - 1);
+    decltype(node.nodes) newNodes;
+
+    for (auto k = 0; k < r0; ++k)
+    {
+        for (auto col = 0; col < node.colCount; ++col)
+        {
+            const auto index = node.nodes[k * node.colCount + col];
+            newNodes.push_back(index);
+        }
+    }
+    for (auto k = 0; k < count; ++k)
+    {
+        for (auto col = 0; col < node.colCount; ++col)
+        {
+            auto index = 0;
+            if (m_free.empty())
+            {
+                index = m_nodes.size();
+                m_nodes.push_back(qtgui_node());                
+            }
+            else
+                index = m_free.takeFirst();
+
+            m_nodes[index].parent = parent.internalId();
+            m_nodes[index].row = r0 + k;
+            m_nodes[index].col = col;
+            newNodes.push_back(index);
+        }
+    }
+    for (auto k = r0; k < node.rowCount; ++k)
+    {
+        for (auto col = 0; col < node.colCount; ++col)
+        {
+            const auto index = node.nodes[k * node.colCount + col];
+            newNodes.push_back(index);
+            m_nodes[index].row += count;
+        }
+    }
+    node.nodes = std::move(newNodes);
+    node.rowCount += r1 - r0;
+    QAbstractItemModel::endInsertRows();
+    return true;
+}
+bool qtgui_model::insertColumns(int column, int count, const QModelIndex& parent)
+{
+    if (count < 0 || column < 0)
+        return false;
+    auto& node = m_nodes[parent.internalId()];
+    auto c0 = std::min(node.colCount, column);
+    auto c1 = c0 + count;
+    if (c1 == c0)
+        return true;
+
+    QAbstractItemModel::beginInsertRows(parent, c0, c1 - 1);
+    decltype(node.nodes) newNodes;
+
+    for (auto row = 0; row < node.rowCount; ++row)
+    {
+        for (auto k = 0; k < c0; ++k)
+        {
+            const auto index = node.nodes[row * node.colCount + k];
+            newNodes.push_back(index);
+        }
+        for (auto k = 0; k < count; ++k)
+        {
+            auto index = 0;
+            if (m_free.empty())
+            {
+                index = m_nodes.size();
+                m_nodes.push_back(qtgui_node());
+            }
+            else
+                index = m_free.takeFirst();
+
+            m_nodes[index].parent = parent.internalId();
+            m_nodes[index].row = row;
+            m_nodes[index].col = c0 + k;
+            newNodes.push_back(index);
+        }
+
+        for (auto k = c0; k < node.colCount; ++k)
+        {
+            const auto index = node.nodes[row * node.colCount + k];
+            newNodes.push_back(index);
+            m_nodes[index].col += count;
+        }
+    }
+    node.nodes = std::move(newNodes);
+    node.colCount += c1 - c0;
+    QAbstractItemModel::endInsertRows();
+    return true;
+}
+bool qtgui_model::removeRows(int row, int count, const QModelIndex& parent)
+{
+    if (count < 0 || row < 0)
+        return false;
+
+    auto& node = m_nodes[parent.internalId()];
+    auto r0 = row;
+    auto r1 = row + count;
+    r0 = std::min(node.rowCount, r0);
+    r1 = std::min(node.rowCount, r1);
+    if (r1 == r0)
+        return true;
+
+    QAbstractItemModel::beginRemoveRows(parent, r0, r1 - 1);
+    decltype(node.nodes) newNodes;
+
+    for (auto k = 0; k < node.rowCount; ++k)
+    {
+        for (auto col = 0; col < node.colCount; ++col)
+        {
+            const auto index = node.nodes[k * node.colCount + col];
+            auto& child = m_nodes[index];
+            if (k < r0 || k >= r1)
+            {
+                newNodes.push_back(index);
+                if (k >= r1)
+                    child.row -= count;
+            }
+            else
+            {
+                removeChild(index);
+            }
+        }
+    }
+    node.nodes = std::move(newNodes);
+    node.rowCount -= r1 - r0;
+    QAbstractItemModel::endRemoveRows();
+    return true;
+}
+bool qtgui_model::removeColumns(int column, int count, const QModelIndex& parent)
+{
+    if (count < 0 || column < 0)
+        return false;
+
+    auto& node = m_nodes[parent.internalId()];
+    auto c0 = column;
+    auto c1 = column + count;
+    c0 = std::min(node.colCount, c0);
+    c1 = std::min(node.rowCount, c1);
+    if (c0 == c1)
+        return true;
+
+    QAbstractItemModel::beginRemoveColumns(parent, c0, c1 - 1);
+    decltype(node.nodes) newNodes;
+    
+    for (auto row = 0; row < node.rowCount; ++row)
+    {
+        for (auto k = 0; k < node.colCount; ++k)
+        {
+            const auto index = node.nodes[row * node.colCount + k];
+            auto& child = m_nodes[index];
+            if (k < c0 || k >= c1)
+            {
+                newNodes.push_back(index);
+                if (k >= c1)
+                    child.col -= count;
+            }
+            else
+            {
+                removeChild(index);
+            }
+        }
+    }
+    node.nodes = std::move(newNodes);
+    node.colCount -= c1 - c0;
+    QAbstractItemModel::endRemoveColumns();
+    return true;
+}
+gui_node qtgui_model::node(const QModelIndex& index) const
+{
+    if (!index.isValid())
+        return gui_node();
+
+    const auto model = property(qtgui_property_name).toULongLong();
+    gui_node new_node;
+    new_node._ptr = new qtgui_node_data(model, node(index.parent()), index.row(), index.column());
+    return new_node;
+}
+void qtgui_model::reset()
+{
+    beginResetModel();
+    m_nodes.clear();
+    m_nodes.push_back(qtgui_node());
+    m_free.clear();
+    endResetModel();
+}
+
+QVariant qtgui_make_variant(const gui_variant& var)
+{
+    switch (var.type())
+    {
+    case gui_variant_type::boolean:
+        return var.as_boolean();
+    case gui_variant_type::sinteger:
+        return var.as_sinteger();
+    case gui_variant_type::uinteger:
+        return var.as_uinteger();
+    case gui_variant_type::floating:
+        return var.as_floating();
+    case gui_variant_type::sstring:
+    case gui_variant_type::lstring:
+    {
+        const auto bytes = var.as_string().bytes();
+        return QString::fromUtf8(bytes.data(), static_cast<int>(bytes.size()));
+    }
+    }
+    return {};
+}
+std::errc qtgui_make_variant(const QVariant& qvar, gui_variant& var)
+{
+    auto ok = false;
+    switch (qvar.type())
+    {
+    case QVariant::Type::Bool:
+        ok = true;
+        var = qvar.toBool();
+        break;
+
+    case QVariant::Type::Char:
+    case QVariant::Type::Int:
+    case QVariant::Type::LongLong:
+        var = qvar.toLongLong(&ok);
+        break;
+
+    case QVariant::Type::UInt:
+    case QVariant::Type::ULongLong:
+        var = qvar.toULongLong(&ok);
+        break;
+
+    case QVariant::Type::Double:
+        var = qvar.toDouble(&ok);
+        break;
+
+    case QVariant::Type::ModelIndex:
+    {
+        auto qModelIndex = qvar.toModelIndex();
+        const auto qModel = static_cast<const qtgui_model*>(qModelIndex.model());
+        if (qModel)
+        {
+            ok = true;
+            var = qModel->node(qModelIndex);
+        }
+        break;
+    }
+
+    case QVariant::Type::String:
+    {
+        ok = true;
+        const auto str = qvar.toString();
+        const auto bytes = str.toUtf8();
+        return std::errc(make_variant(var, string_view(bytes)).code);
+    }
+    }
+    if (!ok)
+        return std::errc::invalid_argument;
+
+    return {};
 }
 
 #undef ICY_GUI_ERROR
@@ -1206,7 +1971,7 @@ extern "C" __declspec(dllimport) int __stdcall WideCharToMultiByte(unsigned Code
 uint32_t ICY_QTGUI_API icy_gui_system_create(const int version, gui_system** system) noexcept
 {
     if (!system || *system || version != ICY_GUI_VERSION)
-        return static_cast<uint32_t>(std::errc::invalid_argument);
+        return uint32_t(std::errc::invalid_argument);
 
     static char path[0x1000] = {};
     static char* args[1] = { path };

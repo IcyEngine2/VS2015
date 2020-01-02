@@ -10,6 +10,7 @@ struct sockaddr;
 
 namespace icy
 {
+    static const auto network_code_exit = UINT32_MAX;
 	using network_clock = std::chrono::system_clock;
 	using network_duration = network_clock::duration;
 	class network_address;
@@ -187,9 +188,12 @@ namespace icy
     class network_system_base
     {
     public:
-        network_system_base() noexcept = default;
-        network_system_base(network_system_base&& rhs) noexcept :
-            m_library(std::move(rhs.m_library)), m_socket(std::move(rhs.m_socket)), m_addr(rhs.m_addr), m_iocp(rhs.m_iocp)
+        network_system_base(const network_socket_type sock_type) noexcept : m_sock_type(sock_type)
+        {
+
+        }
+        network_system_base(network_system_base&& rhs) noexcept : m_sock_type(rhs.m_sock_type),
+            m_library(std::move(rhs.m_library)), m_socket(std::move(rhs.m_socket)), m_addr_type(rhs.m_addr_type), m_iocp(rhs.m_iocp)
         {
             rhs.m_iocp = nullptr;
         }
@@ -200,33 +204,41 @@ namespace icy
         void shutdown() noexcept;
         error_type initialize() noexcept;
         error_type address(const string_view host, const string_view port, const network_duration timeout, const network_socket_type type, array<network_address>& array) noexcept;
-        error_type stop() noexcept;
+        error_type stop(const uint32_t code) noexcept;
     protected:
         error_type launch(const uint16_t port, const network_socket_type sock_type, const network_address_type addr_type, const size_t max_queue) noexcept;
     protected:
+        const network_socket_type m_sock_type;
         library m_library = "ws2_32.dll"_lib;
         network_socket m_socket;
-        network_address_type m_addr = network_address_type::unknown;
+        network_address_type m_addr_type = network_address_type::unknown;
         void* m_iocp = nullptr;
     };
 	class network_system_tcp : public network_system_base
 	{
 	public:
+        network_system_tcp() noexcept : network_system_base(network_socket_type::TCP)
+        {
+
+        }
         error_type launch(const uint16_t port, const network_address_type addr_type, const size_t max_queue) noexcept
         {
             return network_system_base::launch(port, network_socket_type::TCP, addr_type, max_queue);
         }
-		error_type connect(network_tcp_connection& conn, const network_address& address, const const_array_view<uint8_t> send) noexcept;
+		error_type connect(network_tcp_connection& conn, const network_address& address, const const_array_view<uint8_t> bytes) noexcept;
 		error_type disconnect(network_tcp_connection& conn) noexcept;
 		error_type accept(network_tcp_connection& conn) noexcept;
 		error_type send(network_tcp_connection& conn, const const_array_view<uint8_t> buffer) noexcept;
 		error_type recv(network_tcp_connection& conn, const size_t capacity) noexcept;
-		error_type loop(network_tcp_reply& reply, bool& exit, const network_duration timeout = std::chrono::seconds(UINT32_MAX)) noexcept;
+		error_type loop(network_tcp_reply& reply, uint32_t& code, const network_duration timeout = std::chrono::seconds(UINT32_MAX)) noexcept;
 	};
     class network_system_udp : public network_system_base
     {
     public:
-        using network_system_base::network_system_base;
+        network_system_udp() noexcept : network_system_base(network_socket_type::UDP)
+        {
+
+        }
         error_type launch(const uint16_t port, const network_address_type addr_type, const size_t max_queue) noexcept
         {
             return network_system_base::launch(port, network_socket_type::UDP, addr_type, max_queue);
@@ -234,7 +246,7 @@ namespace icy
         error_type multicast(const network_address& address, const bool join) noexcept;
         error_type send(const network_address& address, const_array_view<uint8_t> bytes) noexcept;
         error_type recv(const size_t capacity) noexcept;
-        error_type loop(network_udp_request& request, bool& exit, const network_duration timeout = std::chrono::seconds(UINT32_MAX)) noexcept;
+        error_type loop(network_udp_request& request, uint32_t& exit, const network_duration timeout = std::chrono::seconds(UINT32_MAX)) noexcept;
     private:
         detail::spin_lock<> m_lock;
         array<unique_ptr<network_udp_request>> m_requests;

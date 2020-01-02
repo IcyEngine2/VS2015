@@ -11,14 +11,10 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\include\icy_qtgui\icy_qtgui.hpp" />
-    <ClInclude Include="..\..\include\icy_qtgui\icy_qtgui_core.hpp" />
-    <ClInclude Include="..\..\include\icy_qtgui\icy_qtgui_model.hpp" />
-    <ClInclude Include="..\..\include\icy_qtgui\icy_qtgui_system.hpp" />
+    <ClCompile Include="..\..\source\icy_qtgui\icy_qtgui.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\source\icy_qtgui\icy_qtgui_model.cpp" />
-    <ClCompile Include="..\..\source\icy_qtgui\icy_qtgui_system.cpp" />
+    <ClInclude Include="..\..\include\icy_qtgui\icy_qtgui.hpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
@@ -70,7 +66,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>ICY_QTGUI_STATIC=1;QT_STATIC;_DEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>ICY_QTGUI_STATIC=1;QT_STATIC=1;ICY_QTGUI_BUILD=1;_DEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <ExceptionHandling>Sync</ExceptionHandling>
     </ClCompile>
@@ -88,7 +84,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>ICY_QTGUI_STATIC=1;QT_STATIC;NDEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>ICY_QTGUI_STATIC=1;QT_STATIC=1;ICY_QTGUI_BUILD=1;NDEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <ExceptionHandling>Sync</ExceptionHandling>
     </ClCompile>
