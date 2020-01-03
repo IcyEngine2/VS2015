@@ -86,7 +86,7 @@ namespace icy
     {
     public:
         //  pass in key_message .control or .alt or .shift
-        explicit key_mod(const uint32_t mod) noexcept : m_value(mod)
+        key_mod(const uint32_t mod) noexcept : m_value(mod)
         {
 
         }
@@ -224,6 +224,7 @@ namespace icy
 		return lhs ? (lhs & rhs) != 0 : true;
 	}
 	error_type to_string(const key_message& key, string& str) noexcept;
+    string_view to_string(const key key) noexcept;
 }
 
 #pragma warning(pop)

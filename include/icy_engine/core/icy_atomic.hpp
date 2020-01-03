@@ -36,7 +36,7 @@ namespace icy
             }
             bool try_lock() noexcept
             {
-                return !m_flag.test_and_set(std::memory_order_acquire);
+                return !m_flag.test_and_set(std::memory_order_acq_rel);
             }
             void unlock() noexcept
             {
@@ -49,7 +49,7 @@ namespace icy
                 {
                     for (auto k = 0_z; k < spin; ++k)
                     {
-                        if (!m_flag.test_and_set(std::memory_order_acquire))
+                        if (!m_flag.test_and_set(std::memory_order_acq_rel))
                             return;
                     }
                     SwitchToThread();
@@ -57,7 +57,7 @@ namespace icy
             }
             void lock(std::false_type) noexcept
             {
-                while (!m_flag.test_and_set(std::memory_order_acquire))
+                while (!m_flag.test_and_set(std::memory_order_acq_rel))
                 {
 
                 }

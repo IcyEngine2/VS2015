@@ -649,7 +649,7 @@ namespace icy
     error_type console_read_key(key& key) noexcept;
     error_type win32_parse_cargs(array<string>& args) noexcept;
     error_type computer_name(string& str) noexcept;
-    error_type process_name(string& str) noexcept;
+    error_type process_name(HINSTANCE__* module, string& str) noexcept;
 
     class library
     {

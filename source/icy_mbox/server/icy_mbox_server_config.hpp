@@ -13,6 +13,7 @@ public:
         static constexpr icy::string_view applications = "Applications"_s;
         static constexpr icy::string_view ipaddr = "IP Address"_s;
         static constexpr icy::string_view inject = "Inject"_s;
+        static constexpr icy::string_view maxconn = "Max Connections"_s;
     };
 public:
     icy::error_type from_json(const icy::json& input) noexcept
@@ -30,6 +31,7 @@ public:
         }
         input.get(key::inject, inject);
         input.get(key::ipaddr, ipaddr);
+        input.get(key::maxconn, maxconn);
         return {};
     }
     icy::error_type to_json(icy::json& output) const noexcept
@@ -41,6 +43,7 @@ public:
             ICY_ERROR(json_apps.insert(pair.key, pair.value));
         ICY_ERROR(output.insert(key::inject, inject));
         ICY_ERROR(output.insert(key::ipaddr, ipaddr));
+        ICY_ERROR(output.insert(key::maxconn, maxconn));
         return {};
     }
     static icy::error_type copy(const mbox_config& src, mbox_config& dst) noexcept
@@ -50,10 +53,12 @@ public:
             ICY_ERROR(emplace(dst.applications, pair.key, pair.value));
         ICY_ERROR(to_string(src.inject, dst.inject));
         ICY_ERROR(to_string(src.ipaddr, dst.ipaddr));
+        dst.maxconn = src.maxconn;
         return {};
     }
 public:
     icy::map<icy::string, icy::string> applications;
     icy::string ipaddr;
     icy::string inject;
+    uint16_t maxconn;
 };

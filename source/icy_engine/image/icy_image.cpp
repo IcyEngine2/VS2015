@@ -9,11 +9,11 @@ static void release(image::data_type*& data) noexcept
     {
         auto& heap = data->heap;
         data->~data_type();
-        heap.realloc(data, 0);
+        heap.realloc(data, 0, heap.user);
         data = nullptr;
     }
 }
-static error_type make_image_data(heap& heap, const image_type type, icy::image::data_type*& data) noexcept
+static error_type make_image_data(global_heap_type heap, const image_type type, icy::image::data_type*& data) noexcept
 {
     switch (type)
     {
@@ -38,7 +38,7 @@ image::~image() noexcept
 }
 image_type image::type_from_string(const string_view str) noexcept
 {
-    switch (hash(file_name(str).ext))
+    switch (hash(file_name(str).extension))
     {
     case ".png"_hash:
         return image_type::png;
@@ -56,7 +56,7 @@ image_size image::size() const noexcept
 {
     return m_data ? m_data->size : image_size();
 }
-error_type image::save(heap& heap, const const_matrix_view<color> colors, const image_type type, array<uint8_t>& buffer) noexcept
+error_type image::save(global_heap_type heap, const const_matrix_view<color> colors, const image_type type, array<uint8_t>& buffer) noexcept
 {
     data_type* new_data = nullptr;
     ICY_ERROR(make_image_data(heap, type, new_data));
@@ -74,7 +74,7 @@ error_type image::save(heap& heap, const const_matrix_view<color> colors, const 
     ICY_ERROR(new_data->save(colors, write));
     return {};
 }
-error_type image::save(heap& heap, const const_matrix_view<color> colors, const string_view file_name, image_type type)
+error_type image::save(global_heap_type heap, const const_matrix_view<color> colors, const string_view file_name, image_type type)
 {
     if (type == image_type::unknown)
         type = type_from_string(file_name);
@@ -95,7 +95,7 @@ error_type image::save(heap& heap, const const_matrix_view<color> colors, const 
     ICY_ERROR(new_data->save(colors, write));
     return {};
 }
-error_type image::load(heap& heap, const const_array_view<uint8_t> buffer, image_type type) noexcept 
+error_type image::load(global_heap_type heap, const const_array_view<uint8_t> buffer, image_type type) noexcept
 {
     if (type == image_type::unknown)
         type = type_from_buffer(buffer);
@@ -109,7 +109,7 @@ error_type image::load(heap& heap, const const_array_view<uint8_t> buffer, image
     std::swap(m_data, new_data);
     return {};
 }
-error_type image::load(heap& heap, const string_view file_name, image_type type) noexcept
+error_type image::load(global_heap_type heap, const string_view file_name, image_type type) noexcept
 {
     if (type == image_type::unknown)
     {

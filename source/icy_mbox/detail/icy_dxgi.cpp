@@ -72,10 +72,11 @@ error_type dxgi_offset(size_t& offset) noexcept
     return {};
 }
 
-error_type dxgi_window(IDXGISwapChain& chain, icy::string& wname, icy::window_size& wsize)
+error_type dxgi_window(IDXGISwapChain& chain, icy::string& wname, icy::window_size& wsize, HWND__*& hwnd)
 {
     DXGI_SWAP_CHAIN_DESC desc = {};
     ICY_COM_ERROR(chain.lpVtbl->GetDesc(&chain, &desc));
+    hwnd = desc.OutputWindow;
     wsize = { desc.BufferDesc.Width, desc.BufferDesc.Height };
     
     const auto lib = GetModuleHandleW(L"user32");

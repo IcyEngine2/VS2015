@@ -6,9 +6,10 @@
 
 struct IDXGISwapChain;
 using dxgi_present = long(__stdcall*)(IDXGISwapChain*, unsigned, unsigned);
+struct HWND__;
 
 //  by default: 17152
 icy::error_type dxgi_offset(size_t& offset) noexcept;
-icy::error_type dxgi_window(IDXGISwapChain& chain, icy::string& wname, icy::window_size& wsize);
+icy::error_type dxgi_window(IDXGISwapChain& chain, icy::string& wname, icy::window_size& wsize, HWND__*& hwnd);
 icy::error_type dxgi_copy(IDXGISwapChain& chain, 
     const icy::const_array_view<icy::rectangle> src, icy::array<icy::matrix<icy::color>>& dst) noexcept;

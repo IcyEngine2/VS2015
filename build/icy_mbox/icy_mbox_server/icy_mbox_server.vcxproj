@@ -88,6 +88,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\source\icy_mbox\icy_mbox.hpp" />
+    <ClInclude Include="..\..\..\source\icy_mbox\server\icy_mbox_server_input_log.hpp" />
+    <ClInclude Include="..\..\..\source\icy_mbox\server\icy_mbox_server_network.hpp" />
     <ClInclude Include="..\..\..\source\icy_mbox\server\icy_mbox_server_proc.hpp" />
     <ClInclude Include="..\..\..\source\icy_mbox\server\icy_mbox_server_apps.hpp" />
     <ClInclude Include="..\..\..\source\icy_mbox\server\icy_mbox_server_config.hpp" />

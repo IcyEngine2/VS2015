@@ -100,7 +100,7 @@ error_type image_png::load(const_array_view<uint8_t> bytes) noexcept
 
     png_read_image(png, rows.data());
     png_read_end(png, info);
-
+    size = { dx, dy };
     return {};
 }
 error_type image_png::view(const image_size offset, matrix_view<color> colors) const noexcept
@@ -167,9 +167,9 @@ error_type image_png::save(const const_matrix_view<color> colors, write_stream& 
     return {};
 }
 
-extern image::data_type* make_image_png(heap& heap) noexcept
+extern image::data_type* make_image_png(global_heap_type heap) noexcept
 {
-    if (const auto ptr = heap.realloc(nullptr, sizeof(image_png)))
+    if (const auto ptr = heap.realloc(nullptr, sizeof(image_png), heap.user))
         return new (ptr) image_png(heap);
     return nullptr;
 }

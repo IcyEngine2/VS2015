@@ -42,12 +42,12 @@ const key_pair key_array[104] =
     { "Num Enter"_s, key::num_enter },
     { "Num Lock"_s, key::num_lock },
     { "Scr Lock"_s, key::scr_lock },
-    { "left shift"_s, key::left_shift },
-    { "right shift"_s, key::right_shift },
-    { "left ctrl"_s, key::left_ctrl },
-    { "right ctrl"_s, key::right_ctrl },
-    { "left Alt"_s, key::left_alt },
-    { "right Alt"_s, key::right_alt },
+    { "Left shift"_s, key::left_shift },
+    { "Right shift"_s, key::right_shift },
+    { "Left ctrl"_s, key::left_ctrl },
+    { "Right ctrl"_s, key::right_ctrl },
+    { "Left Alt"_s, key::left_alt },
+    { "Right Alt"_s, key::right_alt },
     { ":"_s, key::colon },
     { "+"_s, key::plus },
     { ","_s, key::comma },
@@ -382,4 +382,13 @@ error_type icy::to_string(const key_message& key, string& str) noexcept
 			return str.append(pair.str);
 	}
 	return make_stdlib_error(std::errc::invalid_argument);
+}
+string_view icy::to_string(const key key) noexcept
+{
+    for (auto&& pair : key_array)
+    {
+        if (pair.key == key)
+            return pair.str;
+    }
+    return ""_s;
 }

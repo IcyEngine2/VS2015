@@ -41,6 +41,12 @@
     <ClInclude Include="..\..\..\source\icy_mbox\server\icy_mbox_server_proc.hpp">
       <Filter>Source Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\source\icy_mbox\server\icy_mbox_server_network.hpp">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\icy_mbox\server\icy_mbox_server_input_log.hpp">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Natvis Include="..\..\..\icy_types.natvis">

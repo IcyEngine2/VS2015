@@ -281,6 +281,7 @@ error_type network_tcp_connection::make_timer() noexcept
 }
 network_tcp_connection::~network_tcp_connection() noexcept
 {
+    _close();
 	for (auto&& request : m_requests)
         icy::realloc(request, 0);
 }
@@ -638,7 +639,7 @@ error_type network_system_base::launch(const uint16_t port, const network_socket
             return last_system_error();
 	}
 
-    if (sock_type == network_socket_type::TCP)
+    if (sock_type == network_socket_type::TCP && max_queue)
     {
         if (network_func_listen(socket, int(max_queue)) == SOCKET_ERROR)
             return last_system_error();

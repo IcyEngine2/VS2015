@@ -28,8 +28,8 @@ namespace icy
         struct data_type;
         static image_type type_from_string(const string_view str) noexcept;
         static image_type type_from_buffer(const_array_view<uint8_t> buffer) noexcept;
-        static error_type save(heap& heap, const const_matrix_view<color> data, const image_type type, array<uint8_t>& buffer) noexcept;
-        static error_type save(heap& heap, const const_matrix_view<color> data, const string_view file, const image_type type = image_type::unknown);
+        static error_type save(global_heap_type heap, const const_matrix_view<color> data, const image_type type, array<uint8_t>& buffer) noexcept;
+        static error_type save(global_heap_type heap, const const_matrix_view<color> data, const string_view file, const image_type type = image_type::unknown);
         image() noexcept = default;
         ~image() noexcept;
         image(image&& rhs) noexcept : m_type(rhs.m_type), m_data(rhs.m_data)
@@ -37,8 +37,8 @@ namespace icy
 
         }
         ICY_DEFAULT_MOVE_ASSIGN(image);        
-        error_type load(heap& heap, const const_array_view<uint8_t> buffer, const image_type type = image_type::unknown) noexcept;
-        error_type load(heap& heap, const string_view file, const image_type type = image_type::unknown) noexcept;
+        error_type load(global_heap_type heap, const const_array_view<uint8_t> buffer, const image_type type = image_type::unknown) noexcept;
+        error_type load(global_heap_type heap, const string_view file, const image_type type = image_type::unknown) noexcept;
         error_type view(const image_size offset, matrix_view<color> data) noexcept;
         image_type type() const noexcept
         {

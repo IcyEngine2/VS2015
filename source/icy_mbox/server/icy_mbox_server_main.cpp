@@ -11,13 +11,17 @@
 #include "icy_mbox_server_config.hpp"
 #include "icy_mbox_server_apps.hpp"
 #include "icy_mbox_server_proc.hpp"  
+#include "icy_mbox_server_network.hpp"
+#include "icy_mbox_server_input_log.hpp"
 #if _DEBUG
 #pragma comment(lib, "icy_engine_cored")
 #pragma comment(lib, "icy_engine_networkd")
+#pragma comment(lib, "icy_engine_imaged")
 #pragma comment(lib, "icy_qtguid")
 #else
 #pragma comment(lib, "icy_engine_core")
 #pragma comment(lib, "icy_engine_network")
+#pragma comment(lib, "icy_engine_image")
 #pragma comment(lib, "icy_qtgui")
 #endif
 
@@ -38,8 +42,6 @@ public:
 private:
     mbox_application& m_app;
 };
-
-
 class mbox_application
 {
     friend mbox_main_thread;
@@ -50,8 +52,8 @@ private:
     error_type process_name_to_application(const string_view process_name, string& app) const noexcept;
     error_type exec(const event event) noexcept;
     error_type launch() noexcept;
-    error_type update() noexcept;
-    //error_type proc_context(const gui_node node) noexcept;
+    error_type ping() noexcept;
+    error_type context(const gui_node node) noexcept;
 private:
     mbox_main_thread m_main = *this;
     mbox_config m_config;
@@ -59,10 +61,12 @@ private:
     gui_widget m_window;
     mbox_applications m_apps;
     mbox_processes m_proc;
+    mbox_server_network m_network;
     gui_widget m_app_path;
     gui_widget m_launch;
-    gui_widget m_update;
+    gui_widget m_ping;
     string m_app;
+    mbox_input_log m_input;
 };
 
 int main()
@@ -167,6 +171,8 @@ error_type mbox_application::init(const mbox_config& config) noexcept
     ICY_ERROR(m_gui->create(m_window, gui_widget_type::window, {}, gui_widget_flag::layout_grid)); 
     ICY_ERROR(m_apps.initialize(*m_gui, m_window));
     ICY_ERROR(m_proc.initialize(*m_gui, m_window));
+    ICY_ERROR(m_input.initialize(*m_gui));
+    ICY_ERROR(m_network.initialize(m_config));
     //ICY_ERROR(mbox_grid_proc::create(*m_gui, m_window, m_proc));
 
     gui_widget label_apps;
@@ -181,7 +187,7 @@ error_type mbox_application::init(const mbox_config& config) noexcept
     ICY_ERROR(m_gui->create(value_dll_path, gui_widget_type::line_edit, m_window));
     ICY_ERROR(m_gui->create(buttons, gui_widget_type::none, m_window, gui_widget_flag::layout_hbox));
     ICY_ERROR(m_gui->create(m_launch, gui_widget_type::text_button, buttons, gui_widget_flag::auto_insert));
-    ICY_ERROR(m_gui->create(m_update, gui_widget_type::text_button, buttons, gui_widget_flag::auto_insert));
+    ICY_ERROR(m_gui->create(m_ping, gui_widget_type::text_button, buttons, gui_widget_flag::auto_insert));
     
     ICY_ERROR(m_gui->insert(label_apps, gui_insert(0, 0)));
     ICY_ERROR(m_gui->insert(label_exe_path, gui_insert(0, 1)));
@@ -196,31 +202,39 @@ error_type mbox_application::init(const mbox_config& config) noexcept
     ICY_ERROR(m_gui->text(label_exe_path, "App File Path"_s));
     ICY_ERROR(m_gui->text(label_dll_path, "Inject DLL Path"_s));
     ICY_ERROR(m_gui->text(m_launch, "Launch"_s));
-    ICY_ERROR(m_gui->text(m_update, "Update"_s));
+    ICY_ERROR(m_gui->text(m_ping, "Ping"_s));
 
     for (auto&& pair : m_config.applications)
         ICY_ERROR(m_apps.append(pair.key));
     
-    //ICY_ERROR(m_apps->update(m_config));
     ICY_ERROR(m_gui->text(value_dll_path, m_config.inject));
-
     ICY_ERROR(m_gui->show(m_window, true));
     
     return {};
 }
 error_type mbox_application::exec() noexcept
 {
-    ICY_SCOPE_EXIT{ event::post(nullptr, event_type::global_quit); };
+    ICY_SCOPE_EXIT{ event::post(nullptr, event_type::global_quit); m_network.wait(); };
     ICY_ERROR(m_main.launch());
+    ICY_ERROR(m_network.launch());
     ICY_ERROR(m_gui->loop());
+    ICY_ERROR(m_network.error());
     ICY_ERROR(m_main.error());
     return {};
 }
 error_type mbox_application::exec(const event event) noexcept
 {
-    if (event->type == event_type::window_close && event->data<gui_event>().widget == m_window)
+    if (event->type == event_type::window_close)
     {
-        ICY_ERROR(event::post(nullptr, event_type::global_quit));
+        const auto& event_data = event->data<gui_event>();
+        if (event_data.widget == m_window)
+        {
+            ICY_ERROR(event::post(nullptr, event_type::global_quit));
+        }
+        else
+        {
+            ICY_ERROR(m_gui->show(event_data.widget, false));
+        }
     }
     else if (event->type == event_type::gui_update)
     {
@@ -230,10 +244,10 @@ error_type mbox_application::exec(const event event) noexcept
             if (const auto error = launch())
                 show_error(error, "Launch new process"_s);
         }
-        else if (event_data.widget == m_update)
+        else if (event_data.widget == m_ping)
         {
-            if (const auto error = update())
-                show_error(error, "Update process list (ping)"_s);
+            if (const auto error = ping())
+                show_error(error, "Ping (update process list)"_s);
         }
     }
     else if (event->type == event_type::gui_select)
@@ -253,13 +267,65 @@ error_type mbox_application::exec(const event event) noexcept
     }
     else if (event->type == event_type::gui_context)
     {
-        /*const auto& event_data = event->data<gui_event>();
-        if (event_data.widget == m_proc->widget())
+        const auto& event_data = event->data<gui_event>();
+        if (event_data.widget == m_proc.widget())
         {
-            if (const auto error = proc_context(event_data.data.as_node()))
+            if (const auto error = context(event_data.data.as_node()))
                 show_error(error, "Inject application"_s);
         }
-        */
+        
+    }
+    else if (event->type == event_type_user_connect)
+    {
+        const auto& msg = event->data<event_user_connect>();
+        mbox_process proc;
+        proc.key = msg.info.key;
+        ICY_ERROR(to_string(msg.address, proc.address));
+        const auto copy_str = [](const char(&bytes)[32], string& str)
+        {
+            return to_string(string_view(bytes, strnlen(bytes, sizeof(bytes))), str);
+        };
+        ICY_ERROR(copy_str(msg.info.computer_name, proc.computer_name));
+        ICY_ERROR(copy_str(msg.info.profile, proc.profile));
+        ICY_ERROR(copy_str(msg.info.window_name, proc.window_name));
+        ICY_ERROR(process_name_to_application(string_view(msg.info.process_name,
+            strnlen(msg.info.process_name, sizeof(msg.info.process_name))), proc.application));
+        ICY_ERROR(m_proc.update(proc));
+    }
+    else if (event->type == event_type_user_disconnect)
+    {
+        const auto& msg = event->data<event_user_disconnect>();
+        for (auto&& val : m_proc.data())
+        {
+            if (val.key == msg.key)
+            {
+                mbox_process proc;
+                ICY_ERROR(mbox_process::copy(val, proc));
+                proc.address.clear();
+                ICY_ERROR(m_proc.update(proc));
+                break;
+            }
+        }        
+    }
+    else if (event->type == event_type_user_recv_image)
+    {
+        const auto& msg = event->data<event_user_recv_image>();
+        file f1;
+        f1.open("D:/125.png", file_access::write, file_open::create_always, file_share::none);
+        f1.append(msg.png.data(), msg.png.size());
+    }
+    else if (event->type == event_type_user_recv_input)
+    {
+        const auto& msg = event->data<event_user_recv_input>();
+        for (auto&& proc : m_proc.data())
+        {
+            if (proc.key == msg.key)
+            {
+                for (auto&& input : msg.data)
+                    ICY_ERROR(m_input.append(proc.profile, input));
+                break;
+            }
+        }
     }
     return {};
 }
@@ -271,14 +337,15 @@ error_type mbox_application::launch() noexcept
         return make_stdlib_error(std::errc::no_such_file_or_directory);
     ICY_ERROR(app.launch(*path));
     mbox_process mbox_proc;
-    mbox_proc.process_id = app.index();
+    mbox_proc.key.pid = app.index();
     ICY_ERROR(computer_name(mbox_proc.computer_name));
     ICY_ERROR(to_string(m_app, mbox_proc.application));
     ICY_ERROR(m_proc.update(mbox_proc));
+    mbox_proc.key.hash = hash(mbox_proc.computer_name);
 
     return {};
 }
-error_type mbox_application::update() noexcept
+error_type mbox_application::ping() noexcept
 {
     const auto proc_to_app = [this](const string_view process_name, string& app)
     {
@@ -305,7 +372,8 @@ error_type mbox_application::update() noexcept
         mbox_process proc;
         if (proc_to_app(pair.first, proc.application))
             continue;
-        proc.process_id = pair.second;
+        proc.key.pid = pair.second;
+        proc.key.hash = hash(cname);
         ICY_ERROR(to_string(cname, proc.computer_name));
         ICY_ERROR(local.push_back(std::move(proc)));
     }
@@ -315,7 +383,7 @@ error_type mbox_application::update() noexcept
         auto found = false;
         for (auto&& proc : m_proc.data())
         {
-            if (proc.process_id == local_proc.process_id && proc.computer_name == local_proc.computer_name)
+            if (proc.key == local_proc.key)
             {
                 found = true;
                 break;
@@ -333,7 +401,7 @@ error_type mbox_application::update() noexcept
         auto found = false;
         for (auto&& local_proc : local)
         {
-            if (proc.process_id == local_proc.process_id)
+            if (proc.key == local_proc.key)
             {
                 found = true;
                 break;
@@ -351,149 +419,21 @@ error_type mbox_application::update() noexcept
     {
         ICY_ERROR(m_proc.update(proc));
     }
-    return {};
-    //m_apps.remove(node);
     
-  /*  m_proc.update();
-    array<mbox_grid_proc::value_type> local_proc;
-    for (auto&& pair : local_list)
-    {
-        mbox_grid_proc::value_type val;
-        if (proc_to_app(pair.first, val.application))
-            continue;
 
-        /*auto found = false;
-        for (auto&& network_val : network_proc)
-        {
-            if (network_val.computer_name == cname && network_val.process_id == pair.second)
-            {
-                found = true;
-                break;
-            }
-        }
-        if (found)
-            continue;
-
-        ICY_ERROR(to_string(cname, val.computer_name));
-        val.process_id = pair.second;
-        ICY_ERROR(local_proc.push_back(std::move(val)));
-    }
-    //for (auto&& proc : local_proc)
-     //   network_proc.push_back(std::move(proc));
-
-    ICY_ERROR(m_proc->update(std::move(local_proc)));
-
-    /*if (m_config.ipaddr.empty())
-        return make_stdlib_error(std::errc::bad_address);
-
-    string cname;
-    ICY_ERROR(computer_name(cname));
-
-    mbox::command send_cmd;
-    ICY_ERROR(create_guid(send_cmd.cmd_uid));
-    send_cmd.cmd_type = mbox::command_type::info;
-    send_cmd.arg_type = mbox::command_arg_type::string;
-    send_cmd.binary.size = copy(m_config.ipaddr, send_cmd.binary.bytes);
-   
     network_system_udp network;
     ICY_ERROR(network.initialize());
-    
     array<network_address> address;
     ICY_ERROR(network.address(mbox::multicast_addr, mbox::multicast_port, max_timeout, network_socket_type::UDP, address));
     if (address.empty())
         return make_stdlib_error(std::errc::bad_address);
-    
+
     ICY_ERROR(network.launch(0, network_address_type::ip_v4, 0));
-    ICY_ERROR(network.recv(sizeof(mbox::command)));
-    ICY_ERROR(network.send(address[0], { reinterpret_cast<const uint8_t*>(&send_cmd), sizeof(send_cmd) }));
-
-  //  array<mbox_grid_proc::value_type> network_proc;
-
-   
-
-   /* auto code = 0u;
-    while (true)
-    {
-        const auto timeout = std::chrono::milliseconds(250);
-        network_udp_request request;
-        if (const auto error = network.loop(request, code, timeout))
-        {
-            if (error == make_stdlib_error(std::errc::timed_out))
-                break;
-            else
-                return error;
-        }
-        if (code)
-            break;
-
-        if (request.type == network_request_type::recv)
-        {
-            ICY_ERROR(network.recv(sizeof(mbox::command)));
-        }
-
-        if (request.type == network_request_type::recv &&
-            request.bytes.size() >= sizeof(mbox::command))
-        {
-            const auto recv_cmd = reinterpret_cast<const mbox::command*>(request.bytes.data());
-            if (recv_cmd->version != mbox::protocol_version)
-                continue;
-            if (recv_cmd->cmd_uid != send_cmd.cmd_uid)
-                continue;
-            if (recv_cmd->cmd_type != mbox::command_type::info)
-                continue;
-            if (recv_cmd->arg_type != mbox::command_arg_type::info)
-                continue;
-
-            const auto& info = recv_cmd->info;
-
-            const auto make_str = [](const char(&buffer)[32])
-            {
-                return string_view(buffer, strnlen(buffer, _countof(buffer)));
-            };
-
-            mbox_grid_proc::value_type val;
-            val.process_id = info.process_id;
-            ICY_ERROR(to_string(make_str(info.computer_name), val.computer_name));
-            ICY_ERROR(to_string(make_str(info.profile), val.profile));
-            ICY_ERROR(to_string(make_str(info.window_name), val.window_name));
-            val.address;
-            if (proc_to_app(make_str(info.process_name), val.application))
-                continue;
-            
-            ICY_ERROR(network_proc.push_back(std::move(val)));
-        }
-    }
-
-    array<std::pair<string, uint32_t>> local_list;
-    ICY_ERROR(process::enumerate(local_list));
-
-    array<mbox_grid_proc::value_type> local_proc;
-    for (auto&& pair : local_list)
-    {
-        mbox_grid_proc::value_type val;
-        if (proc_to_app(pair.first, val.application))
-            continue;
-
-        /*auto found = false;
-        for (auto&& network_val : network_proc)
-        {
-            if (network_val.computer_name == cname && network_val.process_id == pair.second)
-            {
-                found = true;
-                break;
-            }                
-        }
-        if (found)
-            continue;
-
-        ICY_ERROR(to_string(cname, val.computer_name));
-        val.process_id = pair.second; 
-        ICY_ERROR(local_proc.push_back(std::move(val)));
-    }
-    //for (auto&& proc : local_proc)
-     //   network_proc.push_back(std::move(proc));
-
-    ICY_ERROR(m_proc->update(std::move(local_proc)));*/
+    
+    mbox::ping ping = {};
+    copy(m_config.ipaddr, ping.address);
+    ICY_ERROR(network.send(address[0], { reinterpret_cast<const uint8_t*>(&ping), sizeof(ping) }));
+    
     return {};
 }
 
@@ -509,13 +449,17 @@ error_type mbox_application::process_name_to_application(const string_view proce
             return to_string(pair.key, app);
     }
     return make_stdlib_error(std::errc::invalid_argument);
-}/*
-error_type mbox_application::proc_context(const gui_node node) noexcept
+}
+error_type mbox_application::context(const gui_node node) noexcept
 {
+    if (node.row() >= m_proc.data().size())
+        return {};// make_stdlib_error(std::errc::invalid_argument);
+
     gui_widget menu;
     gui_action inject;
     gui_action deject;
     gui_action render;
+    gui_action input;
     ICY_ERROR(m_gui->create(menu, gui_widget_type::menu, m_window));
     ICY_SCOPE_EXIT{ m_gui->destroy(menu); };
     ICY_ERROR(m_gui->create(inject, "Inject"_s));
@@ -524,64 +468,53 @@ error_type mbox_application::proc_context(const gui_node node) noexcept
     ICY_SCOPE_EXIT{ m_gui->destroy(deject); };
     ICY_ERROR(m_gui->create(render, "Render"_s));
     ICY_SCOPE_EXIT{ m_gui->destroy(render); };
+    ICY_ERROR(m_gui->create(input, "Input"_s));
+    ICY_SCOPE_EXIT{ m_gui->destroy(input); };
 
-    const auto& value = m_proc->data(node);
+
+    const auto& value = m_proc.data()[node.row()];
     if (value.address.empty())
     {
-        m_gui->enable(deject, false);
-        m_gui->enable(render, false);
+        ICY_ERROR(m_gui->enable(deject, false));
+        ICY_ERROR(m_gui->enable(render, false));
+        ICY_ERROR(m_gui->enable(input, false));
     }
     else
     {
-        m_gui->enable(inject, false);
+        ICY_ERROR(m_gui->enable(inject, false));
     }
     ICY_ERROR(m_gui->insert(menu, inject));
     ICY_ERROR(m_gui->insert(menu, deject));
     ICY_ERROR(m_gui->insert(menu, render));
+    ICY_ERROR(m_gui->insert(menu, input));
     gui_action action;
     ICY_ERROR(m_gui->exec(menu, action));
 
     if (action == inject)
     {
         process proc;
-        ICY_ERROR(proc.open(value.process_id));
+        ICY_ERROR(proc.open(value.key.pid));
         ICY_ERROR(proc.inject(m_config.inject));
     }
     else if (action == deject)
     {
-        mbox::command cmd;
-        cmd.cmd_type = mbox::command_type::exit;
-        ICY_ERROR(create_guid(cmd.cmd_uid));
-        cmd.proc_uid = value.uid;
-        value.address;
-        m_proc->data();
-
-        ICY_ERROR(m_send.push(std::move(cmd)));
-        m_network;
-
-        network_system_tcp network;
-        ICY_ERROR(network.initialize());
-        const auto delim = value.address.find(":"_s);
-        if (delim == value.address.end())
-            return make_stdlib_error(std::errc::bad_address);
-
-        array<network_address> address;
-        ICY_ERROR(network.address(string_view(value.address.begin(), delim),
-            string_view(delim + 1, value.address.end()), network_default_timeout, network_socket_type::TCP, address));
-        if (address.empty())
-            return make_stdlib_error(std::errc::bad_address);
-
-     
-        network_tcp_connection conn(network_connection_type::none);
-        conn.timeout(max_timeout);
-        ICY_ERROR(network.connect(conn, address[0], { reinterpret_cast<const uint8_t*>(&cmd), sizeof(cmd) }));
-        
-        auto code = 0u;
-        network_tcp_reply reply;
-        ICY_ERROR(network.loop(reply, code));
+        ICY_ERROR(m_network.disconnect(value.key));
+    }
+    else if (action == render)
+    {
+        //rectangle rect;
+        //rect.x = 25;
+        //rect.y = 25;
+        //rect.w = 256;
+        //rect.h = 256;
+        //ICY_ERROR(m_network.send(value.key, { &rect, 1 }));
+    }
+    else if (action == input)
+    {
+        ICY_ERROR(m_gui->show(m_input.window(), true));
     }
     return {};
-}*/
+}
 
 uint32_t show_error(const error_type error, const string_view text) noexcept
 {

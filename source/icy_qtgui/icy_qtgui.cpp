@@ -86,8 +86,7 @@ extern void qtgui_exit(const std::errc code = std::errc(0))
     qApp->exit(1);
 }
 
-namespace icy {
-//ICY_STATIC_NAMESPACE_BEG
+ICY_STATIC_NAMESPACE_BEG
 static auto qtapp_argc = 0;
 static char** qtapp_argv = nullptr;
 static const auto qtgui_property_name = "user";
@@ -132,6 +131,7 @@ enum class qtgui_event_type : uint32_t
     show,
     text_widget,
     text_model,
+    text_header,
     bind_action,
     bind_widget,
     enable_action,
@@ -140,6 +140,7 @@ enum class qtgui_event_type : uint32_t
     destroy_action,
     destroy_model,
     clear_model,
+    scroll,
 };
 
 class qtgui_event_create_widget : public QEvent
@@ -303,6 +304,21 @@ public:
     const gui_node node;
     const QString text;
 };
+class qtgui_event_text_header : public QEvent
+{
+public:
+    qtgui_event_text_header(const gui_node node, const uint32_t index, const Qt::Orientation orientation, const QString text) :
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::text_header))),
+        node(node), index(index), orientation(orientation), text(text)
+    {
+
+    }
+public:
+    const gui_node node;
+    const uint32_t index;
+    const Qt::Orientation orientation;
+    const QString text;
+};
 class qtgui_event_bind_action : public QEvent
 {
 public:
@@ -401,6 +417,20 @@ public:
 public:
     const gui_node root;
 };
+class qtgui_event_scroll : public QEvent
+{
+public:
+    qtgui_event_scroll(const gui_widget widget, const gui_node node) :
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::scroll))),
+        widget(widget), node(node)
+    {
+
+    }
+public:
+    const gui_widget widget;
+    const gui_node node;
+};
+
 class qtgui_splitter : public QSplitter
 {
     using QSplitter::QSplitter;
@@ -476,10 +506,14 @@ public:
     bool removeRows(int row, int count, const QModelIndex& parent) override;
     bool removeColumns(int column, int count, const QModelIndex& parent) override;
     void removeChild(const int32_t index);
+    QVariant headerData(int section, Qt::Orientation orientation, int role) const override;
+    bool setHeaderData(int section, Qt::Orientation orientation, const QVariant& value, int role) override;
     void reset();
 private:
     QList<qtgui_node> m_nodes;
     QQueue<int32_t> m_free;
+    QMap<int, QString> m_vheader;
+    QMap<int, QString> m_hheader;
 };
 class qtgui_system : public gui_system, public QApplication
 {
@@ -503,6 +537,8 @@ private:
     uint32_t show(const gui_widget widget, const bool value) noexcept override;
     uint32_t text(const gui_widget widget, const string_view text) noexcept override;
     uint32_t text(const gui_node node, const string_view text) noexcept override;
+    uint32_t vheader(const gui_node node, const uint32_t index, const string_view text) noexcept override;
+    uint32_t hheader(const gui_node node, const uint32_t index, const string_view text) noexcept override;
     uint32_t bind(const gui_action action, const gui_widget widget) noexcept override;
     uint32_t bind(const gui_widget widget, const gui_node node) noexcept override;
     uint32_t enable(const gui_action action, const bool value) noexcept override;
@@ -511,6 +547,7 @@ private:
     uint32_t destroy(const gui_action action) noexcept override;
     uint32_t destroy(const gui_node root) noexcept override;
     uint32_t clear(const gui_node root) noexcept override;
+    uint32_t scroll(const gui_widget widget, const gui_node node) noexcept override;
 private:
     std::errc process(const qtgui_event_create_widget& event);
     std::errc process(const qtgui_event_create_action& event);
@@ -524,6 +561,7 @@ private:
     std::errc process(const qtgui_event_show& event);
     std::errc process(const qtgui_event_text_widget& event);
     std::errc process(const qtgui_event_text_model& event);
+    std::errc process(const qtgui_event_text_header& event);
     std::errc process(const qtgui_event_bind_action& event);
     std::errc process(const qtgui_event_bind_widget& event);
     std::errc process(const qtgui_event_enable_action& event);
@@ -532,6 +570,7 @@ private:
     std::errc process(const qtgui_event_destroy_action& event);
     std::errc process(const qtgui_event_destroy_model& event);
     std::errc process(const qtgui_event_clear_model& event);
+    std::errc process(const qtgui_event_scroll& event);
 private:
     detail::intrusive_mpsc_queue m_queue;
     QWidget m_root;
@@ -642,6 +681,9 @@ bool qtgui_system::notify(QObject* object, QEvent* event) noexcept
                 case qtgui_event_type::text_model:
                     error = process(*static_cast<qtgui_event_text_model*>(event));
                     break;
+                case qtgui_event_type::text_header:
+                    error = process(*static_cast<qtgui_event_text_header*>(event));
+                    break;
                 case qtgui_event_type::bind_action:
                     error = process(*static_cast<qtgui_event_bind_action*>(event));
                     break;
@@ -665,6 +707,9 @@ bool qtgui_system::notify(QObject* object, QEvent* event) noexcept
                     break;
                 case qtgui_event_type::clear_model:
                     error = process(*static_cast<qtgui_event_clear_model*>(event));
+                    break;
+                case qtgui_event_type::scroll:
+                    error = process(*static_cast<qtgui_event_scroll*>(event));
                     break;
                 default:
                     error = std::errc::function_not_supported;
@@ -901,6 +946,26 @@ uint32_t qtgui_system::text(const gui_node node, const string_view text) noexcep
     ICY_CATCH;
     return {};
 }
+uint32_t qtgui_system::vheader(const gui_node node, const uint32_t index, const string_view text) noexcept
+{
+    try
+    {
+        const auto event = new qtgui_event_text_header(node, index, Qt::Vertical, make_string(text));
+        qApp->postEvent(this, event);
+    }
+    ICY_CATCH;
+    return {};
+}
+uint32_t qtgui_system::hheader(const gui_node node, const uint32_t index, const string_view text) noexcept
+{
+    try
+    {
+        const auto event = new qtgui_event_text_header(node, index, Qt::Horizontal, make_string(text));
+        qApp->postEvent(this, event);
+    }
+    ICY_CATCH;
+    return {};
+}
 uint32_t qtgui_system::bind(const gui_action action, const gui_widget widget) noexcept
 {
     try
@@ -977,6 +1042,16 @@ uint32_t qtgui_system::clear(const gui_node root) noexcept
     try
     {
         const auto event = new qtgui_event_clear_model(root);
+        qApp->postEvent(this, event);
+    }
+    ICY_CATCH;
+    return {};
+}
+uint32_t qtgui_system::scroll(const gui_widget widget, const gui_node node) noexcept
+{
+    try
+    {
+        const auto event = new qtgui_event_scroll(widget, node);
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
@@ -1205,6 +1280,7 @@ std::errc qtgui_system::process(const qtgui_event_create_widget& event)
     {
         view->setContextMenuPolicy(Qt::ContextMenuPolicy::CustomContextMenu);
         view->setSelectionBehavior(QAbstractItemView::SelectionBehavior::SelectRows);
+        view->setAutoScroll(true);
         QObject::connect(view, &QAbstractItemView::customContextMenuRequested, 
             [view, func](const QPoint& point){ func(view->indexAt(point), event_type::gui_context); });        
     }
@@ -1435,7 +1511,19 @@ std::errc qtgui_system::process(const qtgui_event_text_model& event)
     const auto qIndex = model->index(event.node);
     if (!model->setData(qIndex, event.text, Qt::ItemDataRole::DisplayRole))
         return std::errc::invalid_argument;
+    return {};
+}
+std::errc qtgui_system::process(const qtgui_event_text_header& event)
+{
+    if (event.node.model() >= m_models.size())
+        return std::errc::invalid_argument;
 
+    const auto model = m_models[event.node.model()];
+    if (!model)
+        return std::errc::invalid_argument;
+
+    if (!model->setHeaderData(event.index, event.orientation, event.text, Qt::ItemDataRole::DisplayRole))
+        return std::errc::invalid_argument;
     return {};
 }
 std::errc qtgui_system::process(const qtgui_event_bind_action& event)
@@ -1473,7 +1561,15 @@ std::errc qtgui_system::process(const qtgui_event_bind_widget& event)
         const auto modelIndex = event.node.model();
         view->setModel(model);
         view->setRootIndex(model->index(event.node));
-
+        if (const auto table = qobject_cast<QTableView*>(view))
+        {
+            table->verticalHeader()->setVisible(!model->headerData(0, Qt::Vertical, Qt::DisplayRole).isNull());
+            table->horizontalHeader()->setVisible(!model->headerData(0, Qt::Horizontal, Qt::DisplayRole).isNull());
+        }
+        else if (const auto tree = qobject_cast<QTreeView*>(view))
+        {
+            tree->header()->setVisible(!model->headerData(0, Qt::Horizontal, Qt::DisplayRole).isNull());
+        }
         QObject::connect(view->selectionModel(), &QItemSelectionModel::currentChanged, 
             [this, widgetIndex, model](const QModelIndex& qIndex)
             {
@@ -1636,6 +1732,25 @@ std::errc qtgui_system::process(const qtgui_event_clear_model& event)
     model->reset();
     return {};
 }
+std::errc qtgui_system::process(const qtgui_event_scroll& event)
+{
+    if (event.widget.index >= m_widgets.size() ||
+        event.node.model() >= m_models.size())
+        return std::errc::invalid_argument;
+
+    const auto widget = m_widgets[event.widget.index];
+    const auto model = m_models[event.node.model()];
+    if (!widget || !model)
+        return std::errc::invalid_argument;
+
+    if (const auto view = qobject_cast<QAbstractItemView*>(widget))
+    {
+        view->scrollTo(model->index(event.node));        
+    }
+    else
+        return std::errc::invalid_argument;
+    return {};
+}
 
 QModelIndex qtgui_model::index(const gui_node gui_index) const
 {
@@ -1679,6 +1794,7 @@ bool qtgui_model::setData(const QModelIndex& index, const QVariant& var, int rol
     if (role == Qt::ItemDataRole::DisplayRole)
     {
         m_nodes[index.internalId()].text = var.toString();
+        emit dataChanged(index, index);
         return true;
     }
     return false;
@@ -1889,6 +2005,28 @@ void qtgui_model::reset()
     m_free.clear();
     endResetModel();
 }
+QVariant qtgui_model::headerData(int section, Qt::Orientation orientation, int role) const
+{
+    if (role == Qt::DisplayRole)
+    {
+        const auto& map = (orientation == Qt::Vertical ? m_vheader : m_hheader);
+        const auto it = map.find(section);
+        if (it != map.end())
+            return it.value();
+    }
+    return QVariant();
+}
+bool qtgui_model::setHeaderData(int section, Qt::Orientation orientation, const QVariant& value, int role)
+{
+    if (role == Qt::DisplayRole && value.type() == QVariant::Type::String)
+    {
+        auto& map = (orientation == Qt::Vertical ? m_vheader : m_hheader);
+        map[section] = value.toString();
+        emit headerDataChanged(orientation, section, section);
+        return true;
+    }
+    return false;
+}
 
 QVariant qtgui_make_variant(const gui_variant& var)
 {
@@ -1938,12 +2076,16 @@ std::errc qtgui_make_variant(const QVariant& qvar, gui_variant& var)
 
     case QVariant::Type::ModelIndex:
     {
+        ok = true;
         auto qModelIndex = qvar.toModelIndex();
         const auto qModel = static_cast<const qtgui_model*>(qModelIndex.model());
         if (qModel)
         {
-            ok = true;
             var = qModel->node(qModelIndex);
+        }
+        else
+        {
+            var = gui_node();
         }
         break;
     }

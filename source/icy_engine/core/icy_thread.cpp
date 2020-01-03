@@ -268,7 +268,11 @@ thread::~thread() noexcept
 {
     if (m_data)
     {
-        m_data->wait();
+        if (m_data->handle)
+        {
+            CloseHandle(m_data->handle);
+            m_data->handle = nullptr;
+        }
         allocator_type::destroy(m_data);
         allocator_type::deallocate(m_data);
     }

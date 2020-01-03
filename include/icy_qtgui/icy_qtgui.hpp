@@ -235,13 +235,15 @@ namespace icy
             switch (type())
             {
             case gui_variant_type::node:
-                m_node._ptr->add_ref();
+                if (m_node)
+                    m_node._ptr->add_ref();
                 break;
 
             case gui_variant_type::lstring:
             case gui_variant_type::array:
             case gui_variant_type::user:
-                m_buffer->ref.fetch_add(1, std::memory_order_release);
+                if (m_buffer)
+                    m_buffer->ref.fetch_add(1, std::memory_order_release);
                 break;
             }
         }
@@ -263,7 +265,7 @@ namespace icy
             case gui_variant_type::lstring:
             case gui_variant_type::array:
             case gui_variant_type::user:
-                if (m_buffer->ref.fetch_sub(1, std::memory_order_acq_rel) == 1)
+                if (m_buffer && m_buffer->ref.fetch_sub(1, std::memory_order_acq_rel) == 1)
                     m_buffer->alloc(m_buffer, 0, m_buffer->user);
                 break;
             }
@@ -276,7 +278,7 @@ namespace icy
         {
             if (type() == gui_variant_type::sstring)
                 return string_view(reinterpret_cast<const char*>(m_data), m_size);
-            else if (type() == gui_variant_type::lstring)
+            else if (type() == gui_variant_type::lstring && m_buffer)
                 return string_view(reinterpret_cast<const char*>(m_buffer + 1), m_buffer->size);
             else
                 return {};
@@ -301,7 +303,7 @@ namespace icy
                 return m_floating != 0;
 
             case gui_variant_type::sstring:
-                return *m_data != 0;
+                return m_data && *m_data != 0;
             }
             return true;
         }
@@ -372,7 +374,7 @@ namespace icy
         }
         template<typename T> const T* as_user() const noexcept
         {
-            if (type() == gui_variant_type::user)
+            if (type() == gui_variant_type::user && m_buffer)
             {
                 if (m_buffer->size == sizeof(T))
                     return reinterpret_cast<T*>(m_buffer + 1);
@@ -390,7 +392,7 @@ namespace icy
             case gui_variant_type::lstring:
             case gui_variant_type::array:
             case gui_variant_type::user:
-                return m_buffer + 1;
+                return m_buffer ? m_buffer + 1 : nullptr;
             }
             return nullptr;
         }
@@ -405,7 +407,7 @@ namespace icy
             case gui_variant_type::lstring:
             case gui_variant_type::array:
             case gui_variant_type::user:
-                return m_buffer->size;
+                return m_buffer ? m_buffer->size : 0;
             }
             return 0;
         }
@@ -564,12 +566,15 @@ namespace icy
         virtual uint32_t text(const gui_node node, const string_view text) noexcept = 0;
         virtual uint32_t bind(const gui_action action, const gui_widget menu) noexcept = 0;
         virtual uint32_t bind(const gui_widget widget, const gui_node node) noexcept = 0;
+        virtual uint32_t vheader(const gui_node root, const uint32_t index, const string_view text) noexcept = 0;
+        virtual uint32_t hheader(const gui_node root, const uint32_t index, const string_view text) noexcept = 0;
         virtual uint32_t enable(const gui_action action, const bool value) noexcept = 0;
         virtual uint32_t modify(const gui_widget widget, const string_view args) noexcept = 0;
         virtual uint32_t destroy(const gui_widget widget) noexcept = 0;
         virtual uint32_t destroy(const gui_action action) noexcept = 0;
         virtual uint32_t destroy(const gui_node root) noexcept = 0;
         virtual uint32_t clear(const gui_node root) noexcept = 0;
+        virtual uint32_t scroll(const gui_widget widget, const gui_node node) noexcept = 0;
     protected:
         ~gui_system() noexcept = default;
     };
@@ -735,6 +740,14 @@ namespace icy
         {
             ICY_GUI_ERROR(m_system->bind(widget, node));
         }
+        error_type vheader(const gui_node root, const uint32_t index, const string_view text) noexcept
+        {
+            ICY_GUI_ERROR(m_system->vheader(root, index, text));
+        }
+        error_type hheader(const gui_node root, const uint32_t index, const string_view text) noexcept
+        {
+            ICY_GUI_ERROR(m_system->hheader(root, index, text));
+        }
         error_type modify(const gui_widget widget, const string_view args) noexcept
         {
             ICY_GUI_ERROR(m_system->modify(widget, args));
@@ -791,6 +804,10 @@ namespace icy
         error_type clear(const gui_node root) noexcept
         {
             ICY_GUI_ERROR(m_system->clear(root));
+        }
+        error_type scroll(const gui_widget widget, const gui_node node) noexcept
+        {
+            ICY_GUI_ERROR(m_system->scroll(widget, node));
         }
     private:
 #if ICY_QTGUI_STATIC

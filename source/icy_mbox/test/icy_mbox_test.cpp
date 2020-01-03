@@ -79,7 +79,7 @@ error_type mbox_application::exec() noexcept
     ICY_ERROR(m_window->restyle(window_style::windowed));
     ICY_ERROR(m_display.launch());
     ICY_ERROR(m_network.launch());
-    ICY_ERROR(m_window->loop(std::chrono::milliseconds(10)));
+    ICY_ERROR(m_window->loop(std::chrono::milliseconds(0)));
     ICY_ERROR(m_display.wait());
     ICY_ERROR(m_network.wait());
     return {};

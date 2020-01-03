@@ -15,7 +15,7 @@ public:
     using data_type::data_type;
     ~image_jpg() noexcept
     {
-        heap.realloc(data, 0);
+        heap.realloc(data, 0, heap.user);
     }
     error_type save(const const_matrix_view<color> colors, write_stream& output) noexcept override;
     error_type load(const const_array_view<uint8_t> bytes) noexcept override;
@@ -76,7 +76,7 @@ error_type image_jpg::load(const_array_view<uint8_t> bytes) noexcept
     jpeg_start_decompress(&info);
 
     size = { info.output_width, info.output_height };
-    data = static_cast<uint8_t*>(heap.realloc(data, size.x * size.y * 3));
+    data = static_cast<uint8_t*>(heap.realloc(data, size.x * size.y * 3, heap.user));
     if (!data)
         return make_stdlib_error(std::errc::not_enough_memory);
     
@@ -117,9 +117,9 @@ error_type image_jpg::save(const const_matrix_view<color> colors, write_stream& 
     return {};
 }
 
-extern image::data_type* make_image_jpg(heap& heap) noexcept
+extern image::data_type* make_image_jpg(global_heap_type heap) noexcept
 {
-    if (const auto ptr = heap.realloc(nullptr, sizeof(image_jpg)))
+    if (const auto ptr = heap.realloc(nullptr, sizeof(image_jpg), heap.user))
         return new (ptr) image_jpg(heap);
     return nullptr;
 }
