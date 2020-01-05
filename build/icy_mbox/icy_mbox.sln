@@ -40,6 +40,11 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "graphics", "..\icy_engine\g
 		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC} = {B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}
 	EndProjectSection
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_mbox_script", "icy_mbox_script\icy_mbox_script.vcxproj", "{57B44F1F-408A-496D-8FE1-7437BB626983}"
+	ProjectSection(ProjectDependencies) = postProject
+		{4D337F45-E466-4650-9782-63FAEA81F1B1} = {4D337F45-E466-4650-9782-63FAEA81F1B1}
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -74,6 +79,10 @@ Global
 		{2529D4F5-C845-4B41-B789-4FCFFF27B9BA}.Debug|x64.Build.0 = Debug|x64
 		{2529D4F5-C845-4B41-B789-4FCFFF27B9BA}.Release|x64.ActiveCfg = Release|x64
 		{2529D4F5-C845-4B41-B789-4FCFFF27B9BA}.Release|x64.Build.0 = Release|x64
+		{57B44F1F-408A-496D-8FE1-7437BB626983}.Debug|x64.ActiveCfg = Debug|x64
+		{57B44F1F-408A-496D-8FE1-7437BB626983}.Debug|x64.Build.0 = Debug|x64
+		{57B44F1F-408A-496D-8FE1-7437BB626983}.Release|x64.ActiveCfg = Release|x64
+		{57B44F1F-408A-496D-8FE1-7437BB626983}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -110,9 +110,9 @@ namespace icy
             event_data* value;
         };
     public:
-        virtual ~event_queue() noexcept
+        virtual ~event_queue() noexcept = 0
         {
-            filter(0);
+
         }
     protected:
         void filter(const uint64_t mask) noexcept;
@@ -128,13 +128,13 @@ namespace icy
             return error;
         }
     private:
-        error_type post(event_data& new_event) noexcept;
         virtual error_type signal(const event_data& event) noexcept = 0;
+        error_type post(event_data& new_event) noexcept;
     private:
         detail::intrusive_mpsc_queue m_queue;
         event_queue* m_prev = nullptr;
         uint64_t m_mask = 0;
-        static detail::rw_spin_lock<> g_lock;
+        static detail::rw_spin_lock g_lock;
         static event_queue* g_list;
     };
     class event_loop : public event_queue

@@ -161,7 +161,7 @@ namespace icy
     class d3d12_display : public display
     {
     public:
-        ~d3d12_display() noexcept;
+        ~d3d12_display() noexcept override;
         error_type initialize(const adapter& adapter, const display_flag flags) noexcept;
         error_type bind(HWND__* const window) noexcept override;
         error_type loop(const duration_type timeout) noexcept override;

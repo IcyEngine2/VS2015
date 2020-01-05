@@ -79,7 +79,7 @@ public:
 public:
     static LRESULT WINAPI proc(const HWND hwnd, const UINT msg, const WPARAM wparam, const LPARAM lparam) noexcept;
     error_type initialize(const window_flags flags) noexcept;
-    ~window_data() noexcept;
+    ~window_data() noexcept override;
 private:
     library m_library = "user32"_lib;
     HWND m_hwnd = nullptr;
@@ -110,6 +110,7 @@ static error_type win32_name(const HWND hwnd, string& str) noexcept
 }
 window_data::~window_data() noexcept
 {
+    filter(0);
     if (m_hwnd && (m_win32_flags & win32_flag::initialized))
     {
         win32_set_window_longptr(m_hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(win32_def_window_proc));

@@ -231,6 +231,7 @@ error_type d3d12_swap_chain::resize() noexcept
 
 d3d12_display::~d3d12_display() noexcept
 {
+    filter(0);
     m_fence.signal(*m_queue);
     m_fence.wait();
 }

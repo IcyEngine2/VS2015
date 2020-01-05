@@ -63,6 +63,8 @@ namespace icy
 	{
         friend file_const_map;
 	public:		
+        static error_type replace(const string_view src, const string_view dst) noexcept;
+        static error_type tmpname(string& str) noexcept;
 		file() noexcept = default;
         file(const file&) = delete;
 		~file() noexcept

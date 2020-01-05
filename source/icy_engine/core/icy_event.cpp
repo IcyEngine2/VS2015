@@ -7,6 +7,10 @@ ICY_STATIC_NAMESPACE_BEG
 class event_loop_data : public event_loop
 {
 public:
+    ~event_loop_data() noexcept override
+    {
+        filter(0);
+    }
     error_type initialize(const uint64_t mask) noexcept
     {
         ICY_ERROR(m_mutex.initialize());
@@ -150,8 +154,9 @@ error_type event_queue::post(event_data& event) noexcept
     ICY_ERROR(signal(event));
     return {};
 }
-detail::rw_spin_lock<> event_queue::g_lock;
+detail::rw_spin_lock event_queue::g_lock;
 event_queue* event_queue::g_list;
+
 error_type event_loop::create(shared_ptr<event_loop>& loop, const uint64_t mask) noexcept
 {
     shared_ptr<event_loop_data> new_ptr;

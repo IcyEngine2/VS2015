@@ -78,6 +78,10 @@ namespace icy
         {
             return icy::compare(m_ptr, rhs.m_ptr);
         }
+        void operator=(const std::nullptr_t) noexcept
+        {
+            *this = unique_ptr();
+        }
     private:
         T* m_ptr = nullptr;
     };

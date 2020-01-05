@@ -49,6 +49,30 @@ error_type file_info::initialize(const string_view path) noexcept
 	return {};
 }
 
+error_type file::replace(const string_view src, const string_view dst) noexcept
+{
+    array<wchar_t> wsrc;
+    array<wchar_t> wdst;
+    ICY_ERROR(to_utf16(src, wsrc));
+    ICY_ERROR(to_utf16(dst, wdst));
+    if (!MoveFileExW(wsrc.data(), wdst.data(), 
+        MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED | MOVEFILE_WRITE_THROUGH))
+        return last_system_error();
+    return {};
+}
+error_type file::tmpname(string& str) noexcept
+{
+    wchar_t wdir[512];
+    auto dirlen = GetTempPathW(_countof(wdir), wdir);
+    if (!dirlen)
+        return last_system_error();
+
+    wchar_t wname[MAX_PATH];
+    if (!GetTempFileNameW(wdir, nullptr, 0, wname))
+        return last_system_error();
+
+    return to_string(const_array_view<wchar_t>(wname, wcsnlen(wname, _countof(wname))), str);
+}
 error_type file::open(const string_view path, const file_access access, const file_open open_mode, const file_share share) noexcept
 {
 	array<wchar_t> wpath;

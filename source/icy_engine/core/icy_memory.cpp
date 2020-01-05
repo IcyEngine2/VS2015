@@ -79,7 +79,7 @@ struct __declspec(align(SYSTEM_CACHE_ALIGNMENT_SIZE)) heap_unit_data
 };
 struct __declspec(align(SYSTEM_CACHE_ALIGNMENT_SIZE)) heap_tloc_data
 {
-    detail::rw_spin_lock<1> lock;
+    detail::rw_spin_lock lock;
     size_t count = 0;
     size_t capacity = 0;
     detail::intrusive_mpsc_queue queue;
@@ -793,5 +793,30 @@ heap_node_unit* heap_node_list::pop(heap_base& heap) noexcept
     }
 }
 size_t icy::align_size(const size_t size) noexcept { size_t tmp; return ::align_size(size, tmp); }
+
+void detail::rw_spin_lock::lock_write() noexcept
+{
+    AcquireSRWLockExclusive(reinterpret_cast<SRWLOCK*>(this));
+}
+void detail::rw_spin_lock::lock_read() noexcept
+{
+    AcquireSRWLockShared(reinterpret_cast<SRWLOCK*>(this));
+}
+bool detail::rw_spin_lock::try_lock_read() noexcept
+{
+    return !!TryAcquireSRWLockShared(reinterpret_cast<SRWLOCK*>(this));
+}
+bool detail::rw_spin_lock::try_lock_write() noexcept
+{
+    return !!TryAcquireSRWLockExclusive(reinterpret_cast<SRWLOCK*>(this));
+}
+void detail::rw_spin_lock::unlock_read() noexcept
+{
+    ReleaseSRWLockShared(reinterpret_cast<SRWLOCK*>(this));
+}
+void detail::rw_spin_lock::unlock_write() noexcept
+{
+    ReleaseSRWLockExclusive(reinterpret_cast<SRWLOCK*>(this));
+}
 
 icy::global_heap_type detail::global_heap;

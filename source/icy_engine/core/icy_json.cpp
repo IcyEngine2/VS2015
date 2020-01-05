@@ -466,6 +466,11 @@ static error_type to_string(const json& json, string& str, const string_view tab
 {
     switch (json.type())
     {
+    case json_type::none:
+    {
+        ICY_ERROR(str.append("null"_s));
+        break;
+    }
     case json_type::boolean:
     {
         string append;

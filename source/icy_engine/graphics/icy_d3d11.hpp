@@ -46,6 +46,10 @@ namespace icy
     class d3d11_display : public display
     {
     public:
+        ~d3d11_display() noexcept override
+        {
+            filter(0);
+        }
         error_type initialize(const adapter& adapter, const display_flag flags) noexcept;
         error_type bind(HWND__* const window) noexcept override;
         error_type loop(const duration_type timeout) noexcept override;

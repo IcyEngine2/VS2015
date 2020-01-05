@@ -21,6 +21,7 @@ namespace icy
         release,
         hold,
         press,
+        _total,
     };
 	struct mouse_event_enum
 	{
@@ -40,6 +41,7 @@ namespace icy
 	{
 		enum : uint32_t
 		{
+            none,
 			left,
 			right,
 			mid,
@@ -106,6 +108,10 @@ namespace icy
         auto right() const noexcept
         {
             return !!(m_value & 0x02);
+        }
+        explicit operator uint32_t() const noexcept
+        {
+            return m_value;
         }
     private:
         const uint32_t m_value;

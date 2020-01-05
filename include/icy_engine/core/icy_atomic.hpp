@@ -10,8 +10,10 @@
 #pragma warning(push)
 #pragma warning(disable:4296)
 
+
 extern "C" __declspec(dllimport) int __stdcall SwitchToThread();
 extern "C" __declspec(dllimport) unsigned long __stdcall GetCurrentThreadId();
+//extern "C" __declspec(dllimport) int TryAcquireSRWLockShared(SRWLOCK*);
 
 namespace icy
 {
@@ -65,7 +67,21 @@ namespace icy
 		private:
             std::atomic_flag m_flag;
         };
-        template<size_t spin = 0> class rw_spin_lock
+        class rw_spin_lock
+        {
+        public:
+            rw_spin_lock() noexcept = default;
+            rw_spin_lock(const rw_spin_lock&) = delete;
+            void lock_write() noexcept;
+            void lock_read() noexcept;
+            bool try_lock_read() noexcept;
+            bool try_lock_write() noexcept;
+            void unlock_read() noexcept;
+            void unlock_write() noexcept;
+        private:
+            void* m_ptr = nullptr;
+        };
+        /*template<size_t spin = 0> class rw_spin_lock
         {
         protected:
             using tag = std::bool_constant<(spin > 0)>;
@@ -196,7 +212,7 @@ namespace icy
             }
         private:
             std::atomic<int32_t> m_counter = 0;
-        };
+        };*/
         
         template<size_t spin = 0> class spin_semaphore
         {
