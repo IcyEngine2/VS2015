@@ -21,7 +21,7 @@
 #endif
 #endif
 
-#define ICY_GUI_VERSION 0x0006'0001
+#define ICY_GUI_VERSION 0x0006'0002
 
 #pragma warning(push)
 #pragma warning(disable:4201)
@@ -609,6 +609,7 @@ namespace icy
         virtual uint32_t vheader(const gui_node root, const uint32_t index, const string_view text) noexcept = 0;
         virtual uint32_t hheader(const gui_node root, const uint32_t index, const string_view text) noexcept = 0;
         virtual uint32_t enable(const gui_action action, const bool value) noexcept = 0;
+        virtual uint32_t enable(const gui_widget widget, const bool value) noexcept = 0;
         virtual uint32_t modify(const gui_widget widget, const string_view args) noexcept = 0;
         virtual uint32_t destroy(const gui_widget widget) noexcept = 0;
         virtual uint32_t destroy(const gui_action action) noexcept = 0;
@@ -792,6 +793,10 @@ namespace icy
         {
             ICY_GUI_ERROR(m_system->enable(action, value));
         }
+        error_type enable(const gui_widget widget, const bool value) noexcept
+        {
+            ICY_GUI_ERROR(m_system->enable(widget, value));
+        }
         error_type bind(const gui_action action, const gui_widget menu) noexcept
         {
             ICY_GUI_ERROR(m_system->bind(action, menu));
@@ -965,7 +970,7 @@ namespace icy
 }
 #endif
 
-extern "C" uint32_t ICY_QTGUI_API icy_gui_system_create(const int version, icy::gui_system** system) noexcept;
+extern "C" uint32_t ICY_QTGUI_API icy_gui_system_create(const int version, icy::gui_system*& system) noexcept;
 
 #ifndef ICY_QTGUI_BUILD
 inline icy::error_type icy::gui_queue::initialize() noexcept
@@ -975,12 +980,12 @@ inline icy::error_type icy::gui_queue::initialize() noexcept
     m_system = nullptr;
 
 #if ICY_QTGUI_STATIC
-    ICY_GUI_ERROR(icy_gui_system_create(ICY_GUI_VERSION, &m_system));
+    ICY_GUI_ERROR(icy_gui_system_create(ICY_GUI_VERSION, m_system));
 #else
     ICY_ERROR(m_library.initialize());
     if (const auto func = ICY_FIND_FUNC(m_library, icy_gui_system_create))
     {
-        const auto err = func(ICY_GUI_VERSION, &m_system);
+        const auto err = func(ICY_GUI_VERSION, m_system);
         ICY_GUI_ERROR(err);
     }
     else

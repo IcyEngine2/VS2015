@@ -21,6 +21,15 @@
     <ClCompile Include="..\..\..\source\icy_mbox\icy_mbox_script.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_mbox\script\icy_mbox_script_context.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_mbox\script\icy_mbox_script_explorer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_mbox\script\icy_mbox_script_form.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\source\icy_mbox\script\icy_mbox_script_explorer.hpp">
@@ -32,13 +41,13 @@
     <ClInclude Include="..\..\..\source\icy_mbox\script\icy_mbox_script_editor.hpp">
       <Filter>Source Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\source\icy_mbox\script\icy_mbox_script_event.hpp">
-      <Filter>Source Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\source\icy_mbox\script\icy_mbox_script_form.hpp">
-      <Filter>Source Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\..\source\icy_mbox\script\icy_mbox_script_context.hpp">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\icy_mbox\script\icy_mbox_script_common.hpp">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\icy_mbox\script\icy_mbox_script_form2.hpp">
       <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>

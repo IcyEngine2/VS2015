@@ -56,7 +56,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>ICY_QTGUI_STATIC=1;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
@@ -71,7 +71,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>ICY_QTGUI_STATIC=1;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
@@ -83,14 +83,17 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\..\source\icy_mbox\icy_mbox_script.cpp" />
+    <ClCompile Include="..\..\..\source\icy_mbox\script\icy_mbox_script_context.cpp" />
+    <ClCompile Include="..\..\..\source\icy_mbox\script\icy_mbox_script_explorer.cpp" />
+    <ClCompile Include="..\..\..\source\icy_mbox\script\icy_mbox_script_form.cpp" />
     <ClCompile Include="..\..\..\source\icy_mbox\script\icy_mbox_script_main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\source\icy_mbox\icy_mbox_script.hpp" />
+    <ClInclude Include="..\..\..\source\icy_mbox\script\icy_mbox_script_common.hpp" />
     <ClInclude Include="..\..\..\source\icy_mbox\script\icy_mbox_script_context.hpp" />
-    <ClInclude Include="..\..\..\source\icy_mbox\script\icy_mbox_script_form.hpp" />
+    <ClInclude Include="..\..\..\source\icy_mbox\script\icy_mbox_script_form2.hpp" />
     <ClInclude Include="..\..\..\source\icy_mbox\script\icy_mbox_script_editor.hpp" />
-    <ClInclude Include="..\..\..\source\icy_mbox\script\icy_mbox_script_event.hpp" />
     <ClInclude Include="..\..\..\source\icy_mbox\script\icy_mbox_script_explorer.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

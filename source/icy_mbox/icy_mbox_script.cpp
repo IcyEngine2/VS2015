@@ -9,29 +9,30 @@ const guid mbox::group_broadcast = guid(0x12A85EC642DF451A, 0xABFDE3C2BE328ED3);
 const guid mbox::group_multicast = guid(0xDA0B89EB493F4966, 0x8C538CA27AEA8AB3);
 const guid mbox::group_default = guid();
 
+const string_view mbox::str_group_broadcast = "Everyone"_s;
+const string_view mbox::str_group_multicast = "Other"_s;
+const string_view mbox::str_group_default = "Self"_s;
+
 static constexpr auto str_key_index = "Index"_s;
 //static constexpr auto str_key_name = "Name"_s;
 static constexpr auto str_key_type = "Type"_s;
 static constexpr auto str_key_data = "Data"_s;
 static constexpr auto str_key_value = "Value"_s;
-static constexpr auto str_key_keyboard = "Keyboard"_s;
-static constexpr auto str_key_kevent = "Keyboard Event"_s;
-static constexpr auto str_key_mevent = "Mouse Event"_s;
-static constexpr auto str_key_mouse = "Mouse"_s;
 static constexpr auto str_key_macro = "Macro"_s;
+static constexpr auto str_key_button = "Button"_s;
 static constexpr auto str_key_ctrl = "Ctrl"_s;
 static constexpr auto str_key_shift = "Shift"_s;
 static constexpr auto str_key_alt = "Alt"_s;
 static constexpr auto str_key_group = "Group"_s;
 static constexpr auto str_key_event = "Event"_s;
 static constexpr auto str_key_command = "Command"_s;
-static constexpr auto str_key_button = "Button"_s;
 static constexpr auto str_key_offset = "Offset"_s;
 static constexpr auto str_key_period = "Period"_s;
 static constexpr auto str_key_reference = "Reference"_s;
 static constexpr auto str_key_variable = "Variable"_s;
 static constexpr auto str_key_profiles = "Profiles"_s;
 static constexpr auto str_key_actions = "Actions"_s;
+static constexpr auto str_key_assign = "Assign"_s;
 
 string_view mbox::to_string(const mbox::type type) noexcept
 {
@@ -55,16 +56,6 @@ string_view mbox::to_string(const mbox::type type) noexcept
     }
     return {};
 }
-string_view mbox::to_string(const mbox::input_type type) noexcept
-{
-    switch (type)
-    {
-    case mbox::input_type::keyboard: return str_key_keyboard;
-    case mbox::input_type::mouse: return str_key_mouse;
-    case mbox::input_type::macro: return str_key_macro;
-    }
-    return {};
-}
 string_view mbox::to_string(const mbox::variable_type type) noexcept
 {
     switch (type)
@@ -80,7 +71,7 @@ string_view mbox::to_string(const mbox::event_type type) noexcept
 {
     switch (type)
     {
-    case event_type::variable_changed: "Var Changed"_s;
+    case event_type::variable_changed: return "Var Changed"_s;
     case event_type::variable_equal: return "Var =="_s;
     case event_type::variable_not_equal: return "Var !="_s;
     case event_type::variable_greater: return "Var >"_s;
@@ -171,6 +162,108 @@ static error_type to_value(const string_view str, T& value) noexcept
     return {};
 }
 
+error_type mbox::base::copy(const base& src, base& dst) noexcept
+{
+    dst.index = src.index;
+    dst.parent = src.parent;
+    dst.type = src.type;
+    ICY_ERROR(to_string(src.name, dst.name));
+    dst.value = {};
+    switch (src.type)
+    {
+    case mbox::type::directory:   
+    case mbox::type::list_inputs:
+    case mbox::type::list_variables:
+    case mbox::type::list_timers:
+    case mbox::type::list_events:
+    case mbox::type::list_bindings:
+    case mbox::type::list_commands:
+        ICY_ERROR(dst.value.directory.indices.assign(src.value.directory.indices));
+        break;
+
+    case mbox::type::input:
+    {
+        const auto& src_value = src.value.input;
+        auto& dst_value = dst.value.input;
+        dst_value.alt = src_value.alt;
+        dst_value.button = src_value.button;
+        dst_value.ctrl = src_value.ctrl;
+        dst_value.event = src_value.event;
+        dst_value.shift = src_value.shift;
+        ICY_ERROR(to_string(src_value.macro, dst_value.macro));
+        break;
+    }
+    case mbox::type::variable:
+    {
+        const auto& src_value = src.value.variable;
+        auto& dst_value = dst.value.variable;
+        dst_value.vtype = src_value.vtype;
+        dst_value.group = src_value.group;
+        switch (src_value.vtype)
+        {
+        case variable_type::boolean:
+            dst_value.boolean = src_value.boolean;
+            break;
+        case variable_type::counter:
+        case variable_type::integer:
+            dst_value.integer = src_value.integer;
+            break;
+        case variable_type::string:
+            ICY_ERROR(to_string(src_value.string, dst_value.string));
+            break;
+        }
+        break;
+    }
+    case mbox::type::timer:
+    {
+        const auto& src_value = src.value.timer;
+        auto& dst_value = dst.value.timer;
+        dst_value = src_value;
+        break;
+    }
+    case mbox::type::event:
+    {
+        const auto& src_value = src.value.event;
+        auto& dst_value = dst.value.event;
+        dst_value = src_value;
+        break;
+    }
+    case mbox::type::command:
+    {
+        const auto& src_value = src.value.command;
+        auto& dst_value = dst.value.command;
+        dst_value.group = src_value.group;
+        ICY_ERROR(dst_value.actions.assign(src_value.actions));
+        break;
+    }
+
+    case mbox::type::binding:
+    {
+        const auto& src_value = src.value.binding;
+        auto& dst_value = dst.value.binding;
+        dst_value = src_value;
+        break;
+    }
+
+    case mbox::type::group:
+    {
+        const auto& src_value = src.value.group;
+        auto& dst_value = dst.value.group;
+        ICY_ERROR(dst_value.profiles.assign(src_value.profiles));
+        break;
+    }
+
+    case mbox::type::profile:
+    {
+        const auto& src_value = src.value.profile;
+        auto& dst_value = dst.value.profile;
+        dst_value = src_value;
+        break;
+    }
+    }
+    return {};
+}
+
 error_type mbox::library::initialize() noexcept
 {
     m_data.clear();
@@ -235,8 +328,223 @@ error_type mbox::library::save_to(const string_view filename) noexcept
     ICY_ERROR(file::replace(tname, filename));
     return {};
 }
+error_type mbox::library::enumerate(const mbox::type type, array<guid>& indices) noexcept
+{
+    for (auto&& pair : m_data)
+    {
+        if (pair.value.type == type)
+            ICY_ERROR(indices.push_back(guid(pair.key)));
+    }
+    return {};
+}
+error_type mbox::library::is_valid(const base& base) noexcept
+{
+    const auto parent = m_data.find(base.parent);
+    if (parent == m_data.end() || find(base.index))
+        return make_stdlib_error(std::errc::invalid_argument);
 
-icy::error_type mbox::library::children(const icy::guid& index, const bool recursive, icy::array<icy::guid>& vec) noexcept
+    if (base.name.empty())
+        return make_stdlib_error(std::errc::invalid_argument);
+
+    const auto is_group = [this](const guid& index)
+    {
+        if (index == mbox::group_default ||
+            index == mbox::group_multicast ||
+            index == mbox::group_broadcast)
+        {
+            ;
+        }
+        else
+        {
+            const auto ptr = find(index);
+            if (!ptr || ptr->type != mbox::type::group)
+                return make_stdlib_error(std::errc::invalid_argument);
+        }
+        return error_type();
+    };
+
+    switch (base.type)
+    {
+    case mbox::type::directory:
+    case mbox::type::list_inputs:
+    case mbox::type::list_variables:
+    case mbox::type::list_timers:
+    case mbox::type::list_events:
+    case mbox::type::list_bindings:
+    case mbox::type::list_commands:
+        break;
+
+    case mbox::type::input:
+        break;
+
+    case mbox::type::variable:
+        ICY_ERROR(is_group(base.value.variable.group));
+        break;
+    
+    case mbox::type::timer:
+        ICY_ERROR(is_group(base.value.timer.group));
+        if (base.value.timer.offset.count() < 0 ||
+            base.value.timer.period.count() < 0)
+            return make_stdlib_error(std::errc::invalid_argument);
+        break;
+
+    case mbox::type::event:
+    {
+        const auto& value = base.value.event;
+        ICY_ERROR(is_group(value.group));
+        const auto ref = find(value.reference);
+
+        if (value.etype == mbox::event_type::focus_acquire ||
+            value.etype == mbox::event_type::focus_release)
+        {
+            break;
+        }
+        else if (!ref)
+        {
+            return make_stdlib_error(std::errc::invalid_argument);
+        }
+
+        switch (value.etype)
+        {
+        case mbox::event_type::variable_changed:
+        {
+            if (ref->type != mbox::type::variable)
+                return make_stdlib_error(std::errc::invalid_argument);
+            break;
+        }
+        case mbox::event_type::variable_not_equal:
+        case mbox::event_type::variable_greater:
+        case mbox::event_type::variable_lesser:
+        case mbox::event_type::variable_greater_or_equal:
+        case mbox::event_type::variable_lesser_or_equal:
+        case mbox::event_type::variable_str_contains:
+        {
+            if (ref->type != mbox::type::variable)
+                return make_stdlib_error(std::errc::invalid_argument);
+            const auto compare = find(value.compare);
+            if (!compare || compare->type != mbox::type::variable)
+                return make_stdlib_error(std::errc::invalid_argument);
+
+            if (value.etype == mbox::event_type::variable_str_contains)
+            {
+                if (ref->value.variable.vtype != mbox::variable_type::string)
+                    return make_stdlib_error(std::errc::invalid_argument);
+            }
+            else
+            {
+                if (ref->value.variable.vtype == mbox::variable_type::string)
+                    ;
+                else if (ref->value.variable.vtype != compare->value.variable.vtype)
+                    return make_stdlib_error(std::errc::invalid_argument);
+            }
+            break;
+        }
+        case mbox::event_type::recv_input:
+        {
+            if (ref->type != mbox::type::input)
+                return make_stdlib_error(std::errc::invalid_argument);
+            break;
+        }
+                    
+        case mbox::event_type::timer_first:
+        case mbox::event_type::timer_tick:
+        case mbox::event_type::timer_last:
+            if (ref->type != mbox::type::timer)
+                return make_stdlib_error(std::errc::invalid_argument);
+            break;
+
+        default:
+            return make_stdlib_error(std::errc::invalid_argument);
+        }
+
+
+    }
+    case mbox::type::command:
+    {
+        const auto& value = base.value.command;
+        ICY_ERROR(is_group(value.group));
+        for (auto&& action : value.actions)
+        {
+            ICY_ERROR(is_group(action.group));
+            const auto lhs = find(action.reference);
+            if (!lhs)
+                return make_stdlib_error(std::errc::invalid_argument);
+
+            switch (action.atype)
+            {
+            case mbox::action_type::variable_assign:
+            {
+                const auto rhs = find(action.assign);
+                if (!lhs || !rhs || lhs->type != mbox::type::variable || rhs->type != mbox::type::variable)
+                    return make_stdlib_error(std::errc::invalid_argument);
+                break;
+            }
+            case mbox::action_type::variable_inc:
+            case mbox::action_type::variable_dec:
+            {
+                if (!lhs || lhs->type != mbox::type::variable || lhs->value.variable.vtype != mbox::variable_type::counter)
+                    return make_stdlib_error(std::errc::invalid_argument);
+                break;
+            }
+
+            case mbox::action_type::execute_command:
+            {
+                if (lhs->type != mbox::type::command)
+                    return make_stdlib_error(std::errc::invalid_argument);
+                break;
+            }
+            case mbox::action_type::timer_start:
+            case mbox::action_type::timer_stop:
+            case mbox::action_type::timer_pause:
+            case mbox::action_type::timer_resume:
+            {
+                if (lhs->type != mbox::type::timer)
+                    return make_stdlib_error(std::errc::invalid_argument);
+                break;
+            }
+
+            case mbox::action_type::send_input:
+            {
+                if (lhs->type != mbox::type::input)
+                    return make_stdlib_error(std::errc::invalid_argument);
+                break;
+            }
+            case mbox::action_type::join_group:
+            case mbox::action_type::leave_group:
+            {
+                if (lhs->type != mbox::type::group)
+                    return make_stdlib_error(std::errc::invalid_argument);
+                break;
+            }
+            }
+        }
+        break;
+    }
+    case mbox::type::binding:
+    {
+        const auto& value = base.value.binding;
+        ICY_ERROR(is_group(value.group));
+        const auto command = find(value.command);
+        const auto event = find(value.event);
+        if (!command || !event || command->type != mbox::type::command || event->type != mbox::type::event)
+            return make_stdlib_error(std::errc::invalid_argument);
+        break;
+    }
+    case mbox::type::profile:
+    {
+        const auto& value = base.value.profile;
+        const auto command = find(value.command);
+        if(!command || command->type != mbox::type::command)
+            return make_stdlib_error(std::errc::invalid_argument);
+        break;
+    }
+
+    default:
+        return make_stdlib_error(std::errc::invalid_argument);
+    }
+    return {};
+}
+error_type mbox::library::children(const icy::guid& index, const bool recursive, icy::array<icy::guid>& vec) noexcept
 {
     const auto it = m_data.find(index);
     if (it == m_data.end())
@@ -287,6 +595,7 @@ error_type mbox::library::references(const guid& index, array<guid>& vec) noexce
             {
                 use |= index == action.group;
                 use |= index == action.reference;
+                use |= index == action.assign;
             }
             break;
         }
@@ -294,7 +603,7 @@ error_type mbox::library::references(const guid& index, array<guid>& vec) noexce
         {
             use |= index == value.event.group;
             use |= index == value.event.reference;
-            use |= index == value.event.variable;
+            use |= index == value.event.compare;
             break;
         }
         case type::group:
@@ -324,17 +633,40 @@ error_type mbox::library::references(const guid& index, array<guid>& vec) noexce
     }
     return {};
 }
+error_type mbox::library::path(const icy::guid& index, icy::string& str) noexcept
+{
+    if (index == mbox::group_default)
+        return icy::to_string(str_group_default, str);
+    else if (index == mbox::group_broadcast)
+        return icy::to_string(str_group_broadcast, str);
+    else if (index == mbox::group_multicast)
+        return icy::to_string(str_group_multicast, str);
+
+    auto ptr = find(index);
+    if (!ptr)
+        return make_stdlib_error(std::errc::invalid_argument);
+
+    ICY_ERROR(to_string(ptr->name, str));
+    while (true)
+    {
+        ptr = find(ptr->parent);
+        if (!ptr || ptr->index == mbox::root)
+            break;
+        ICY_ERROR(str.append(" / "_s));
+        ICY_ERROR(str.append(ptr->name));
+    }
+    return {};
+}
 error_type mbox::library::remove(const icy::guid& index, remove_query& query) noexcept
 {
     return make_stdlib_error(std::errc::function_not_supported);    
 }
 error_type mbox::library::insert(const base& base) noexcept
 {
-    const auto parent = m_data.find(base.parent);
-    if (parent == m_data.end() || find(base.index))
-        return make_stdlib_error(std::errc::invalid_argument);
-
-    for (auto&& index : parent->value.value.directory.indices)
+    ICY_ERROR(is_valid(base));
+    auto& parent = m_data.find(base.parent)->value;
+    
+    for (auto&& index : parent.value.directory.indices)
     {
         if (const auto child = find(index))
         {
@@ -344,8 +676,9 @@ error_type mbox::library::insert(const base& base) noexcept
     }
 
     array<guid>* parent_indices;
+    parent_indices = &parent.value.directory.indices;
 
-    switch (parent->value.type)
+    switch (parent.type)
     {
     case mbox::type::directory:
     {
@@ -364,18 +697,40 @@ error_type mbox::library::insert(const base& base) noexcept
         default:
             return make_stdlib_error(std::errc::invalid_argument);
         }
-        parent_indices = &parent->value.value.directory.indices;
+        parent_indices = &parent.value.directory.indices;
+        break;
+    }
+    case mbox::type::list_inputs:
+    {
+        if (base.type != type::input)
+            return make_stdlib_error(std::errc::invalid_argument);
+        break;
+    }
+    case mbox::type::list_events:
+    {
+        if (base.type != type::variable)
+            return make_stdlib_error(std::errc::invalid_argument);
+        break;
+    }
+    case mbox::type::list_commands:
+    {
+        if (base.type != type::command)
+            return make_stdlib_error(std::errc::invalid_argument);
+        break;
+    }
+    case mbox::type::list_bindings:
+    {
+        if (base.type != type::binding)
+            return make_stdlib_error(std::errc::invalid_argument);
         break;
     }
     default:
-        return make_stdlib_error(std::errc::invalid_argument);
+        parent_indices = nullptr;
     }
     
     mbox::base new_base;
-    new_base.index = base.index;
-    new_base.parent = base.parent;
-    new_base.type = base.type;
-    ICY_ERROR(to_string(base.name, new_base.name));
+    ICY_ERROR(mbox::base::copy(base, new_base));      
+
     if (parent_indices)
     {
         if (std::find(parent_indices->begin(), parent_indices->end(), base.index) != parent_indices->end())
@@ -426,27 +781,15 @@ error_type mbox::library::to_json(const base& base, icy::json& obj) noexcept
     case type::input:
     {
         const auto& value = base.value.input;
-        ICY_ERROR(json_data.insert(str_key_type, to_string(value.itype)));
-        if (value.itype == input_type::keyboard || value.itype == input_type::macro)
-        {
-            ICY_ERROR(json_data.insert(str_key_kevent, ::to_string(value.kevent)));
-            ICY_ERROR(json_data.insert(str_key_button, to_string(value.kbutton)));
-        }
-        else if (value.itype == input_type::mouse)
-        {
-            ICY_ERROR(json_data.insert(str_key_mevent, ::to_string(value.mevent)));
-            ICY_ERROR(json_data.insert(str_key_button, ::to_string(value.mbutton)));
-        }
+        ICY_ERROR(json_data.insert(str_key_event, ::to_string(value.event)));
+        ICY_ERROR(json_data.insert(str_key_button, to_string(value.button)));
         if (const auto integer = uint32_t(value.ctrl))
              ICY_ERROR(json_data.insert(str_key_ctrl, integer));
         if (const auto integer = uint32_t(value.alt))
             ICY_ERROR(json_data.insert(str_key_alt, integer));
         if (const auto integer = uint32_t(value.shift))
             ICY_ERROR(json_data.insert(str_key_shift, integer));
-
-        if (value.itype == input_type::macro && !value.macro.empty())
-            ICY_ERROR(json_data.insert(str_key_macro, value.macro));
-        
+        ICY_ERROR(json_data.insert(str_key_macro, value.macro));        
         break;
     }
     case type::variable:
@@ -492,7 +835,7 @@ error_type mbox::library::to_json(const base& base, icy::json& obj) noexcept
         string str_variable;
         ICY_ERROR(to_string(value.group, str_group));
         ICY_ERROR(to_string(value.reference, str_reference));
-        ICY_ERROR(to_string(value.variable, str_variable));
+        ICY_ERROR(to_string(value.compare, str_variable));
         ICY_ERROR(json_data.insert(str_key_group, std::move(str_group)));
         ICY_ERROR(json_data.insert(str_key_reference, std::move(str_reference)));
         ICY_ERROR(json_data.insert(str_key_variable, std::move(str_variable)));
@@ -511,10 +854,13 @@ error_type mbox::library::to_json(const base& base, icy::json& obj) noexcept
             ICY_ERROR(json_action.insert(str_key_type, to_string(action.atype)));
 
             string str_reference;
+            string str_assign;
             ICY_ERROR(to_string(action.group, str_group));
             ICY_ERROR(to_string(action.reference, str_reference));
+            ICY_ERROR(to_string(action.assign, str_assign));
             ICY_ERROR(json_action.insert(str_key_group, std::move(str_group)));
             ICY_ERROR(json_action.insert(str_key_reference, std::move(str_reference)));
+            ICY_ERROR(json_action.insert(str_key_assign, std::move(str_assign)));
             ICY_ERROR(actions.push_back(std::move(json_action)));
         }
         ICY_ERROR(json_data.insert(str_key_actions, std::move(actions)));
@@ -657,23 +1003,12 @@ error_type mbox::library::from_json(const json& json_input, mbox::base& output) 
         }
         break;
     }
-
     case mbox::type::input:
     {
         auto& value = output.value.input;
         if (!json_data || json_data->type() != json_type::object)
             return make_stdlib_error(std::errc::invalid_argument);
-
-        ICY_ERROR(to_value(json_data->get(str_key_type), value.itype));
-       /* const auto str_value_type = json_data->get(str_key_type);
-        for (; value.itype != mbox::input_type::_total; value.itype = mbox::input_type(uint32_t(value.itype) + 1))
-        {
-            if (to_string(value.itype) == str_value_type)
-                break;
-        }*/
-        if (value.itype == mbox::input_type::_total)
-            return make_stdlib_error(std::errc::invalid_argument);
-
+        
         auto value_ctrl = 0u;
         auto value_alt = 0u;
         auto value_shift = 0u;
@@ -686,44 +1021,136 @@ error_type mbox::library::from_json(const json& json_input, mbox::base& output) 
         value.alt = value_alt;
         value.shift = value_shift;
 
-        if (value.itype == mbox::input_type::keyboard ||
-            value.itype == mbox::input_type::macro)
+        const auto str_button = json_data->get(str_key_button);
+        if (!str_button.empty())
         {
-            const auto str_button = json_data->get(str_key_button);
-            if (!str_button.empty())
+            for (auto n = 0u; n < 256u; ++n)
             {
-                for (auto n = 0u; n < 256u; ++n)
+                if (to_string(key(n)) == str_button)
                 {
-                    if (to_string(key(n)) == str_button)
-                    {
-                        value.kbutton = key(n);
-                        break;
-                    }
+                    value.button = key(n);
+                    break;
                 }
-                if (value.kbutton == key::none)
-                    return make_stdlib_error(std::errc::invalid_argument);
             }
-            ICY_ERROR(to_value(json_data->get(str_key_kevent), value.kevent));
         }
-        else if (value.itype == input_type::mouse)
-        {
-            ICY_ERROR(to_value(json_data->get(str_key_mevent), value.mevent));
-            ICY_ERROR(to_value(json_data->get(str_key_button), value.mbutton));
-        }
-
-        if (value.itype == mbox::input_type::macro)
-            ICY_ERROR(to_string(json_data->get(str_key_macro), value.macro));
+        ICY_ERROR(to_value(json_data->get(str_key_event), value.event));
+        ICY_ERROR(to_string(json_data->get(str_key_macro), value.macro));
         
         break;
     }
     case mbox::type::variable:
-    case mbox::type::timer:
-    case mbox::type::event:
-    case mbox::type::command:
-    case mbox::type::binding:
-    case mbox::type::group:
-    case mbox::type::profile:
+    {
+        auto& value = output.value.variable;
+        if (!json_data || json_data->type() != json_type::object)
+            return make_stdlib_error(std::errc::invalid_argument);
+
+        ICY_ERROR(to_value(json_data->get(str_key_type), value.vtype));
+        ICY_ERROR(json_data->get(str_key_group).to_value(value.group));
+        
+        switch (value.vtype)
+        {
+        case variable_type::boolean:
+            ICY_ERROR(json_data->get(str_key_value).to_value(value.boolean));
+            break;
+        case variable_type::integer:
+        case variable_type::counter:
+            ICY_ERROR(json_data->get(str_key_value).to_value(value.integer));
+            break;
+        case variable_type::string:
+            ICY_ERROR(to_string(json_data->get(str_key_value), value.string));
+            break;
+        default:
+            return make_stdlib_error(std::errc::invalid_argument);
+        }
         break;
+    }
+    case mbox::type::timer:
+    {
+        auto& value = output.value.timer;
+        if (!json_data || json_data->type() != json_type::object)
+            return make_stdlib_error(std::errc::invalid_argument);
+
+        ICY_ERROR(json_data->get(str_key_group).to_value(value.group));
+        auto offset = 0u;
+        auto period = 0u;
+        ICY_ERROR(json_data->get(str_key_offset).to_value(offset));
+        ICY_ERROR(json_data->get(str_key_period).to_value(period));
+        value.offset = std::chrono::milliseconds(offset);
+        value.period = std::chrono::milliseconds(period);
+        break;
+    }
+    case mbox::type::event:
+    {
+        auto& value = output.value.event;
+        if (!json_data || json_data->type() != json_type::object)
+            return make_stdlib_error(std::errc::invalid_argument);
+        ICY_ERROR(to_value(json_data->get(str_key_type), value.etype));
+        ICY_ERROR(json_data->get(str_key_group).to_value(value.group));
+        ICY_ERROR(json_data->get(str_key_reference).to_value(value.reference));
+        ICY_ERROR(json_data->get(str_key_variable).to_value(value.compare));
+        break;
+    }
+    case mbox::type::command:
+    {
+        auto& value = output.value.command;
+        if (!json_data || json_data->type() != json_type::object)
+            return make_stdlib_error(std::errc::invalid_argument);
+        ICY_ERROR(json_data->get(str_key_group).to_value(value.group));
+      
+        auto actions = json_data->find(str_key_actions);
+        if (!actions || actions->type() != json_type::array)
+            return make_stdlib_error(std::errc::invalid_argument);
+
+        for (auto&& action : actions->vals())
+        {
+            if (action.type() != json_type::object)
+                return make_stdlib_error(std::errc::invalid_argument);
+
+            mbox::value_command::action new_action;
+            ICY_ERROR(to_value(action.get(str_key_type), new_action.atype));
+            ICY_ERROR(action.get(str_key_group).to_value(new_action.group));
+            ICY_ERROR(action.get(str_key_reference).to_value(new_action.reference));
+            ICY_ERROR(action.get(str_key_assign).to_value(new_action.assign));
+            ICY_ERROR(value.actions.push_back(std::move(new_action)));
+        }
+        break;
+    }
+    case mbox::type::binding:
+    {
+        auto& value = output.value.binding;
+        if (!json_data || json_data->type() != json_type::object)
+            return make_stdlib_error(std::errc::invalid_argument);
+        ICY_ERROR(json_data->get(str_key_group).to_value(value.group));
+        ICY_ERROR(json_data->get(str_key_command).to_value(value.command));
+        ICY_ERROR(json_data->get(str_key_event).to_value(value.event));
+        break;
+    }
+    case mbox::type::group:
+    {
+        auto& value = output.value.group;
+        if (!json_data || json_data->type() != json_type::object)
+            return make_stdlib_error(std::errc::invalid_argument);
+
+        const auto profiles = json_data->find(str_key_profiles);
+        if (!profiles || profiles->type() != json_type::array)
+            return make_stdlib_error(std::errc::invalid_argument);
+
+        for (auto&& profile : profiles->vals())
+        {
+            guid index;
+            ICY_ERROR(profile.get().to_value(index));
+            ICY_ERROR(value.profiles.push_back(index));
+        }
+        break;
+    }
+    case mbox::type::profile:
+    {
+        auto& value = output.value.profile;
+        if (!json_data || json_data->type() != json_type::object)
+            return make_stdlib_error(std::errc::invalid_argument);
+        ICY_ERROR(json_data->get(str_key_command).to_value(value.command));
+        break;
+    }
     default:
         return make_stdlib_error(std::errc::invalid_argument);
     }

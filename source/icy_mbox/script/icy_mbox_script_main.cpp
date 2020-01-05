@@ -1,10 +1,10 @@
-#define ICY_QTGUI_STATIC 1
 #include <icy_qtgui/icy_qtgui.hpp>
 #include <icy_engine/core/icy_file.hpp>
 #include <icy_engine/core/icy_json.hpp>
 #include <icy_engine/core/icy_thread.hpp>
 #include <icy_engine/core/icy_queue.hpp>
 #include <icy_engine/network/icy_network.hpp>
+#include "icy_mbox_script_common.hpp"
 #include "icy_mbox_script_explorer.hpp"
 #include "icy_mbox_script_editor.hpp"
 #include "icy_mbox_script_context.hpp"
@@ -20,7 +20,6 @@
 
 using namespace icy;
 
-uint32_t show_error(const error_type error, const string_view text) noexcept;
 class mbox_application;
 
 class mbox_main_thread : public thread
@@ -211,15 +210,6 @@ error_type mbox_application::exec(const event event) noexcept
                 show_error(error, "Save library"_s);
                 return {};
             }
-        }
-    }
-    else if (event->type == mbox_event_type_create)
-    {
-        const auto& event_data = event->data<mbox::base>();
-        if (const auto error = m_library.insert(event_data))
-        {
-            show_error(error, "Create new object"_s);
-            return {};
         }
     }
 

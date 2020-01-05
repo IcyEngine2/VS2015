@@ -145,11 +145,13 @@ enum class qtgui_event_type : uint32_t
     text_widget,
     text_model,
     text_header,
+    text_tabs,
     udata_model,
     icon_model,
     bind_action,
     bind_widget,
     enable_action,
+    enable_widget,
     modify_widget,
     destroy_widget,
     destroy_action,
@@ -333,6 +335,20 @@ public:
     const gui_node node;
     const QString text;
 };
+class qtgui_event_text_tabs : public QEvent
+{
+public:
+    qtgui_event_text_tabs(const gui_widget tabs, const gui_widget widget, const QString text) :
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::text_tabs))),
+        tabs(tabs), widget(widget), text(text)
+    {
+
+    }
+public:
+    const gui_widget tabs;
+    const gui_widget widget;
+    const QString text;
+};
 class qtgui_event_udata_model : public QEvent
 {
 public:
@@ -411,6 +427,19 @@ public:
     }
 public:
     const gui_action action;
+    const bool value;
+};
+class qtgui_event_enable_widget : public QEvent
+{
+public:
+    qtgui_event_enable_widget(const gui_widget widget, const bool value) :
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::enable_widget))),
+        widget(widget), value(value)
+    {
+
+    }
+public:
+    const gui_widget widget;
     const bool value;
 };
 class qtgui_event_modify_widget : public QEvent
@@ -630,6 +659,7 @@ private:
     uint32_t show(const gui_widget widget, const bool value) noexcept override;
     uint32_t text(const gui_widget widget, const string_view text) noexcept override;
     uint32_t text(const gui_node node, const string_view text) noexcept override;
+    uint32_t text(const gui_widget tabs, const gui_widget widget, const string_view text) noexcept;
     uint32_t udata(const gui_node node, const gui_variant& var) noexcept override;
     uint32_t icon(const gui_node node, const gui_image image) noexcept override;
     uint32_t vheader(const gui_node node, const uint32_t index, const string_view text) noexcept override;
@@ -637,6 +667,7 @@ private:
     uint32_t bind(const gui_action action, const gui_widget widget) noexcept override;
     uint32_t bind(const gui_widget widget, const gui_node node) noexcept override;
     uint32_t enable(const gui_action action, const bool value) noexcept override;
+    uint32_t enable(const gui_widget widget, const bool value) noexcept override;
     uint32_t modify(const gui_widget widget, const string_view args) noexcept override;
     uint32_t destroy(const gui_widget widget) noexcept override;
     uint32_t destroy(const gui_action action) noexcept override;
@@ -658,12 +689,14 @@ private:
     std::errc process(const qtgui_event_show& event);
     std::errc process(const qtgui_event_text_widget& event);
     std::errc process(const qtgui_event_text_model& event);
+    std::errc process(const qtgui_event_text_tabs& event);
     std::errc process(const qtgui_event_udata_model& event);
     std::errc process(const qtgui_event_icon_model& event);
     std::errc process(const qtgui_event_text_header& event);
     std::errc process(const qtgui_event_bind_action& event);
     std::errc process(const qtgui_event_bind_widget& event);
     std::errc process(const qtgui_event_enable_action& event);
+    std::errc process(const qtgui_event_enable_widget& event);
     std::errc process(const qtgui_event_modify_widget& event);
     std::errc process(const qtgui_event_destroy_widget& event);
     std::errc process(const qtgui_event_destroy_action& event);
@@ -795,6 +828,9 @@ bool qtgui_system::notify(QObject* object, QEvent* event) noexcept
                 case qtgui_event_type::text_widget:
                     error = process(*static_cast<qtgui_event_text_widget*>(event));
                     break;
+                case qtgui_event_type::text_tabs:
+                    error = process(*static_cast<qtgui_event_text_tabs*>(event));
+                    break;
                 case qtgui_event_type::text_model:
                     error = process(*static_cast<qtgui_event_text_model*>(event));
                     break;
@@ -815,6 +851,9 @@ bool qtgui_system::notify(QObject* object, QEvent* event) noexcept
                     break;
                 case qtgui_event_type::enable_action:
                     error = process(*static_cast<qtgui_event_enable_action*>(event));
+                    break;
+                case qtgui_event_type::enable_widget:
+                    error = process(*static_cast<qtgui_event_enable_widget*>(event));
                     break;
                 case qtgui_event_type::modify_widget:
                     error = process(*static_cast<qtgui_event_modify_widget*>(event));
@@ -1098,6 +1137,16 @@ uint32_t qtgui_system::text(const gui_widget widget, const string_view text) noe
     ICY_CATCH;
     return {};
 }
+uint32_t qtgui_system::text(const gui_widget tabs, const gui_widget widget, const string_view text) noexcept
+{
+    try
+    {
+        const auto event = new qtgui_event_text_tabs(tabs, widget, make_string(text));
+        qApp->postEvent(this, event);
+    }
+    ICY_CATCH;
+    return {};
+}
 uint32_t qtgui_system::text(const gui_node node, const string_view text) noexcept
 {
     try
@@ -1173,6 +1222,16 @@ uint32_t qtgui_system::enable(const gui_action action, const bool value) noexcep
     try
     {
         const auto event = new qtgui_event_enable_action(action, value);
+        qApp->postEvent(this, event);
+    }
+    ICY_CATCH;
+    return {};
+}
+uint32_t qtgui_system::enable(const gui_widget widget, const bool value) noexcept
+{
+    try
+    {
+        const auto event = new qtgui_event_enable_widget(widget, value);
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
@@ -1667,7 +1726,17 @@ std::errc qtgui_system::process(const qtgui_event_show& event)
     if (const auto menu = qobject_cast<QMenu*>(widget))
         menu->move(QCursor::pos());
     
-    widget->setVisible(event.value);
+    /*if (const auto window = qobject_cast<QMainWindow*>(widget))
+    {
+        if (!event.value)
+            window->close();
+        else
+            window->show();
+    }
+    else
+    {*/
+        widget->setVisible(event.value);
+    //}
     return {};
 }
 std::errc qtgui_system::process(const qtgui_event_text_widget& event)
@@ -1705,27 +1774,26 @@ std::errc qtgui_system::process(const qtgui_event_text_widget& event)
     }
     return {};
 }
-std::errc qtgui_system::process(const qtgui_event_text_tabs& event) noexcept
+std::errc qtgui_system::process(const qtgui_event_text_tabs& event)
 {
-    if (event.widget.index >= m_widgets.size())
+    if (event.tabs.index >= m_widgets.size() ||
+        event.widget.index >= m_widgets.size())
         return std::errc::invalid_argument;
 
+    const auto tabs = qobject_cast<QTabWidget*>(m_widgets[event.tabs.index]);
     const auto widget = m_widgets[event.widget.index];
-    if (!widget)
+    if (!tabs || !widget)
         return std::errc::invalid_argument;
-
-    if (const auto tabs = qobject_cast<QTabWidget*>(widget->parentWidget()))
+    
+    for (auto k = 0; k < tabs->count(); ++k)
     {
-        for (auto k = 0; k < tabs->count(); ++k)
+        if (tabs->widget(k) == widget)
         {
-            if (tabs->widget(k) == widget)
-            {
-                tabs->setTabText(k, event.text);
-                break;
-            }
+            tabs->setTabText(k, event.text);
+            return {};
         }
     }
-
+    return std::errc::invalid_argument;
 }
 std::errc qtgui_system::process(const qtgui_event_text_model& event)
 {
@@ -1867,6 +1935,28 @@ std::errc qtgui_system::process(const qtgui_event_enable_action& event)
     action->setEnabled(event.value);
     return {};
 }
+std::errc qtgui_system::process(const qtgui_event_enable_widget& event)
+{
+    if (event.widget.index >= m_widgets.size())
+        return std::errc::invalid_argument;
+
+    const auto widget = m_widgets[event.widget.index];
+    if (!widget)
+        return std::errc::invalid_argument;
+
+    widget->setEnabled(event.value);
+
+    if (const auto textEdit = qobject_cast<QTextEdit*>(widget))
+    {
+        textEdit->setReadOnly(!event.value);
+    }
+    if (const auto lineEdit = qobject_cast<QLineEdit*>(widget))
+    {
+        lineEdit->setReadOnly(!event.value);
+    }
+
+    return {};
+}
 std::errc qtgui_system::process(const qtgui_event_modify_widget& event)
 {
     if (event.widget.index >= m_widgets.size())
@@ -1932,6 +2022,32 @@ std::errc qtgui_system::process(const qtgui_event_modify_widget& event)
             }
         }        
     }
+
+/*    const auto readonly = event.args.find(make_string(gui_widget_args_keys::readonly));
+    if (readonly != event.args.end())
+    {
+        const auto textEdit = qobject_cast<QTextEdit*>(widget);
+        const auto lineEdit = qobject_cast<QLineEdit*>(widget);
+        if (readonly->toString() == "true")
+        {
+            if (textEdit)
+            {
+                textEdit->setReadOnly(true);
+            }
+            if (lineEdit)
+            {
+                lineEdit->setReadOnly(true);
+                lineEdit->setBackgroundRole(QPalette::ColorRole::Button);
+            }
+        }
+        else if (readonly->toString() == "false")
+        {
+            if (textEdit) textEdit->setReadOnly(false);
+            if (lineEdit) lineEdit->setReadOnly(false);
+        }
+    }
+    */
+    
     return {};
 }
 std::errc qtgui_system::process(const qtgui_event_destroy_widget& event)
@@ -2015,9 +2131,15 @@ std::errc qtgui_system::process(const qtgui_event_scroll& event)
     if (!widget || !model)
         return std::errc::invalid_argument;
 
+    const auto qIndex = model->index(event.node);
     if (const auto view = qobject_cast<QAbstractItemView*>(widget))
     {
-        view->scrollTo(model->index(event.node));        
+        view->scrollTo(qIndex);    
+        view->selectionModel()->select(qIndex, QItemSelectionModel::SelectionFlag::ClearAndSelect);
+    }
+    else if (const auto combo = qobject_cast<QComboBox*>(widget))
+    {
+        combo->setCurrentIndex(combo->findData(qIndex.data(Qt::UserRole)));
     }
     else
         return std::errc::invalid_argument;
@@ -2479,9 +2601,9 @@ std::errc qtgui_make_variant(const QVariant& qvar, gui_variant& var)
 extern "C" __declspec(dllimport) int __stdcall WideCharToMultiByte(unsigned CodePage, unsigned long dwFlags,
     const wchar_t* lpWideCharStr, int cchWideChar, char* lpMultiByteStr, int cbMultiByte, char* = nullptr, int* = 0);
 
-uint32_t ICY_QTGUI_API icy_gui_system_create(const int version, gui_system** system) noexcept
+uint32_t ICY_QTGUI_API icy_gui_system_create(const int version, gui_system*& system) noexcept
 {
-    if (!system || *system || version != ICY_GUI_VERSION)
+    if (system || version != ICY_GUI_VERSION)
         return uint32_t(std::errc::invalid_argument);
 
     static char path[0x1000] = {};
@@ -2506,7 +2628,7 @@ uint32_t ICY_QTGUI_API icy_gui_system_create(const int version, gui_system** sys
     {
         qtapp_argc = 1;
         qtapp_argv = args;
-        *system = new qtgui_system;
+        system = new qtgui_system;
         return 0;
     }
     ICY_CATCH;
