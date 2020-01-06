@@ -64,6 +64,7 @@ private:
     open_type m_open;
     save_type m_save_as;
     gui_action m_save;
+    gui_action m_macros;
     string m_path;
 };
 int main()
@@ -124,11 +125,13 @@ error_type mbox_application::init() noexcept
     ICY_ERROR(m_gui->create(m_open.action, "Open"_s));
     ICY_ERROR(m_gui->create(m_open.dialog, gui_widget_type::dialog_open_file, m_window));
     ICY_ERROR(m_gui->create(m_save, "Save"_s));
+    ICY_ERROR(m_gui->create(m_macros, "Export Macros"_s));
     ICY_ERROR(m_gui->create(m_save_as.action, "Save As"_s));
     ICY_ERROR(m_gui->create(m_save_as.dialog, gui_widget_type::dialog_save_file, m_window));
     ICY_ERROR(m_gui->insert(menu_file, m_open.action));
     ICY_ERROR(m_gui->insert(menu_file, m_save));
     ICY_ERROR(m_gui->insert(menu_file, m_save_as.action));
+    ICY_ERROR(m_gui->insert(menu_bar, m_macros));
     ICY_ERROR(m_gui->show(m_window, true));
     return {};
 }
@@ -210,6 +213,16 @@ error_type mbox_application::exec(const event event) noexcept
                 show_error(error, "Save library"_s);
                 return {};
             }
+        }
+        else if (action == m_macros)
+        {
+            array<guid> indices;
+            ICY_ERROR(m_library.enumerate(mbox::type::input, indices));
+            for (auto&& index : indices)
+            {
+                index;
+            }
+
         }
     }
 

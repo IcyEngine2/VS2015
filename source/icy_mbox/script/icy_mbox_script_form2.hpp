@@ -312,6 +312,25 @@ private:
     mbox_form_key_value_base m_command_base;
 };
 
+class mbox_form_value_binding : public mbox_form_value
+{
+public:
+    mbox_form_value_binding(const mbox_form_mode mode, icy::gui_queue& gui, mbox::library& library) noexcept :
+        mbox_form_value(mode, gui, library), m_group(gui), m_event_list(gui), m_event_base(gui), m_command_list(gui), m_command_base(gui)
+    {
+
+    }
+    icy::error_type initialize(const icy::gui_widget parent, const mbox::base& base) noexcept override;
+    icy::error_type create(mbox::base& base) noexcept override;
+    icy::error_type exec(const icy::event event) noexcept override;
+private:
+    mbox_form_key_value_base m_group;
+    mbox_form_key_value_base m_event_list;
+    mbox_form_key_value_base m_event_base;
+    mbox_form_key_value_base m_command_list;
+    mbox_form_key_value_base m_command_base;
+};
+
 class mbox_form
 {
 public:
