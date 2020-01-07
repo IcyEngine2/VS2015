@@ -1,4 +1,5 @@
 #include "icy_win32.hpp"
+#include <icy_engine/core/icy_string.hpp>
 #define WIN32_LEAN_AND_MEAN 1
 #include <Windows.h>
 #pragma comment(lib, "user32.lib")
@@ -17,16 +18,47 @@ void window_hook::shutdown() noexcept
     }
 }
 
+static std::bitset<256> key_state() noexcept
+{
+    uint8_t keyboard[0x100];
+    GetKeyboardState(keyboard);
+    std::bitset<256> keys;
+    const auto mask = 0x80;
+    keys[uint32_t(key::left_ctrl)] = (keyboard[VK_LCONTROL] & mask) != 0;
+    keys[uint32_t(key::left_alt)] = (keyboard[VK_LMENU] & mask) != 0;
+    keys[uint32_t(key::left_shift)] = (keyboard[VK_LSHIFT] & mask) != 0;
+    keys[uint32_t(key::right_ctrl)] = (keyboard[VK_RCONTROL] & mask) != 0;
+    keys[uint32_t(key::right_alt)] = (keyboard[VK_RMENU] & mask) != 0;
+    keys[uint32_t(key::right_shift)] = (keyboard[VK_RSHIFT] & mask) != 0;
+    return keys;
+}
+
 error_type window_hook::initialize(HWND__* hwnd) noexcept
 {
     shutdown();
+
+    if (!AllowSetForegroundWindow(GetCurrentProcessId()))
+        return last_system_error();
+
     g_wndproc = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&proc)));
     m_handle = hwnd;
-    uint8_t keys[256];
-    GetKeyboardState(keys);
-    for (auto k = 0u; k < m_keyboard.size(); ++k)
-        m_keyboard[k] = (keys[k] & 0b1000'0000) != 0;
     g_instance = this;
+    return {};
+}
+error_type window_hook::send(const const_array_view<input_message> vec) noexcept
+{
+    ICY_LOCK_GUARD(m_lock);
+    for (auto&& msg : vec)
+        ICY_ERROR(m_queue.push_back(msg));
+    if (!PostMessageW(m_handle, WM_NULL, 0, 0))
+        return last_system_error();
+    return {};
+}
+error_type window_hook::rename(const icy::string_view name) noexcept
+{
+    ICY_ERROR(to_utf16(name, m_name));
+    if (!PostMessageW(m_handle, WM_NULL, 0, 0))
+        return last_system_error();
     return {};
 }
 
@@ -42,20 +74,55 @@ LRESULT __stdcall window_hook::proc(HWND__* hwnd, uint32_t msg, WPARAM wparam, L
     case WM_NULL:
     {
         ICY_LOCK_GUARD(g_instance->m_lock);
-        if (!g_instance->m_queue.empty())
+        auto instance = g_instance;
+        g_instance = nullptr;
+        if (!instance->m_queue.empty())
         {
-            auto instance = g_instance;
-            g_instance = nullptr;
-            for (auto&& input : g_instance->m_queue)
+            for (auto&& input : instance->m_queue)
             {
-                auto next = detail::to_winapi(input);
-                SendMessageW(hwnd, next.message, next.wParam, next.lParam);
+                if (input.type == input_type::key || input.type == input_type::mouse)
+                {
+                    auto next = detail::to_winapi(input);
+                    SendMessageW(hwnd, next.message, next.wParam, next.lParam);
+                }
+                else if (input.type == input_type::active && input.active)
+                {
+                    SetForegroundWindow(hwnd);
+                    SetFocus(hwnd);
+                    SetActiveWindow(hwnd);
+                }
             }
-            g_instance = instance;
-            g_instance->m_queue.clear();
+            instance->m_queue.clear();
         }
+        if (!instance->m_name.empty())
+        {
+            SetWindowTextW(hwnd, instance->m_name.data());
+            instance->m_name.clear();
+        }
+        g_instance = instance;
         return 0;
     }
+
+    case WM_CHAR:
+    case WM_UNICHAR:
+    {
+        auto cancel = false;
+        if (const auto error = g_instance->callback(input_message(L""), cancel))
+            g_instance->m_error = error;
+        else if (cancel)
+            return 0;
+        break;
+    }
+
+    case WM_ACTIVATE:
+    {
+        const auto activate = LOWORD(wparam) != WA_INACTIVE;
+        auto cancel = false;
+        if (const auto error = g_instance->callback(input_message(activate), cancel))
+            g_instance->m_error = error;
+        break;
+    }
+
 
     case WM_KEYDOWN:
     case WM_KEYUP:
@@ -63,8 +130,7 @@ LRESULT __stdcall window_hook::proc(HWND__* hwnd, uint32_t msg, WPARAM wparam, L
     case WM_SYSKEYUP:
     {
         key_message key_input;
-        auto count = detail::from_winapi(key_input, wparam, lparam, g_instance->m_keyboard);
-        g_instance->m_keyboard[uint32_t(key_input.key)] = key_input.event == key_event::press;
+        auto count = detail::from_winapi(key_input, wparam, lparam, key_state());
         auto cancel = false;
         if (const auto error = g_instance->callback(key_input, cancel))
             g_instance->m_error = error;
@@ -87,7 +153,7 @@ LRESULT __stdcall window_hook::proc(HWND__* hwnd, uint32_t msg, WPARAM wparam, L
     case WM_XBUTTONDBLCLK:
     {
         mouse_message mouse_input;
-        detail::from_winapi(mouse_input, 0, 0, msg, wparam, lparam, g_instance->m_keyboard);
+        detail::from_winapi(mouse_input, 0, 0, msg, wparam, lparam, key_state());
         auto cancel = false;
         if (const auto error = g_instance->callback(mouse_input, cancel))
             g_instance->m_error = error;

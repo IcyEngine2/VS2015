@@ -92,7 +92,7 @@
   <ItemGroup>
     <ClInclude Include="..\..\..\source\icy_mbox\detail\icy_dxgi.hpp" />
     <ClInclude Include="..\..\..\source\icy_mbox\detail\icy_win32.hpp" />
-    <ClInclude Include="..\..\..\source\icy_mbox\icy_mbox.hpp" />
+    <ClInclude Include="..\..\..\source\icy_mbox\icy_mbox_network.hpp" />
   </ItemGroup>
   <ItemGroup>
     <Natvis Include="..\..\..\icy_types.natvis" />

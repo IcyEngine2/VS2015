@@ -148,6 +148,7 @@ enum class qtgui_event_type : uint32_t
     text_tabs,
     udata_model,
     icon_model,
+    icon_widget,
     bind_action,
     bind_widget,
     enable_action,
@@ -373,6 +374,19 @@ public:
     }
 public:
     const gui_node node;
+    const gui_image image;
+};
+class qtgui_event_icon_widget : public QEvent
+{
+public:
+    qtgui_event_icon_widget(const gui_widget widget, const gui_image image) :
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::icon_widget))),
+        widget(widget), image(image)
+    {
+
+    }
+public:
+    const gui_widget widget;
     const gui_image image;
 };
 class qtgui_event_text_header : public QEvent
@@ -662,6 +676,7 @@ private:
     uint32_t text(const gui_widget tabs, const gui_widget widget, const string_view text) noexcept;
     uint32_t udata(const gui_node node, const gui_variant& var) noexcept override;
     uint32_t icon(const gui_node node, const gui_image image) noexcept override;
+    uint32_t icon(const gui_widget widget, const gui_image icon) noexcept override;
     uint32_t vheader(const gui_node node, const uint32_t index, const string_view text) noexcept override;
     uint32_t hheader(const gui_node node, const uint32_t index, const string_view text) noexcept override;
     uint32_t bind(const gui_action action, const gui_widget widget) noexcept override;
@@ -692,6 +707,7 @@ private:
     std::errc process(const qtgui_event_text_tabs& event);
     std::errc process(const qtgui_event_udata_model& event);
     std::errc process(const qtgui_event_icon_model& event);
+    std::errc process(const qtgui_event_icon_widget& event);
     std::errc process(const qtgui_event_text_header& event);
     std::errc process(const qtgui_event_bind_action& event);
     std::errc process(const qtgui_event_bind_widget& event);
@@ -770,16 +786,6 @@ bool qtgui_system::notify(QObject* object, QEvent* event) noexcept
                 qtgui_exit();
                 return 0;
             }
-            else if (event->type() == QEvent::Type::Close && qobject_cast<QMenu*>(object))
-            {
-                auto node = new qtgui_event_node;
-                node->args.widget.index = object->property(qtgui_property_name).toULongLong();
-                node->type = event_type::gui_action;
-                m_queue.push(node);
-                qtgui_exit();
-                output = QApplication::notify(object, event);
-                return 0;
-            }
             else if (event->type() == QEvent::Type::Quit)
             {
                 qtgui_exit();
@@ -839,6 +845,9 @@ bool qtgui_system::notify(QObject* object, QEvent* event) noexcept
                     break;
                 case qtgui_event_type::icon_model:
                     error = process(*static_cast<qtgui_event_icon_model*>(event));
+                    break;
+                case qtgui_event_type::icon_widget:
+                    error = process(*static_cast<qtgui_event_icon_widget*>(event));
                     break;
                 case qtgui_event_type::text_header:
                     error = process(*static_cast<qtgui_event_text_header*>(event));
@@ -1172,6 +1181,16 @@ uint32_t qtgui_system::icon(const gui_node node, const gui_image image) noexcept
     try
     {
         const auto event = new qtgui_event_icon_model(node, image);
+        qApp->postEvent(this, event);
+    }
+    ICY_CATCH;
+    return {};
+}
+uint32_t qtgui_system::icon(const gui_widget widget, const gui_image image) noexcept
+{
+    try
+    {
+        const auto event = new qtgui_event_icon_widget(widget, image);
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
@@ -1724,8 +1743,22 @@ std::errc qtgui_system::process(const qtgui_event_show& event)
         return std::errc::invalid_argument;
 
     if (const auto menu = qobject_cast<QMenu*>(widget))
-        menu->move(QCursor::pos());
-    
+    {
+        //menu->move(QCursor::pos());
+        auto action = menu->exec(QCursor::pos());
+        if (!action)
+        {
+            auto node = new qtgui_event_node;
+            node->args.widget = event.widget;
+            node->type = event_type::gui_action;
+            m_queue.push(node);
+            qtgui_exit();
+        }        
+    }
+    else
+    {
+        widget->setVisible(event.value);
+    }
     /*if (const auto window = qobject_cast<QMainWindow*>(widget))
     {
         if (!event.value)
@@ -1735,7 +1768,6 @@ std::errc qtgui_system::process(const qtgui_event_show& event)
     }
     else
     {*/
-        widget->setVisible(event.value);
     //}
     return {};
 }
@@ -1837,6 +1869,31 @@ std::errc qtgui_system::process(const qtgui_event_icon_model& event)
     const auto qIndex = model->index(event.node);
     if (!model->setData(qIndex, *image, Qt::ItemDataRole::DecorationRole))
         return std::errc::invalid_argument;
+    return {};
+}
+std::errc qtgui_system::process(const qtgui_event_icon_widget& event)
+{
+    if (event.widget.index >= m_widgets.size() ||
+        event.image.index >= m_images.size())
+        return std::errc::invalid_argument;
+
+    const auto widget = m_widgets[event.widget.index];
+    const auto image = m_images[event.image.index];
+    if (!widget || !image)
+        return std::errc::invalid_argument;
+
+    if (const auto button = qobject_cast<QAbstractButton*>(widget))
+    {
+        button->setIcon(*image);
+    }
+    else if (const auto window = qobject_cast<QMainWindow*>(widget))
+    {
+        window->setWindowIcon(*image);
+    }
+    else
+    {
+        return std::errc::invalid_argument;
+    }
     return {};
 }
 std::errc qtgui_system::process(const qtgui_event_text_header& event)

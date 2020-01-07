@@ -603,6 +603,7 @@ namespace icy
         virtual uint32_t text(const gui_widget tabs, const gui_widget widget, const string_view text) noexcept = 0;
         virtual uint32_t text(const gui_node node, const string_view text) noexcept = 0;
         virtual uint32_t icon(const gui_node node, const gui_image icon) noexcept = 0;
+        virtual uint32_t icon(const gui_widget widget, const gui_image icon) noexcept = 0;
         virtual uint32_t udata(const gui_node node, const gui_variant& var) noexcept = 0;
         virtual uint32_t bind(const gui_action action, const gui_widget menu) noexcept = 0;
         virtual uint32_t bind(const gui_widget widget, const gui_node node) noexcept = 0;
@@ -788,6 +789,10 @@ namespace icy
         error_type icon(const gui_node node, const gui_image image) noexcept
         {
             ICY_GUI_ERROR(m_system->icon(node, image));
+        }
+        error_type icon(const gui_widget widget, const gui_image image) noexcept
+        {
+            ICY_GUI_ERROR(m_system->icon(widget, image));
         }
         error_type enable(const gui_action action, const bool value) noexcept
         {

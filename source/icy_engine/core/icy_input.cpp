@@ -158,11 +158,11 @@ key icy::detail::scan_vk_to_key(uint16_t vkey, uint16_t scan, const bool isE0) n
 }
 uint16_t icy::detail::from_winapi(key_message& msg, const size_t wParam, const ptrdiff_t lParam, const std::bitset<256> & buffer) noexcept
 {
-	fill_key_mod(msg, buffer);
+    fill_key_mod(msg, buffer);
 	const auto key = scan_vk_to_key(LOWORD(wParam), WORD((lParam >> 16) & 0x00FF), !!((lParam >> 24) & 0x01));
 	const auto event =
-		(lParam >> 31) & 0x01 ? key_event::release :
-		(lParam >> 30) & 0x01 ? key_event::hold :
+		((lParam >> 31) & 0x01) ? key_event::release :
+		((lParam >> 30) & 0x01) ? key_event::hold :
 		key_event::press;
 	msg = key_message(key, event, msg.ctrl, msg.alt, msg.shift);
 	return LOWORD(lParam);

@@ -37,9 +37,9 @@ namespace mbox
         int version = protocol_version;
         key key;
         char computer_name[32];
-        char window_name[32];
+        char window_name[64];
         char process_name[32];
-        char profile[32];
+        icy::guid profile;
     };
 
     enum class command_type : uint32_t
@@ -48,6 +48,7 @@ namespace mbox
         exit,
         input,
         image,
+        profile,
     };
     struct command
     {

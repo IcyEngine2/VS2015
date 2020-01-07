@@ -145,6 +145,8 @@ public:
     }
     icy::error_type scroll(const icy::guid& index) noexcept
     {
+        if (index == m_select)
+            return {};
         const auto it = std::find(m_data.begin(), m_data.end(), index);
         if (it == m_data.end())
             return icy::make_stdlib_error(std::errc::invalid_argument);
@@ -294,6 +296,7 @@ private:
     icy::gui_widget_scoped m_table;
     icy::array<mbox::value_command::action> m_data;
     icy::unique_ptr<mbox_form_value_action> m_value;
+    size_t m_select = SIZE_MAX;
 };
 
 class mbox_form_value_profile : public mbox_form_value

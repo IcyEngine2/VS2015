@@ -105,6 +105,11 @@ string_view mbox::to_string(const mbox::action_type type) noexcept
     case action_type::send_input: return "Send Input"_s;
     case action_type::join_group: return "Join Group"_s;
     case action_type::leave_group: return "Leave Group"_s;
+    case action_type::set_focus: return "Set Focus"_s;
+    case action_type::enable_binding: return "Enable Binding"_s;
+    case action_type::enable_bindings_list: return "Enable Bindings List"_s;
+    case action_type::disable_binding: return "Disable Binding"_s;
+    case action_type::disable_bindings_list: return "Disable Bindings List"_s;
     }
     return {};
 }
@@ -328,15 +333,6 @@ error_type mbox::library::save_to(const string_view filename) noexcept
     ICY_ERROR(file::replace(tname, filename));
     return {};
 }
-error_type mbox::library::enumerate(const mbox::type type, array<guid>& indices) noexcept
-{
-    for (auto&& pair : m_data)
-    {
-        if (pair.value.type == type)
-            ICY_ERROR(indices.push_back(guid(pair.key)));
-    }
-    return {};
-}
 error_type mbox::library::is_valid(const base& base) noexcept
 {
     const auto parent = m_data.find(base.parent);
@@ -516,6 +512,30 @@ error_type mbox::library::is_valid(const base& base) noexcept
                     return make_stdlib_error(std::errc::invalid_argument);
                 break;
             }
+
+            case mbox::action_type::set_focus:
+            {
+                if (lhs->type != mbox::type::profile)
+                    return make_stdlib_error(std::errc::invalid_argument);
+                break;
+            }
+
+            case mbox::action_type::enable_binding:
+            case mbox::action_type::disable_binding:
+            {
+                if (lhs->type != mbox::type::binding)
+                    return make_stdlib_error(std::errc::invalid_argument);
+                break;
+            }
+
+            case mbox::action_type::enable_bindings_list:
+            case mbox::action_type::disable_bindings_list:
+            {
+                if (lhs->type != mbox::type::list_bindings)
+                    return make_stdlib_error(std::errc::invalid_argument);
+                break;
+            }
+
             }
         }
         break;
@@ -708,7 +728,7 @@ error_type mbox::library::insert(const base& base) noexcept
     }
     case mbox::type::list_events:
     {
-        if (base.type != type::variable)
+        if (base.type != type::event)
             return make_stdlib_error(std::errc::invalid_argument);
         break;
     }
@@ -745,6 +765,68 @@ error_type mbox::library::insert(const base& base) noexcept
     }
     return {};
 }
+error_type mbox::library::modify(const base& base) noexcept
+{
+    const auto it = m_data.find(base.index);
+    if (it == m_data.end() || base.type != it->value.type || base.parent != it->value.parent)
+        return make_stdlib_error(std::errc::invalid_argument);
+
+    if (base.name.empty())
+        return make_stdlib_error(std::errc::invalid_argument);
+
+    if (base.index != mbox::root)
+    {
+        auto& parent = m_data.find(base.parent)->value;
+        for (auto&& index : parent.value.directory.indices)
+        {
+            if (index == base.index)
+                continue;
+
+            if (const auto child = find(index))
+            {
+                if (child->name == base.name)
+                    return make_stdlib_error(std::errc::invalid_argument);
+            }
+        }
+    }
+
+    switch (base.type)
+    {
+    case mbox::type::directory:
+    case mbox::type::list_inputs:
+    case mbox::type::list_variables:
+    case mbox::type::list_timers:
+    case mbox::type::list_events:
+    case mbox::type::list_bindings:
+    case mbox::type::list_commands:
+    {
+        ICY_ERROR(to_string(base.name, it->value.name));
+        break;
+    }
+
+    case mbox::type::input:
+    case mbox::type::variable:
+    case mbox::type::timer:
+    case mbox::type::event:
+    case mbox::type::command:
+    case mbox::type::binding:
+    case mbox::type::group:
+    case mbox::type::profile:
+    {
+        mbox::base old_base;
+        ICY_ERROR(mbox::base::copy(it->value, old_base));
+        ICY_ERROR(mbox::base::copy(base, it->value));
+        if (!is_valid(it->value))
+        {
+            it->value = std::move(old_base);
+            return make_stdlib_error(std::errc::invalid_argument);
+        }
+        break;
+    }
+    }
+    return {};
+}
+
 error_type mbox::library::to_json(const base& base, icy::json& obj) noexcept
 {
     obj = json_type::object;

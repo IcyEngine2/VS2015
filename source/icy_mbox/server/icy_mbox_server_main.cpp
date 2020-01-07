@@ -7,12 +7,14 @@
 #include <icy_engine/process/icy_process.hpp>
 #include <icy_engine/utility/icy_minhook.hpp>
 #include <icy_engine/network/icy_network.hpp>
-#include "../icy_mbox.hpp"
+#include "../icy_mbox_network.hpp"
+#include "../icy_mbox_script.hpp"
 #include "icy_mbox_server_config.hpp"
 #include "icy_mbox_server_apps.hpp"
 #include "icy_mbox_server_proc.hpp"  
 #include "icy_mbox_server_network.hpp"
 #include "icy_mbox_server_input_log.hpp"
+#include "icy_mbox_server_script_exec.hpp"
 #if _DEBUG
 #pragma comment(lib, "icy_engine_cored")
 #pragma comment(lib, "icy_engine_networkd")
@@ -65,8 +67,11 @@ private:
     gui_widget m_app_path;
     gui_widget m_launch;
     gui_widget m_ping;
+    gui_widget m_library_load;
     string m_app;
-    mbox_input_log m_input;
+    unique_ptr<mbox_input_log> m_input;
+    mbox::library m_library;
+    mbox_script_exec m_script_exec = m_network;
 };
 
 int main()
@@ -164,14 +169,26 @@ error_type mbox_main_thread::run() noexcept
     return {};
 }
 
+
 error_type mbox_application::init(const mbox_config& config) noexcept
 {
+  /*  icy::library user32_lib = "user32"_lib;
+    ICY_ERROR(user32_lib.initialize());
+    using AllowSetForegroundWindowFunc = int(__stdcall*)(unsigned long);
+    if (const auto proc = user32_lib.find<AllowSetForegroundWindowFunc>("AllowSetForegroundWindow"))
+    {
+        if (!proc(UINT32_MAX))
+            return last_system_error();
+    }
+    else
+        return make_stdlib_error(std::errc::function_not_supported);*/
+    
     ICY_ERROR(mbox_config::copy(config, m_config));
     ICY_ERROR(create_gui(m_gui));
+    ICY_ERROR(m_library.initialize());
     ICY_ERROR(m_gui->create(m_window, gui_widget_type::window, {}, gui_widget_flag::layout_grid)); 
     ICY_ERROR(m_apps.initialize(*m_gui, m_window));
-    ICY_ERROR(m_proc.initialize(*m_gui, m_window));
-    ICY_ERROR(m_input.initialize(*m_gui));
+    ICY_ERROR(m_proc.initialize(*m_gui, m_library, m_window));
     ICY_ERROR(m_network.initialize(m_config));
     //ICY_ERROR(mbox_grid_proc::create(*m_gui, m_window, m_proc));
 
@@ -188,7 +205,8 @@ error_type mbox_application::init(const mbox_config& config) noexcept
     ICY_ERROR(m_gui->create(buttons, gui_widget_type::none, m_window, gui_widget_flag::layout_hbox));
     ICY_ERROR(m_gui->create(m_launch, gui_widget_type::text_button, buttons, gui_widget_flag::auto_insert));
     ICY_ERROR(m_gui->create(m_ping, gui_widget_type::text_button, buttons, gui_widget_flag::auto_insert));
-    
+    ICY_ERROR(m_gui->create(m_library_load, gui_widget_type::text_button, buttons, gui_widget_flag::auto_insert));
+
     ICY_ERROR(m_gui->insert(label_apps, gui_insert(0, 0)));
     ICY_ERROR(m_gui->insert(label_exe_path, gui_insert(0, 1)));
     ICY_ERROR(m_gui->insert(label_dll_path, gui_insert(0, 2)));
@@ -203,6 +221,7 @@ error_type mbox_application::init(const mbox_config& config) noexcept
     ICY_ERROR(m_gui->text(label_dll_path, "Inject DLL Path"_s));
     ICY_ERROR(m_gui->text(m_launch, "Launch"_s));
     ICY_ERROR(m_gui->text(m_ping, "Ping"_s));
+    ICY_ERROR(m_gui->text(m_library_load, "Load Script Library"_s));
 
     for (auto&& pair : m_config.applications)
         ICY_ERROR(m_apps.append(pair.key));
@@ -216,6 +235,7 @@ error_type mbox_application::exec() noexcept
 {
     ICY_SCOPE_EXIT{ event::post(nullptr, event_type::global_quit); m_network.wait(); };
     ICY_ERROR(m_main.launch());
+    ICY_ERROR(m_script_exec.launch());
     ICY_ERROR(m_network.launch());
     ICY_ERROR(m_gui->loop());
     ICY_ERROR(m_network.error());
@@ -249,6 +269,19 @@ error_type mbox_application::exec(const event event) noexcept
             if (const auto error = ping())
                 show_error(error, "Ping (update process list)"_s);
         }
+        else if (event_data.widget == m_library_load)
+        {
+            string file_name;
+            ICY_ERROR(dialog_open_file(file_name));
+            if (!file_name.empty())
+            {
+                if (const auto error = m_library.load_from(file_name))
+                    show_error(error, "Load script library"_s);
+                event_user_library new_event;
+                ICY_ERROR(mbox::library::copy(m_library, new_event.library));
+                ICY_ERROR(event::post(nullptr, event_type_user_library, std::move(new_event)));
+            }
+        }
     }
     else if (event->type == event_type::gui_select)
     {
@@ -281,12 +314,12 @@ error_type mbox_application::exec(const event event) noexcept
         mbox_process proc;
         proc.key = msg.info.key;
         ICY_ERROR(to_string(msg.address, proc.address));
-        const auto copy_str = [](const char(&bytes)[32], string& str)
+        const auto copy_str = [](const auto& bytes, string& str)
         {
-            return to_string(string_view(bytes, strnlen(bytes, sizeof(bytes))), str);
+            return to_string(string_view(bytes, strnlen(bytes, _countof(bytes))), str);
         };
         ICY_ERROR(copy_str(msg.info.computer_name, proc.computer_name));
-        ICY_ERROR(copy_str(msg.info.profile, proc.profile));
+        proc.profile = msg.info.profile;
         ICY_ERROR(copy_str(msg.info.window_name, proc.window_name));
         ICY_ERROR(process_name_to_application(string_view(msg.info.process_name,
             strnlen(msg.info.process_name, sizeof(msg.info.process_name))), proc.application));
@@ -310,20 +343,23 @@ error_type mbox_application::exec(const event event) noexcept
     else if (event->type == event_type_user_recv_image)
     {
         const auto& msg = event->data<event_user_recv_image>();
-        file f1;
-        f1.open("D:/125.png", file_access::write, file_open::create_always, file_share::none);
-        f1.append(msg.png.data(), msg.png.size());
+        //file f1;
+        //f1.open("D:/125.png", file_access::write, file_open::create_always, file_share::none);
+        //f1.append(msg.png.data(), msg.png.size());
     }
     else if (event->type == event_type_user_recv_input)
     {
         const auto& msg = event->data<event_user_recv_input>();
         for (auto&& proc : m_proc.data())
         {
-            if (proc.key == msg.key)
+            if (m_input)
             {
-                for (auto&& input : msg.data)
-                    ICY_ERROR(m_input.append(proc.profile, input));
-                break;
+                if (proc.key == msg.key)
+                {
+                    for (auto&& input : msg.data)
+                        ICY_ERROR(m_input->append(proc.profile, input));
+                    break;
+                }
             }
         }
     }
@@ -455,29 +491,55 @@ error_type mbox_application::context(const gui_node node) noexcept
     if (node.row() >= m_proc.data().size())
         return {};// make_stdlib_error(std::errc::invalid_argument);
 
-    gui_widget menu;
-    gui_action inject;
-    gui_action deject;
-    gui_action render;
-    gui_action input;
+    gui_widget_scoped menu(*m_gui);
+    gui_widget_scoped menu_profile(*m_gui);
+    gui_action_scoped inject(*m_gui);
+    gui_action_scoped deject(*m_gui);
+    gui_action_scoped render(*m_gui);
+    gui_action_scoped input(*m_gui);
+    gui_action_scoped profile(*m_gui);
+
     ICY_ERROR(m_gui->create(menu, gui_widget_type::menu, m_window));
-    ICY_SCOPE_EXIT{ m_gui->destroy(menu); };
+    ICY_ERROR(m_gui->create(menu_profile, gui_widget_type::menu, menu));
     ICY_ERROR(m_gui->create(inject, "Inject"_s));
-    ICY_SCOPE_EXIT{ m_gui->destroy(inject); };
     ICY_ERROR(m_gui->create(deject, "Deject"_s));
-    ICY_SCOPE_EXIT{ m_gui->destroy(deject); };
     ICY_ERROR(m_gui->create(render, "Render"_s));
-    ICY_SCOPE_EXIT{ m_gui->destroy(render); };
     ICY_ERROR(m_gui->create(input, "Input"_s));
-    ICY_SCOPE_EXIT{ m_gui->destroy(input); };
+    
+    array<guid> profiles;
+    ICY_ERROR(m_library.enumerate(mbox::type::profile, profiles));
 
+    ICY_ERROR(m_gui->create(profile, "Profile"_s));
+    map<string, guid> profile_map;
+    for (auto&& index : profiles)
+    {
+        string str;
+        ICY_ERROR(m_library.path(index, str));
+        ICY_ERROR(profile_map.insert(std::move(str), std::move(index)));
+    }
+    map<gui_action_scoped, guid> profile_actions;
+    ICY_ERROR(profile_actions.reserve(profile_map.size() + 1));
+    
+    gui_action_scoped null_profile(*m_gui);
+    ICY_ERROR(null_profile.initialize("[Null]"_s));
+    ICY_ERROR(m_gui->insert(menu_profile, null_profile));
+    ICY_ERROR(profile_actions.insert(std::move(null_profile), guid()));
 
+    for (auto&& pair : profile_map)
+    {
+        gui_action_scoped action(*m_gui);
+        ICY_ERROR(action.initialize(pair.key));
+        ICY_ERROR(m_gui->insert(menu_profile, action));
+        ICY_ERROR(profile_actions.insert(std::move(action), guid(pair.value)));        
+    }
+    ICY_ERROR(m_gui->bind(profile, menu_profile));
+    
     const auto& value = m_proc.data()[node.row()];
     if (value.address.empty())
     {
         ICY_ERROR(m_gui->enable(deject, false));
         ICY_ERROR(m_gui->enable(render, false));
-        ICY_ERROR(m_gui->enable(input, false));
+        ICY_ERROR(m_gui->enable(profile, false));
     }
     else
     {
@@ -487,6 +549,7 @@ error_type mbox_application::context(const gui_node node) noexcept
     ICY_ERROR(m_gui->insert(menu, deject));
     ICY_ERROR(m_gui->insert(menu, render));
     ICY_ERROR(m_gui->insert(menu, input));
+    ICY_ERROR(m_gui->insert(menu, profile));
     gui_action action;
     ICY_ERROR(m_gui->exec(menu, action));
 
@@ -511,8 +574,45 @@ error_type mbox_application::context(const gui_node node) noexcept
     }
     else if (action == input)
     {
-        ICY_ERROR(m_gui->show(m_input.window(), true));
+        m_input = make_unique<mbox_input_log>();
+        ICY_ERROR(m_input->initialize(*m_gui, m_library));
     }
+    else if (action.index && action.index != null_profile.index)
+    {
+        const auto it = profile_actions.find(action);
+        if (it != profile_actions.end())
+        {
+            for (auto&& proc : m_proc.data())
+            {
+                if (proc.key == value.key)
+                {
+                    event_user_profile event;
+                    event.key = value.key;
+                    event.profile = it->value;
+                    ICY_ERROR(event::post(nullptr, event_type_user_profile, event));
+
+                    mbox_process new_proc;
+                    ICY_ERROR(mbox_process::copy(proc, new_proc));
+                    new_proc.profile = it->value;
+                    ICY_ERROR(m_proc.update(new_proc));
+
+                    string str;
+                    ICY_ERROR(m_library.path(it->value, str));
+                    ICY_ERROR(str.insert(str.begin(), " ["_s));
+                    ICY_ERROR(str.insert(str.begin(), proc.application));
+                    ICY_ERROR(str.append("]"_s));
+                    
+                    mbox::info info = {};
+                    copy(str, info.window_name);
+                    info.profile = it->value;
+
+                    ICY_ERROR(m_network.send(value.key, info));
+                    break;
+                }
+            }
+        }
+    }
+ 
     return {};
 }
 

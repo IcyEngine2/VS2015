@@ -1,17 +1,7 @@
 #include "icy_mbox_script_explorer.hpp"
 #include "icy_mbox_script_common.hpp"
 #include "../icy_mbox_script.hpp"
-#include <icy_engine/image/icy_image.hpp>
 #include <icy_qtgui/icy_qtgui.hpp>
-#include "icons/command.h"
-#include "icons/binding.h"
-#include "icons/directory.h"
-#include "icons/event.h"
-#include "icons/group.h"
-#include "icons/input.h"
-#include "icons/profile.h"
-#include "icons/timer.h"
-#include "icons/variable.h"
 
 using namespace icy;
 
@@ -23,27 +13,6 @@ icy::error_type mbox_explorer::initialize(icy::gui_queue& gui, mbox::library& li
     ICY_ERROR(m_gui->create(m_widget, gui_widget_type::tree_view, parent));
     ICY_ERROR(m_gui->create(m_root));
     ICY_ERROR(m_gui->bind(m_widget, m_root));
-
-    const auto func = [this](const const_array_view<uint8_t> bytes, const mbox::type type)
-    {
-        icy::image image;
-        ICY_ERROR(image.load(detail::global_heap, bytes, image_type::png));
-        auto colors = matrix<color>(image.size().y, image.size().x);
-        if (colors.empty())
-            return make_stdlib_error(std::errc::not_enough_memory);
-        ICY_ERROR(image.view({}, colors));
-        ICY_ERROR(m_gui->create(m_images[uint32_t(type)], colors));
-        return error_type();
-    };
-    ICY_ERROR(func(g_bytes_command, mbox::type::list_commands));
-    ICY_ERROR(func(g_bytes_binding, mbox::type::list_bindings));
-    ICY_ERROR(func(g_bytes_directory, mbox::type::directory));
-    ICY_ERROR(func(g_bytes_event, mbox::type::list_events));
-    ICY_ERROR(func(g_bytes_group, mbox::type::group));
-    ICY_ERROR(func(g_bytes_input, mbox::type::list_inputs));
-    ICY_ERROR(func(g_bytes_profile, mbox::type::profile));
-    ICY_ERROR(func(g_bytes_timer, mbox::type::list_timers));
-    ICY_ERROR(func(g_bytes_variable, mbox::type::list_variables));
     return {};
 }
 icy::error_type mbox_explorer::reset() noexcept
@@ -65,7 +34,7 @@ icy::error_type mbox_explorer::exec(const icy::event event) noexcept
     using namespace icy;
     if (event->type == mbox_event_type_create)
     {
-        const auto& event_data = event->data<guid>();
+        const auto& event_data = event->data<mbox_event_data_create>();
         const auto base = m_library->find(event_data);
         if (!base)
             return make_stdlib_error(std::errc::invalid_argument);
@@ -79,9 +48,53 @@ icy::error_type mbox_explorer::exec(const icy::event event) noexcept
         ICY_ERROR(m_gui->insert_rows(node.parent(), node.row(), 1));
         ICY_ERROR(append(node.parent(), node.row(), *base));
     }
+    else if (event->type == mbox_event_type_modify)
+    {
+        const auto& event_data = event->data<mbox_event_data_modify>();
+        const auto base = m_library->find(event_data.index);
+        if (!base)
+            return make_stdlib_error(std::errc::invalid_argument);
+
+        if (base->name != event_data.name)
+        {
+            if (event_data.index == mbox::root)
+            {
+                ICY_ERROR(m_gui->text(m_gui->node(m_root, 0, 0), base->name));
+            }
+            else
+            {
+                mbox::base copy;
+                ICY_ERROR(mbox::base::copy(*base, copy));
+                ICY_ERROR(to_string(event_data.name, copy.name));
+
+                gui_node old_node;
+                gui_node new_node;
+                auto new_row = 0_z;
+                auto old_row = 0_z;
+                ICY_ERROR(find(*base, new_node, &new_row));
+                ICY_ERROR(find(copy, old_node, &old_row));
+                if (new_node.row() != old_node.row())
+                {
+                    ICY_ERROR(reset());
+                    ICY_ERROR(m_gui->scroll(m_widget, new_node));
+                    //   doesnt work properly?
+                    //const auto parent = new_node.parent();
+                    //ICY_ERROR(m_gui->remove_rows(parent, old_node.row(), 1));
+                    //ICY_ERROR(m_gui->insert_rows(parent, new_node.row(), 1));
+                    //ICY_ERROR(append(parent, new_node.row(), *base));
+                }
+                else
+                {
+                    ICY_ERROR(m_gui->text(new_node, base->name));
+                }
+                return {};
+            }
+        }
+    }
+
     return {};
 }
-icy::error_type mbox_explorer::find(const mbox::base& base, icy::gui_node& node) noexcept
+icy::error_type mbox_explorer::find(const mbox::base& base, icy::gui_node& node, size_t* const offset) noexcept
 {
     using namespace icy;
 
@@ -108,12 +121,15 @@ icy::error_type mbox_explorer::find(const mbox::base& base, icy::gui_node& node)
     std::sort(names.begin(), names.end());
     names.pop_back(std::distance(std::unique(names.begin(), names.end()), names.end()));
 
-    const auto it = binary_search(names.begin(), names.end(), base.name);
-    if (it == names.end())
-        return make_stdlib_error(std::errc::invalid_argument);
+    const auto it = std::lower_bound(names.begin(), names.end(), base.name);
+    //if (it == names.end())
+    //    return make_stdlib_error(std::errc::invalid_argument);
 
-    const auto offset = std::distance(names.begin(), it);
-    node = m_gui->node(parent_node, offset, 0);
+    const auto row = size_t(std::distance(names.begin(), it));
+    if (offset)
+        *offset = row;
+
+    node = m_gui->node(parent_node, row, 0);
     if (!node)
         return make_stdlib_error(std::errc::not_enough_memory);
 
@@ -125,8 +141,43 @@ icy::error_type mbox_explorer::append(const icy::gui_node parent, const size_t o
     auto node = m_gui->node(parent, offset, 0);
     ICY_ERROR(m_gui->text(node, base.name));
     ICY_ERROR(m_gui->udata(node, icy::guid(base.index)));
-    if (m_images[uint32_t(base.type)].index)
-        ICY_ERROR(m_gui->icon(node, m_images[uint32_t(base.type)]));
+
+    gui_image image;
+    switch (base.type)
+    {
+    case mbox::type::directory:
+        image = find_image(mbox_image::type_directory);
+        break;
+    case mbox::type::group:
+        image = find_image(mbox_image::type_group);
+        break;
+    case mbox::type::profile:
+        image = find_image(mbox_image::type_profile);
+        break;
+    case mbox::type::list_bindings:
+        image = find_image(mbox_image::type_binding);
+        break;
+    case mbox::type::list_commands:
+        image = find_image(mbox_image::type_command);
+        break;
+    case mbox::type::list_events:
+        image = find_image(mbox_image::type_event);
+        break;
+    case mbox::type::list_inputs:
+        image = find_image(mbox_image::type_input);
+        break;
+    case mbox::type::list_timers:
+        image = find_image(mbox_image::type_timer);
+        break;
+    case mbox::type::list_variables:
+        image = find_image(mbox_image::type_variable);
+        break;
+    default:
+        break;
+    }
+
+    if (image.index)
+        ICY_ERROR(m_gui->icon(node, image));
 
     switch (base.type)
     {
@@ -156,6 +207,7 @@ icy::error_type mbox_explorer::append(const icy::gui_node parent, const size_t o
             }
             break;
         }
+        break;
     }
     }
     return {};

@@ -14,12 +14,11 @@ public:
     icy::error_type reset() noexcept;
     icy::error_type exec(const icy::event event) noexcept;
 private:
-    icy::error_type find(const mbox::base& base, icy::gui_node& node) noexcept;
+    icy::error_type find(const mbox::base& base, icy::gui_node& node, size_t* offset = nullptr) noexcept;
     icy::error_type append(const icy::gui_node parent, const size_t offset, const mbox::base& base) noexcept;
 private:
     icy::gui_queue* m_gui = nullptr;
     mbox::library* m_library = nullptr;
-    icy::gui_image m_images[uint32_t(mbox::type::_total)];
     icy::gui_widget m_widget;
     icy::gui_node m_root;
 };

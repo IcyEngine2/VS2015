@@ -161,11 +161,11 @@ namespace icy
     class d3d12_display : public display
     {
     public:
-        ~d3d12_display() noexcept override;
+        ~d3d12_display() noexcept;
         error_type initialize(const adapter& adapter, const display_flag flags) noexcept;
         error_type bind(HWND__* const window) noexcept override;
-        error_type loop(const duration_type timeout) noexcept override;
-        error_type signal(const event_data& event) noexcept override;
+        error_type bind(window& window) noexcept override;
+        error_type draw() noexcept override;
         uint64_t frame() const noexcept
         {
             return m_frame.load(std::memory_order_acquire);

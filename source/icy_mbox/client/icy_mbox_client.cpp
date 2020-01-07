@@ -1,6 +1,6 @@
 #include "../detail/icy_dxgi.hpp"
 #include "../detail/icy_win32.hpp"
-#include "../icy_mbox.hpp"
+#include "../icy_mbox_network.hpp"
 #include <icy_engine/core/icy_thread.hpp>
 #include <icy_engine/core/icy_queue.hpp>
 #include <icy_engine/core/icy_file.hpp>
@@ -59,6 +59,12 @@ class mbox_application
     friend mbox_main_thread;
     friend network_udp_thread;
     friend network_tcp_thread;
+    enum class pause_type : uint32_t
+    {
+        begin,
+        end,
+        toggle,
+    };
 public:
     error_type initialize() noexcept;
     error_type launch(IDXGISwapChain& chain) noexcept;
@@ -81,9 +87,11 @@ private:
     network_udp_thread m_udp_thread;
     //detail::spin_lock<> m_lock;
     mpsc_queue<array<rectangle>> m_recv_image;
-    mpsc_queue<array<input_message>> m_recv_input;
+    //mpsc_queue<array<input_message>> m_recv_input;
     mpsc_queue<array<matrix<color>>> m_send_image;
     mpsc_queue<array<input_message>> m_send_input;
+    bool m_paused = false;
+    array<std::pair<key_message, pause_type>> m_pause;
 };
 static mbox_application& instance()
 {
@@ -128,6 +136,12 @@ error_type mbox_application::initialize() noexcept
     new (this) mbox_application;
     
     ICY_ERROR(m_heap.initialize(heap_init::global(64_mb)));
+    
+    ICY_ERROR(m_pause.push_back({ key_message(key::slash, key_event::press), pause_type::begin }));
+    ICY_ERROR(m_pause.push_back({ key_message(key::esc, key_event::press), pause_type::end }));
+    ICY_ERROR(m_pause.push_back({ key_message(key::enter, key_event::press), pause_type::toggle }));
+
+    
     string libname;
     ICY_ERROR(icy::process_name(win32_instance(), libname));
     string dirname;
@@ -203,6 +217,7 @@ error_type mbox_application::dxgi_callback(IDXGISwapChain* chain, unsigned sync,
             ICY_ERROR(rects.append(tmp_rects));
         }
     }
+
     if (!rects.empty())
     {
         array<matrix<color>> colors;
@@ -216,11 +231,68 @@ error_type mbox_application::dxgi_callback(IDXGISwapChain* chain, unsigned sync,
 error_type mbox_application::window_callback(const input_message& input, bool& cancel) noexcept
 {
     cancel = false;
-    array<input_message> vec;
-    ICY_ERROR(vec.push_back(input));
-    ICY_ERROR(m_send_input.push(std::move(vec)));
-    ICY_ERROR(m_tcp_network.stop(network_code_update));
-    cancel = true;
+    auto new_paused = m_paused;
+    if (input.type == input_type::key)
+    {
+        for (auto&& pause_input : m_pause)
+        {
+            if (pause_input.first.key == input.key.key && pause_input.first.event == input.key.event)
+            {
+                if (true
+                    && key_mod_and(pause_input.first.ctrl, input.key.ctrl)
+                    && key_mod_and(pause_input.first.alt, input.key.alt)
+                    && key_mod_and(pause_input.first.shift, input.key.shift))
+                {
+                    switch (pause_input.second)
+                    {
+                    case pause_type::begin:
+                        new_paused = true;
+                        break;
+                    case pause_type::end:
+                        new_paused = false;
+                        break;
+                    case pause_type::toggle:
+                        new_paused = !m_paused;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    auto send = false;
+
+    switch (input.type)
+    {
+    case input_type::text:
+        if (!(m_paused || new_paused))
+            cancel = true;
+        break;
+
+    case input_type::active:
+        send = true;
+        break;
+
+    case input_type::mouse:
+        send = !new_paused;
+        break;
+
+    case input_type::key:
+        if (m_paused && new_paused)
+            cancel = true;
+        else
+            send = true;
+        break;
+    }
+
+    m_paused = new_paused;
+    if (send)
+    {
+        array<input_message> vec;
+        ICY_ERROR(vec.push_back(input));
+        ICY_ERROR(m_send_input.push(std::move(vec)));
+        ICY_ERROR(m_tcp_network.stop(network_code_update));
+    }
     return {};
 }
 error_type mbox_application::log(const string_view msg, const error_type code) noexcept
@@ -313,157 +385,183 @@ error_type network_tcp_thread::run() noexcept
         return instance().log(str, error);
     };
     ICY_MBOX_LOG("TCP Network initialize"_s, network.initialize());
-    ICY_MBOX_LOG("TCP Network launch"_s, network.launch(0, network_address_type::ip_v4, 0));
 
-    network_tcp_connection conn(network_connection_type::none);
-    ICY_MBOX_LOG("Begin connect"_s, network.connect(conn, address, 
-        { reinterpret_cast<const uint8_t*>(&instance().m_info), sizeof(instance().m_info) }));
-
-    while (true)
+    auto now = clock_type::now();
+    auto retry = 2u;
+    const auto retry_regen = std::chrono::seconds(5);
+    for (auto k = 0u; k < retry; ++k)
     {
-        network_tcp_reply reply;
-        auto code = 0u;
-        ICY_MBOX_LOG("Await connect"_s, network.loop(reply, code));
-        if (code == network_code_exit)
-            return {};
-        if (reply.error)
-            return log("Connect fail"_s, reply.error);
-        else if (reply.type == network_request_type::connect)
-            break;
-        else
-            return log("Bad request"_s);
-    }
-    conn.timeout(max_timeout);
-    ICY_ERROR(log("Connect OK"));
+        if (clock_type::now() - now > retry_regen)
+            retry += 1;
+        now = clock_type::now();
 
-    if (const auto error = network.recv(conn, sizeof(mbox::command)))
-        return log("Recv command"_s, error);
+        ICY_MBOX_LOG("TCP Network launch"_s, network.launch(0, network_address_type::ip_v4, 0));
 
-    auto sending = false;
-    array<uint8_t> send_buffer;
+        network_tcp_connection conn(network_connection_type::none);
+        ICY_MBOX_LOG("Begin connect"_s, network.connect(conn, address,
+            { reinterpret_cast<const uint8_t*>(&instance().m_info), sizeof(instance().m_info) }));
 
-    mbox::command last_cmd;
-
-    while (true)
-    {
-        network_tcp_reply reply;
-        auto code = 0u;
-        
-        if (const auto error = network.loop(reply, code))
-            return log("Network loop"_s, error);
-
-        if (code == network_code_exit)
-            return log("Network loop cancel"_s, error_type());
-        
-        if (code == network_code_update)
+        while (true)
         {
-            array<input_message> all_input;
-            array<input_message> vec_input;
+            network_tcp_reply reply;
+            auto code = 0u;
+            ICY_MBOX_LOG("Await connect"_s, network.loop(reply, code));
+            if (code == network_code_exit)
+                return {};
+            if (reply.error)
+                return log("Connect fail"_s, reply.error);
+            else if (reply.type == network_request_type::connect)
+                break;
+            else
+                return log("Bad request"_s);
+        }
+        conn.timeout(max_timeout);
+        ICY_ERROR(log("Connect OK"));
 
-            while (instance().m_send_input.pop(vec_input))
-                ICY_ERROR(all_input.append(vec_input));
-            
-            if (!all_input.empty())
+        if (const auto error = network.recv(conn, sizeof(mbox::command)))
+            return log("Recv command"_s, error);
+
+        auto sending = false;
+        array<uint8_t> send_buffer;
+
+        mbox::command last_cmd;
+
+        while (true)
+        {
+            network_tcp_reply reply;
+            auto code = 0u;
+
+            if (const auto error = network.loop(reply, code))
+                return log("Network loop"_s, error);
+
+            if (code == network_code_exit)
+                return log("Network loop cancel"_s, error_type());
+
+            if (code == network_code_update)
             {
-                mbox::command cmd;
-                cmd.type = mbox::command_type::input;
-                cmd.size = uint32_t(all_input.size() * sizeof(input_message));
-                if (const auto error = send_buffer.append(const_array_view<uint8_t>{ reinterpret_cast<const uint8_t*>(&cmd), sizeof(cmd) }))
-                    return log("Append send buffer"_s, error);
-            }
-            for (auto&& msg : all_input)
-            {
-                if (const auto error = send_buffer.append(const_array_view<uint8_t>{ reinterpret_cast<const uint8_t*>(&msg), sizeof(msg) }))
-                    return log("Append send buffer"_s, error);
-            }
-            array<matrix<color>> vec_image;
-            while (instance().m_send_image.pop(vec_image))
-            {
-                for (auto&& msg : vec_image)
+                array<input_message> all_input;
+                array<input_message> vec_input;
+
+                while (instance().m_send_input.pop(vec_input))
+                    ICY_ERROR(all_input.append(vec_input));
+
+                if (!all_input.empty())
                 {
-                    array<uint8_t> img_buffer;
-                    if (const auto error = image::save(detail::global_heap, msg, image_type::png, img_buffer))
-                        return log("Save image to png"_s, error);
-
                     mbox::command cmd;
-                    cmd.type = mbox::command_type::image;
-                    cmd.size = uint32_t(img_buffer.size());
+                    cmd.type = mbox::command_type::input;
+                    cmd.size = uint32_t(all_input.size() * sizeof(input_message));
                     if (const auto error = send_buffer.append(const_array_view<uint8_t>{ reinterpret_cast<const uint8_t*>(&cmd), sizeof(cmd) }))
                         return log("Append send buffer"_s, error);
-                    if (const auto error = send_buffer.append(img_buffer))
+                }
+                for (auto&& msg : all_input)
+                {
+                    if (const auto error = send_buffer.append(const_array_view<uint8_t>{ reinterpret_cast<const uint8_t*>(&msg), sizeof(msg) }))
                         return log("Append send buffer"_s, error);
                 }
-            }           
-        }
-        else if (reply.type == network_request_type::recv)
-        {
-            if (reply.error)
-                return log("Process recv command"_s, reply.error);
+                array<matrix<color>> vec_image;
+                while (instance().m_send_image.pop(vec_image))
+                {
+                    for (auto&& msg : vec_image)
+                    {
+                        array<uint8_t> img_buffer;
+                        if (const auto error = image::save(detail::global_heap, msg, image_type::png, img_buffer))
+                            return log("Save image to png"_s, error);
 
-            if (last_cmd.type == mbox::command_type::none)
-            {
-                if (reply.bytes.size() != sizeof(mbox::command))
-                    return log("Recv bad command size"_s, make_stdlib_error(std::errc::message_size));
-                const auto cmd = reinterpret_cast<const mbox::command*>(reply.bytes.data());
-                if (cmd->version != mbox::protocol_version)
-                    return log("Recv bad protocol", make_stdlib_error(std::errc::protocol_error));
-                if (cmd->type == mbox::command_type::exit)
-                {
-                    return instance().m_udp_network.stop(network_code_exit);
+                        mbox::command cmd;
+                        cmd.type = mbox::command_type::image;
+                        cmd.size = uint32_t(img_buffer.size());
+                        if (const auto error = send_buffer.append(const_array_view<uint8_t>{ reinterpret_cast<const uint8_t*>(&cmd), sizeof(cmd) }))
+                            return log("Append send buffer"_s, error);
+                        if (const auto error = send_buffer.append(img_buffer))
+                            return log("Append send buffer"_s, error);
+                    }
                 }
-                else if (cmd->size && (cmd->type == mbox::command_type::input || cmd->type == mbox::command_type::image))
+            }
+            else if (reply.type == network_request_type::recv)
+            {
+                if (reply.error)
+                    return log("Process recv command"_s, reply.error);
+
+                if (last_cmd.type == mbox::command_type::none)
                 {
-                    last_cmd.type = cmd->type;
-                    last_cmd.size = cmd->size;
-                    if (const auto error = network.recv(conn, cmd->size))
+                    if (reply.bytes.size() != sizeof(mbox::command))
+                        return log("Recv bad command size"_s, make_stdlib_error(std::errc::message_size));
+                    const auto cmd = reinterpret_cast<const mbox::command*>(reply.bytes.data());
+                    if (cmd->version != mbox::protocol_version)
+                        return log("Recv bad protocol", make_stdlib_error(std::errc::protocol_error));
+                    if (cmd->type == mbox::command_type::exit)
+                    {
+                        return instance().m_udp_network.stop(network_code_exit);
+                    }
+                    else if (cmd->size && (false
+                        || cmd->type == mbox::command_type::input
+                        || cmd->type == mbox::command_type::image
+                        || cmd->type == mbox::command_type::profile))
+                    {
+                        last_cmd.type = cmd->type;
+                        last_cmd.size = cmd->size;
+                        if (const auto error = network.recv(conn, cmd->size))
+                            return log("Try recv buffer"_s);
+                    }
+                    else
+                        return log("Recv bad command type", make_stdlib_error(std::errc::illegal_byte_sequence));
+                }
+                else if (reply.bytes.size() == last_cmd.size)
+                {
+                    if (last_cmd.type == mbox::command_type::input)
+                    {
+                        const auto ptr = reinterpret_cast<const input_message*>(reply.bytes.data());
+                        const auto len = reply.bytes.size() / sizeof(*ptr);
+                        const auto vec = const_array_view<input_message>(ptr, len);
+                        if (const auto error = instance().m_window_hook.send(vec))
+                            return log("Append recv input buffer"_s, error);
+                    }
+                    else if (last_cmd.type == mbox::command_type::image)
+                    {
+                        const auto ptr = reinterpret_cast<const rectangle*>(reply.bytes.data());
+                        array<rectangle> vec;
+                        ICY_ERROR(vec.assign(ptr, ptr + reply.bytes.size() / sizeof(*ptr)));
+                        if (const auto error = instance().m_recv_image.push(std::move(vec)))
+                            return log("Append recv image buffer"_s, error);
+                    }
+                    else if (last_cmd.type == mbox::command_type::profile)
+                    {
+                        const auto ptr = reinterpret_cast<const mbox::info*>(reply.bytes.data());
+                        if (reply.bytes.size() == sizeof(*ptr))
+                        {
+                            instance().m_info.profile = ptr->profile;
+                            auto name = string_view(ptr->window_name, strnlen(ptr->window_name, _countof(ptr->window_name)));
+                            if (const auto error = instance().m_window_hook.rename(name))
+                                return log("Set profile"_s, error);
+                        }
+                    }
+                    last_cmd = {};
+                    if (const auto error = network.recv(conn, sizeof(mbox::command)))
                         return log("Try recv buffer"_s);
                 }
                 else
-                    return log("Recv bad command type", make_stdlib_error(std::errc::illegal_byte_sequence));                
+                {
+                    return log("Recv partial command (size)", make_stdlib_error(std::errc::illegal_byte_sequence));
+                }
             }
-            else if (reply.bytes.size() == last_cmd.size)
+            else if (reply.type == network_request_type::send)
             {
-                if (last_cmd.type == mbox::command_type::input)
-                {
-                    const auto ptr = reinterpret_cast<const input_message*>(reply.bytes.data());
-                    array<input_message> vec;
-                    ICY_ERROR(vec.assign(ptr, ptr + reply.bytes.size() / sizeof(*ptr)));
-                    if (const auto error = instance().m_recv_input.push(std::move(vec)))
-                        return log("Append recv input buffer"_s, error);
-                }
-                else if (last_cmd.type == mbox::command_type::image)
-                {
-                    const auto ptr = reinterpret_cast<const rectangle*>(reply.bytes.data());
-                    array<rectangle> vec;
-                    ICY_ERROR(vec.assign(ptr, ptr + reply.bytes.size() / sizeof(*ptr)));
-                    if (const auto error = instance().m_recv_image.push(std::move(vec)))
-                        return log("Append recv image buffer"_s, error);
-                }
-                last_cmd = {};
-                if (const auto error = network.recv(conn, sizeof(mbox::command)))
-                    return log("Try recv buffer"_s);
+                if (reply.error)
+                    return log("Process send command"_s, reply.error);
+                sending = false;
             }
             else
             {
-                return log("Recv partial command (size)", make_stdlib_error(std::errc::illegal_byte_sequence));
+                break;
+                // return log("Disconnected"_s, reply.error);
             }
-        }
-        else if (reply.type == network_request_type::send)
-        {
-            if (reply.error)
-                return log("Process send command"_s, reply.error);
-            sending = false;
-        }
-        else
-        {
-            return log("Disconnected"_s, reply.error);
-        }
 
-        if (!sending && !send_buffer.empty())
-        {
-            if (const auto error = network.send(conn, send_buffer))
-                return log("Try send buffer"_s, error);
-            send_buffer.clear();
+            if (!sending && !send_buffer.empty())
+            {
+                if (const auto error = network.send(conn, send_buffer))
+                    return log("Try send buffer"_s, error);
+                send_buffer.clear();
+            }
         }
     }
     return {};

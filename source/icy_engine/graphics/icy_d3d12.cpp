@@ -231,7 +231,7 @@ error_type d3d12_swap_chain::resize() noexcept
 
 d3d12_display::~d3d12_display() noexcept
 {
-    filter(0);
+    //filter(0);
     m_fence.signal(*m_queue);
     m_fence.wait();
 }
@@ -312,11 +312,11 @@ error_type d3d12_display::initialize(const adapter& adapter, const display_flag 
     for (auto&& command : m_commands)
         ICY_ERROR(command.initialize(*m_device, D3D12_COMMAND_LIST_TYPE_DIRECT));
 
-    filter(event_type::none
+   /* filter(event_type::none
         | event_type::window_resize
         | event_type::window_active
         | event_type::window_minimized
-        | event_type::window_close);
+        | event_type::window_close);*/
     return {};
 }
 error_type d3d12_display::bind(HWND__* const window) noexcept
@@ -344,11 +344,15 @@ error_type d3d12_display::bind(HWND__* const window) noexcept
 
     return {};
 }
-error_type d3d12_display::loop(const duration_type timeout) noexcept
+error_type d3d12_display::bind(window& window) noexcept
 {
-    while (true)
+    return {};
+}
+error_type d3d12_display::draw() noexcept
+{
+    //while (true)
     {
-        while (auto event = pop())
+      /*  while (auto event = pop())
         {
             if (event->type == event_type::global_quit)
             {
@@ -363,7 +367,7 @@ error_type d3d12_display::loop(const duration_type timeout) noexcept
                 if (src && hwnd == static_cast<const window*>(src.get())->handle())
                     return error_type{};
             }
-        }
+        }*/
         //ICY_ERROR(m_render_system.loop());
 
         //  0: event, 1: fence, 2? swap chain
@@ -454,14 +458,14 @@ error_type d3d12_display::loop(const duration_type timeout) noexcept
                 for (auto&& pair : states)
                     m_state[pair.first * render_count + pair.second] += m_state.size();
             }
-            continue;
+            //continue;
         }
 
-        const auto wait = WaitForMultipleObjectsEx(handles_count, handles.data(), FALSE, ms_timeout(timeout), TRUE);
+        const auto wait = WaitForMultipleObjectsEx(handles_count, handles.data(), FALSE, INFINITE, TRUE);
         if (wait == WAIT_TIMEOUT)
         {
-            ICY_ERROR(event::post(this, event_type::global_timeout));
-            continue;
+            //ICY_ERROR(event::post(this, event_type::global_timeout));
+            //continue;
         }
         else if (wait == WAIT_FAILED)
         {
@@ -471,13 +475,14 @@ error_type d3d12_display::loop(const duration_type timeout) noexcept
         if (handle == m_chain.event())
             m_ready = true;
     }
+    return {};
 }
-error_type d3d12_display::signal(const event_data&) noexcept
+/*error_type d3d12_display::signal(const event_data&) noexcept
 {
     if (!SetEvent(m_event_wait.handle()))
         return last_system_error();
     return {};
-}
+}*/
 
 namespace icy
 {

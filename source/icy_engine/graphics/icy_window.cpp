@@ -1,4 +1,5 @@
 #define ICY_WINDOW_INTERNAL 1
+#include "icy_window.hpp"
 #include <icy_engine/graphics/icy_window.hpp>
 #include <icy_engine/graphics/icy_graphics.hpp>
 #include <icy_engine/core/icy_string.hpp>
@@ -30,8 +31,6 @@ static decltype(&::SetWindowLongPtrW) win32_set_window_longptr;
 static decltype(&::UnregisterClassW) win32_unregister_class;
 static decltype(&::MonitorFromWindow) win32_monitor_from_window;
 static decltype(&::GetMonitorInfoW) win32_get_monitor_info;
-
-
 struct win32_find_window
 {
     string_view name;
@@ -56,38 +55,6 @@ struct win32_flag_enum
 using win32_flag = decltype(win32_flag_enum::none);
 static const auto win32_normal_style = WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME;
 static const auto win32_popup_style = WS_POPUP;
-class window_data : public window
-{
-public:
-    error_type loop(const duration_type timeout) noexcept override;
-    error_type restyle(const window_style style) noexcept override;
-    error_type rename(const string_view name) noexcept override;
-    error_type _close() noexcept override
-    {
-        return post(this, event_type::window_close, true);
-    }
-    HWND__* handle() const noexcept
-    {
-        return m_hwnd;
-    }
-    error_type signal(const event_data& event) noexcept override
-    {
-        if (!win32_post_message(m_hwnd, WM_USER, event.type, 0))
-            return last_system_error();
-        return {};
-    }
-public:
-    static LRESULT WINAPI proc(const HWND hwnd, const UINT msg, const WPARAM wparam, const LPARAM lparam) noexcept;
-    error_type initialize(const window_flags flags) noexcept;
-    ~window_data() noexcept override;
-private:
-    library m_library = "user32"_lib;
-    HWND m_hwnd = nullptr;
-    error_type m_error;
-    uint32_t m_win32_flags = 0;
-    window_flags m_flags = window_flags::none;
-    wchar_t m_cname[64] = {};
-};
 ICY_STATIC_NAMESPACE_END
 static error_type win32_name(const HWND hwnd, string& str) noexcept
 {
@@ -106,6 +73,13 @@ static error_type win32_name(const HWND hwnd, string& str) noexcept
     ICY_ERROR(buffer.resize(size_t(length) + 1));
     win32_get_window_text(hwnd, buffer.data(), length + 1);
     ICY_ERROR(to_string(buffer, str));
+    return {};
+}
+
+icy::error_type window_data::signal(const icy::event_data& event) noexcept
+{
+    if (!win32_post_message(m_hwnd, WM_USER, event.type, 0))
+        return last_system_error();
     return {};
 }
 window_data::~window_data() noexcept
@@ -307,8 +281,10 @@ error_type window_data::loop(const duration_type timeout) noexcept
 			//	continue;
 			//g_input.wnd_proc(msg);
 		}
+        if (display)
+            ICY_ERROR(display->draw());
 
-        const auto count = win32_msg_wait_for_multiple_objects_ex(0, nullptr, ms_timeout(timeout), QS_ALLEVENTS, MWMO_INPUTAVAILABLE);
+       /* const auto count = win32_msg_wait_for_multiple_objects_ex(0, nullptr, ms_timeout(timeout), QS_ALLEVENTS, MWMO_INPUTAVAILABLE);
         if (count == WAIT_OBJECT_0)
         {
             ;
@@ -320,7 +296,7 @@ error_type window_data::loop(const duration_type timeout) noexcept
         else if (count == WAIT_FAILED)
         {
             return last_system_error();
-        }
+        }*/
 	}
 	return{};
 }

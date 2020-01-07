@@ -3,11 +3,26 @@
 #include <icy_engine/core/icy_json.hpp>
 #include <icy_engine/core/icy_thread.hpp>
 #include <icy_engine/core/icy_queue.hpp>
-#include <icy_engine/network/icy_network.hpp>
+#include <icy_engine/image/icy_image.hpp>
 #include "icy_mbox_script_common.hpp"
 #include "icy_mbox_script_explorer.hpp"
 #include "icy_mbox_script_editor.hpp"
 #include "icy_mbox_script_context.hpp"
+#include "icons/command.h"
+#include "icons/binding.h"
+#include "icons/directory.h"
+#include "icons/event.h"
+#include "icons/group.h"
+#include "icons/input.h"
+#include "icons/profile.h"
+#include "icons/timer.h"
+#include "icons/variable.h"
+#include "icons/create.h"
+#include "icons/remove.h"
+#include "icons/modify.h"
+#include "icons/move_up.h"
+#include "icons/move_dn.h"
+
 #if _DEBUG
 #pragma comment(lib, "icy_engine_cored")
 #pragma comment(lib, "icy_engine_imaged")
@@ -21,6 +36,8 @@
 using namespace icy;
 
 class mbox_application;
+
+static gui_image g_images[uint32_t(mbox_image::_total)];
 
 class mbox_main_thread : public thread
 {
@@ -106,6 +123,33 @@ error_type mbox_application::init() noexcept
 {
     ICY_ERROR(m_library.initialize());
     ICY_ERROR(create_gui(m_gui));
+
+    const auto func = [this](const const_array_view<uint8_t> bytes, const mbox_image index)
+    {
+        icy::image image;
+        ICY_ERROR(image.load(detail::global_heap, bytes, image_type::png));
+        auto colors = matrix<color>(image.size().y, image.size().x);
+        if (colors.empty())
+            return make_stdlib_error(std::errc::not_enough_memory);
+        ICY_ERROR(image.view({}, colors));
+        ICY_ERROR(m_gui->create(g_images[uint32_t(index)], colors));
+        return error_type();
+    };
+    ICY_ERROR(func(g_bytes_command, mbox_image::type_command));
+    ICY_ERROR(func(g_bytes_binding, mbox_image::type_binding));
+    ICY_ERROR(func(g_bytes_directory, mbox_image::type_directory));
+    ICY_ERROR(func(g_bytes_event, mbox_image::type_event));
+    ICY_ERROR(func(g_bytes_group, mbox_image::type_group));
+    ICY_ERROR(func(g_bytes_input, mbox_image::type_input));
+    ICY_ERROR(func(g_bytes_profile, mbox_image::type_profile));
+    ICY_ERROR(func(g_bytes_timer, mbox_image::type_timer));
+    ICY_ERROR(func(g_bytes_variable, mbox_image::type_variable));
+    ICY_ERROR(func(g_bytes_create, mbox_image::action_create));
+    ICY_ERROR(func(g_bytes_remove, mbox_image::action_remove));
+    ICY_ERROR(func(g_bytes_modify, mbox_image::action_modify));
+    ICY_ERROR(func(g_bytes_move_up, mbox_image::action_move_up));
+    ICY_ERROR(func(g_bytes_move_dn, mbox_image::action_move_dn));
+
     ICY_ERROR(m_gui->create(m_window, gui_widget_type::window, {}, gui_widget_flag::layout_hbox));
     ICY_ERROR(m_gui->create(m_splitter, gui_widget_type::hsplitter, m_window, gui_widget_flag::auto_insert));
     ICY_ERROR(m_explorer.initialize(*m_gui, m_library, m_splitter));
@@ -241,4 +285,9 @@ uint32_t show_error(const error_type error, const string_view text) noexcept
     to_string("Error: %4 - %1 code [%2]: %3", msg, error.source, long(error.code), error, text);
     win32_message(msg, "Error"_s);
     return error.code;
+}
+
+icy::gui_image find_image(const mbox_image image) noexcept
+{
+    return g_images[uint32_t(image)];
 }

@@ -1,6 +1,7 @@
 #include "icy_d3d11.hpp"
 #include <icy_engine/graphics/icy_window.hpp>
 #include <d3d11.h>
+#include "icy_window.hpp"
 
 using namespace icy;
 
@@ -57,6 +58,24 @@ error_type d3d11_swap_chain::resize() noexcept
     return {};
 }
 
+/*d3d11_display::~d3d11_display() noexcept
+{
+    filter(0);
+    if (m_proc)
+    {
+        HWND hwnd = nullptr;
+        m_chain.window(hwnd);
+        if (hwnd)
+        {
+            SetWindowLongPtrW(hwnd, GWLP_WNDPROC, LONG_PTR(m_proc));
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA, LONG_PTR(m_user));
+        }
+    }
+}*/
+d3d11_display::~d3d11_display() noexcept
+{
+    
+}
 error_type d3d11_display::initialize(const adapter& adapter, const display_flag flags) noexcept
 {
     m_adapter = adapter;
@@ -84,11 +103,11 @@ error_type d3d11_display::initialize(const adapter& adapter, const display_flag 
         }
     }
 
-    filter(event_type::none
+   /* filter(event_type::none
         | event_type::window_resize
         | event_type::window_active
         | event_type::window_minimized
-        | event_type::window_close);
+        | event_type::window_close);*/
     return {};
 }
 error_type d3d11_display::bind(HWND__* const window) noexcept
@@ -98,15 +117,24 @@ error_type d3d11_display::bind(HWND__* const window) noexcept
     ICY_COM_ERROR(factory->MakeWindowAssociation(window, DXGI_MWA_NO_ALT_ENTER | DXGI_MWA_NO_WINDOW_CHANGES | DXGI_MWA_NO_PRINT_SCREEN));
     ICY_ERROR(m_chain.initialize(*factory, *m_device, window, m_flags));
 
+    //m_proc = reinterpret_cast<decltype(&proc)>(SetWindowLongPtrW(window, GWLP_WNDPROC, LONG_PTR(&proc)));
+    //m_user = reinterpret_cast<void*>(SetWindowLongPtrW(window, GWLP_USERDATA, 0));
+
     window_size size = {};
     ICY_ERROR(m_chain.size(size));
     return {};
 }
-error_type d3d11_display::loop(const duration_type timeout) noexcept
+error_type d3d11_display::bind(window& window) noexcept
 {
-    while (true)
+    ICY_ERROR(bind(window.handle()));
+    static_cast<window_data&>(window).display = this;
+    return {};
+}
+error_type d3d11_display::draw() noexcept
+{
+    //while (true)
     {
-        while (auto event = pop())
+  /*      while (auto event = pop())
         {
             if (event->type == event_type::global_quit)
             {
@@ -121,7 +149,7 @@ error_type d3d11_display::loop(const duration_type timeout) noexcept
                 if (src && hwnd == static_cast<const window*>(src.get())->handle())
                     return error_type{};
             }
-        }
+        }*/
         com_ptr<ID3D11DeviceContext> context;
         m_device->GetImmediateContext(&context);
         //ID3D11RenderTargetView* rtv[] = { &m_chain.view() };
@@ -136,7 +164,7 @@ error_type d3d11_display::loop(const duration_type timeout) noexcept
         //context->ExecuteCommandList(buffer.view(), FALSE);
         //m_queue[m_frame.load()];
 
-        ICY_ERROR(post(this, event_type::display_refresh, m_frame.load(std::memory_order_acquire)));
+        //ICY_ERROR(post(this, event_type::display_refresh, m_frame.load(std::memory_order_acquire)));
         if (const auto error = m_chain.present())
         {
             if (error.source == error_source_system &&
@@ -147,12 +175,8 @@ error_type d3d11_display::loop(const duration_type timeout) noexcept
         }
         m_frame.fetch_add(1, std::memory_order_release);
     }
-}
-error_type d3d11_display::signal(const event_data&) noexcept
-{
     return {};
 }
-
 
 namespace icy
 {

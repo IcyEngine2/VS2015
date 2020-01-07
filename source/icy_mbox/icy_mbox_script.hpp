@@ -71,15 +71,20 @@ namespace mbox
         send_input,
         join_group,
         leave_group,
+        set_focus,              //  profile
+        enable_binding,
+        enable_bindings_list,
+        disable_binding,
+        disable_bindings_list,
         _total,
     };
     struct value_input
     {
         icy::key button = icy::key::none;
         icy::key_event event = icy::key_event::none;
-        icy::key_mod ctrl = 0;
-        icy::key_mod alt = 0;
-        icy::key_mod shift = 0;
+        uint32_t ctrl = 0;
+        uint32_t alt = 0;
+        uint32_t shift = 0;
         icy::string macro;
     };
     struct value_directory
@@ -173,13 +178,17 @@ namespace mbox
         {
             friend library;
         public:
+            library* library() const noexcept
+            {
+                return m_library;
+            }
             icy::array_view<icy::guid> indices() const noexcept
             {
                 return m_indices;
             }
             icy::error_type commit() noexcept;
         private:
-            library& m_library;
+            mbox::library* m_library = nullptr;
             icy::array<icy::guid> m_indices;
         };
     public:
@@ -190,13 +199,45 @@ namespace mbox
         {
             return m_data.try_find(index);
         }
-        icy::error_type enumerate(const mbox::type type, icy::array<icy::guid>& indices) noexcept;
+        icy::error_type enumerate(const mbox::type type, icy::array<icy::guid>& indices) noexcept
+        {
+            for (auto&& pair : m_data)
+            {
+                if (pair.value.type == type)
+                    ICY_ERROR(indices.push_back(pair.key));
+            }
+            return {};
+        }
+        icy::error_type enumerate(const mbox::type type, icy::array<mbox::base>& vals) noexcept
+        {
+            for (auto&& pair : m_data)
+            {
+                if (pair.value.type == type)
+                {
+                    mbox::base copy;
+                    ICY_ERROR(mbox::base::copy(pair.value, copy));
+                    ICY_ERROR(vals.push_back(std::move(copy)));
+                }
+            }
+            return {};
+        }
         icy::error_type remove(const icy::guid& index, remove_query& query) noexcept;
         icy::error_type insert(const base& base) noexcept;   
         icy::error_type modify(const base& base) noexcept;
         icy::error_type children(const icy::guid& index, const bool recursive, icy::array<icy::guid>& vec) noexcept;
         icy::error_type references(const icy::guid& index, icy::array<icy::guid>& vec) noexcept;
         icy::error_type path(const icy::guid& index, icy::string& str) noexcept;
+        static icy::error_type copy(const mbox::library& src, mbox::library& dst) noexcept
+        {
+            dst.m_data.clear();
+            for (auto&& pair : src.m_data)
+            {
+                mbox::base tmp;
+                ICY_ERROR(mbox::base::copy(pair.value, tmp));
+                ICY_ERROR(dst.m_data.insert(icy::guid(pair.key), std::move(tmp)));
+            }
+            return {};
+        }
     private:
         icy::error_type is_valid(const base& base) noexcept;
         icy::error_type to_json(const base& base, icy::json& json_output) noexcept;

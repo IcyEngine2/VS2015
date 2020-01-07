@@ -14,10 +14,7 @@ icy::error_type mbox_context::menu(const icy::guid& index) noexcept
     gui_widget_scoped menu(*m_gui);
     gui_widget_scoped menu_create(*m_gui);
     gui_action_scoped action_view(*m_gui);
-    gui_action_scoped action_view_new(*m_gui);
     gui_action_scoped action_edit(*m_gui);
-    gui_action_scoped action_edit_new(*m_gui);
-    gui_action_scoped action_rename(*m_gui);
     gui_action_scoped action_delete(*m_gui);
     gui_action_scoped action_create(*m_gui);
 
@@ -27,9 +24,6 @@ icy::error_type mbox_context::menu(const icy::guid& index) noexcept
     ICY_ERROR(menu_create.initialize());
     ICY_ERROR(action_view.initialize("View"_s));
     ICY_ERROR(action_edit.initialize("Edit"_s));
-    ICY_ERROR(action_view_new.initialize("View [new tab]"_s));
-    ICY_ERROR(action_edit_new.initialize("Edit [new tab]"_s));
-    ICY_ERROR(action_rename.initialize("Rename"_s));
     ICY_ERROR(action_delete.initialize("Delete"_s));
 
     switch (base->type)
@@ -99,9 +93,6 @@ icy::error_type mbox_context::menu(const icy::guid& index) noexcept
 
     ICY_ERROR(m_gui->insert(menu, action_view));
     ICY_ERROR(m_gui->insert(menu, action_edit));
-    ICY_ERROR(m_gui->insert(menu, action_view_new));
-    ICY_ERROR(m_gui->insert(menu, action_edit_new));
-    ICY_ERROR(m_gui->insert(menu, action_rename));
     ICY_ERROR(m_gui->insert(menu, action_delete));
     if (!types.empty())
     {
@@ -109,8 +100,7 @@ icy::error_type mbox_context::menu(const icy::guid& index) noexcept
         ICY_ERROR(m_gui->bind(action_create, menu_create));
         ICY_ERROR(m_gui->insert(menu, action_create));
     }
-
-
+    
     gui_action action;
     ICY_ERROR(m_gui->exec(menu, action));
 
@@ -128,12 +118,14 @@ icy::error_type mbox_context::menu(const icy::guid& index) noexcept
             return make_stdlib_error(std::errc::not_enough_memory);
         ICY_ERROR(m_form->initialize(*base));
     }
-    else if (action == action_rename)
-    {
-        //ICY_ERROR(event::post(nullptr, mbox_event_type_rename, mbox_event(base->index)));
-    }
     else if (action == action_delete)
     {
+        mbox::library::remove_query query;
+        ICY_ERROR(m_library->remove(index, query));
+        if (query.indices().size() == 1)
+        {
+            
+        }
         //ICY_ERROR(event::post(nullptr, mbox_event_type_delete, mbox_event(base->index)));
     }
     else if (action.index)

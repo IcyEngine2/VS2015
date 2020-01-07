@@ -46,14 +46,11 @@ namespace icy
     class d3d11_display : public display
     {
     public:
-        ~d3d11_display() noexcept override
-        {
-            filter(0);
-        }
+        ~d3d11_display() noexcept;
         error_type initialize(const adapter& adapter, const display_flag flags) noexcept;
         error_type bind(HWND__* const window) noexcept override;
-        error_type loop(const duration_type timeout) noexcept override;
-        error_type signal(const event_data& event) noexcept override;
+        error_type bind(window& window) noexcept override;
+        error_type draw() noexcept override;
         uint64_t frame() const noexcept
         {
             return m_frame.load(std::memory_order_acquire);
@@ -67,6 +64,7 @@ namespace icy
             return m_flags;
         }
     private:
+    private:
         adapter m_adapter;
         display_flag m_flags = display_flag::none;
         library m_d3d11_lib = "d3d11"_lib;
@@ -74,5 +72,7 @@ namespace icy
         std::atomic<uint64_t> m_frame = 0;
         d3d11_swap_chain m_chain;
         array<d3d11_back_buffer> m_buffers;
+        //decltype(&proc) m_proc = nullptr;
+        //void* m_user = nullptr;
     };
 }

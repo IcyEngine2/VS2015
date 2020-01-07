@@ -56,6 +56,7 @@ namespace icy
 		key,
 		mouse,
 		text,
+        active,
 	};
 	using mouse_event = decltype(mouse_event_enum::_total);
 	using mouse_button = decltype(mouse_button_enum::_total);
@@ -173,7 +174,7 @@ namespace icy
 		}
 		input_message() : type(input_type::none)
 		{
-
+            memset(this, 0, sizeof(*this));
 		}
 		input_message(const key_message& key) noexcept : type(input_type::key), key(key)
 		{
@@ -183,6 +184,10 @@ namespace icy
 		{
 
 		}
+        input_message(const bool active) noexcept : type(input_type::active), active(active)
+        {
+
+        }
 		input_message(const wchar_t* const wstring) noexcept : type(input_type::text), text{}
 		{
 			for (auto k = 0_z; k < u16_max && wstring && wstring[k]; ++k)
@@ -194,6 +199,7 @@ namespace icy
 			key_message key;
 			mouse_message mouse;
 			wchar_t text[u16_max + 1];
+            const bool active;
 		};
 		const input_type type;
 	};

@@ -32,14 +32,14 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\..\source\icy_mbox\icy_mbox.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\..\source\icy_mbox\detail\icy_win32.hpp">
       <Filter>Source Files\utility</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\source\icy_mbox\detail\icy_dxgi.hpp">
       <Filter>Source Files\utility</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\icy_mbox\icy_mbox_network.hpp">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

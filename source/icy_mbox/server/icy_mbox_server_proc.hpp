@@ -8,9 +8,9 @@ struct mbox_process
     static icy::error_type copy(const mbox_process& src, mbox_process& dst) noexcept
     {
         dst.key = src.key;
+        dst.profile = src.profile;
         ICY_ERROR(to_string(src.computer_name, dst.computer_name));
         ICY_ERROR(to_string(src.window_name, dst.window_name));
-        ICY_ERROR(to_string(src.profile, dst.profile));
         ICY_ERROR(to_string(src.application, dst.application));
         ICY_ERROR(to_string(src.address, dst.address));
         return {};
@@ -18,7 +18,7 @@ struct mbox_process
     mbox::key key;
     icy::string computer_name;
     icy::string window_name;
-    icy::string profile;
+    icy::guid profile;
     icy::string application;
     icy::string address;
 };
@@ -35,10 +35,12 @@ class mbox_processes
         _col_count,
     };
 public:
-    icy::error_type initialize(icy::gui_queue& gui, icy::gui_widget parent)
+    icy::error_type initialize(icy::gui_queue& gui, mbox::library& library, icy::gui_widget parent)
     {
         using namespace icy;
         m_gui = &gui;
+        m_library = &library;
+
         ICY_ERROR(m_gui->create(m_widget, gui_widget_type::grid_view, parent));
         ICY_ERROR(m_gui->create(m_root));
         ICY_ERROR(m_gui->insert_cols(m_root, 0, _col_count));
@@ -88,7 +90,12 @@ public:
         const auto& proc = m_data[index];
         ICY_ERROR(to_string(proc.key.pid, str_proc_id));
         ICY_ERROR(m_gui->text(m_gui->node(m_root, index, col_application), proc.application));
-        ICY_ERROR(m_gui->text(m_gui->node(m_root, index, col_profile), proc.profile));
+
+        icy::string str_profile;
+        if (proc.profile != icy::guid())
+            m_library->path(proc.profile, str_profile);
+
+        ICY_ERROR(m_gui->text(m_gui->node(m_root, index, col_profile), str_profile));
         ICY_ERROR(m_gui->text(m_gui->node(m_root, index, col_address), proc.address));
         ICY_ERROR(m_gui->text(m_gui->node(m_root, index, col_window_name), proc.window_name));
         ICY_ERROR(m_gui->text(m_gui->node(m_root, index, col_computer_name), proc.computer_name));
@@ -105,6 +112,7 @@ public:
     }
 private:
     icy::gui_queue* m_gui = nullptr;
+    mbox::library* m_library = nullptr;
     icy::gui_widget m_widget;
     icy::gui_node m_root;
     icy::array<mbox_process> m_data;

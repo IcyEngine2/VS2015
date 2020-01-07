@@ -73,12 +73,15 @@ namespace icy
         data_type* data = nullptr;
     };
 
-    class display : public event_queue
+    class window;
+    class display
     {
     public:
+        virtual ~display() noexcept = 0 { };
         static error_type create(shared_ptr<display>& display, const adapter& adapter, const display_flag display_flags = display_default) noexcept;
         virtual error_type bind(HWND__* const window) noexcept = 0;
-        virtual error_type loop(const duration_type timeout = max_timeout) noexcept = 0;
+        virtual error_type bind(window& window) noexcept = 0;
+        virtual error_type draw() noexcept = 0;
         virtual size_t frame() const noexcept = 0;
         virtual display_flag flags() const noexcept = 0;
     };

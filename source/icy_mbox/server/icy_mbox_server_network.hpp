@@ -9,13 +9,20 @@
 #include <icy_engine/image/icy_image.hpp>
 #include "icy_mbox_server_config.hpp"
 #include "icy_mbox_server_proc.hpp"
-#include "../icy_mbox.hpp"
+#include "../icy_mbox_network.hpp"
+#include "../icy_mbox_script.hpp"
 
+static constexpr auto event_type_user_library = icy::event_type(icy::event_type::user << 0x00);
 static constexpr auto event_type_user_connect = icy::event_type(icy::event_type::user << 0x01);
 static constexpr auto event_type_user_disconnect = icy::event_type(icy::event_type::user << 0x02);
 static constexpr auto event_type_user_recv_input = icy::event_type(icy::event_type::user << 0x03);
 static constexpr auto event_type_user_recv_image = icy::event_type(icy::event_type::user << 0x04);
+static constexpr auto event_type_user_profile = icy::event_type(icy::event_type::user << 0x05);
 
+struct event_user_library
+{
+    mbox::library library;
+};
 struct event_user_connect 
 {
     mbox::info info;
@@ -35,6 +42,11 @@ struct event_user_recv_image
     mbox::key key;
     icy::array<uint8_t> png;
     icy::matrix<icy::color> colors;
+};
+struct event_user_profile
+{
+    mbox::key key;
+    icy::guid profile;
 };
 
 class mbox_server_network : public icy::thread
@@ -238,6 +250,10 @@ public:
     {
         return send(key, image.data(), image.size() * sizeof(image[0]), mbox::command_type::image);
     }
+    icy::error_type send(const mbox::key key, const mbox::info& profile) noexcept
+    {
+        return send(key, &profile, sizeof(profile), mbox::command_type::profile);
+    }
     icy::error_type disconnect(const mbox::key key) noexcept
     {
         return send(key, nullptr, 0, mbox::command_type::exit);
@@ -249,6 +265,8 @@ public:
 private:
     icy::error_type send(const mbox::key key, const void* data, const size_t size, const mbox::command_type type) noexcept
     {
+        if (!size)
+            return {};
         using namespace icy;
         ICY_LOCK_GUARD(m_lock);
         for (auto&& val : m_data)
