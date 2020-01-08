@@ -182,7 +182,7 @@ namespace icy
 		_TP_TIMER* m_timer = nullptr;
 		void* m_iocp = nullptr;
 		network_clock::time_point m_time;
-		detail::spin_lock<> m_lock;
+		detail::rw_spin_lock m_lock;
 		array<network_tcp_request*> m_requests;
 	};
     class network_system_base
@@ -248,7 +248,7 @@ namespace icy
         error_type recv(const size_t capacity) noexcept;
         error_type loop(network_udp_request& request, uint32_t& exit, const network_duration timeout = std::chrono::seconds(UINT32_MAX)) noexcept;
     private:
-        detail::spin_lock<> m_lock;
+        detail::rw_spin_lock m_lock;
         array<unique_ptr<network_udp_request>> m_requests;
     };
 	error_type to_string(const network_address& address, string& str) noexcept;

@@ -14,23 +14,26 @@ class mbox_script_exec : public icy::thread
         remove_binding,
         send_input,
         set_focus,
+        create_virt,
     };
     struct mbox_action
     {
         mbox_action_type type = mbox_action_type::none;
         icy::guid group;
         icy::guid reference;
+        icy::guid assign;
     };
     struct mbox_binding
     {
         icy::guid group;
         mbox::value_event event;
-        mbox::value_command command;
+        icy::guid command;
     };
     struct mbox_group
     {
         icy::map<icy::guid, int> profiles;
         icy::map<icy::guid, mbox_binding> bindings;
+        icy::map<icy::guid, icy::guid> virt;
     };
     struct mbox_profile
     {
@@ -57,7 +60,7 @@ public:
     {
         using namespace icy;
         shared_ptr<event_loop> loop;
-        ICY_ERROR(m_library.initialize());
+        ICY_ERROR(m_library2.initialize());
         ICY_ERROR(event_loop::create(loop, event_type::user_any));       
         ICY_SCOPE_EXIT{ event::post(nullptr, event_type::global_quit); };
         while (true)
@@ -97,7 +100,8 @@ public:
                 {
                     if (msg.type != input_type::mouse)
                         continue;
-                    if (msg.mouse.ctrl && msg.mouse.event == mouse_event::btn_release)
+                    if (msg.mouse.ctrl && msg.mouse.alt && 
+                        msg.mouse.event == mouse_event::btn_release)
                         mouse = msg.mouse;
                 }
             }
@@ -115,14 +119,22 @@ public:
             ICY_ERROR(exec(actions, send));
             
             if (mouse.event != mouse_event::none)
-            {
+            {                
                 mouse.ctrl = 0;
+                mouse.alt = 0;
+                mouse.shift = 0;
                 mouse_message press = mouse;
+                mouse_message release = mouse;
                 press.event = mouse_event::btn_press;
+                release.event = mouse_event::btn_release;
                 for (auto&& pair : send.data)
-                {                    
+                {                   
+                    //ICY_ERROR(pair.value.push_back(key_message(key::left_ctrl, key_event::press)));
+                    //ICY_ERROR(pair.value.push_back(key_message(key::left_alt, key_event::press)));
                     ICY_ERROR(pair.value.push_back(press));
-                    ICY_ERROR(pair.value.push_back(mouse));
+                    ICY_ERROR(pair.value.push_back(release));
+                    //ICY_ERROR(pair.value.push_back(key_message(key::left_alt, key_event::release)));
+                    //ICY_ERROR(pair.value.push_back(key_message(key::left_ctrl, key_event::release)));
                 }
             }
             for (auto&& pair : send.data)
@@ -135,17 +147,17 @@ private:
     {
         using namespace icy;
 
-        ICY_ERROR(mbox::library::copy(event.library, m_library));
+        ICY_ERROR(mbox::library::copy(event.library, m_library2));
         m_groups.clear();
         m_profiles.clear();
 
         array<mbox::base> profiles;
-        ICY_ERROR(m_library.enumerate(mbox::type::profile, profiles));
+        ICY_ERROR(m_library2.enumerate(mbox::type::profile, profiles));
         for (auto&& base : profiles)
             ICY_ERROR(m_profiles.insert(guid(base.index), mbox_profile()));
 
         array<mbox::base> groups;
-        ICY_ERROR(m_library.enumerate(mbox::type::group, groups));
+        ICY_ERROR(m_library2.enumerate(mbox::type::group, groups));
 
         mbox::base broadcast;
         broadcast.type = mbox::type::group;
@@ -178,8 +190,8 @@ private:
         array<mbox_action> actions;
         for (auto&& index : m_profiles.keys())
         {
-            const auto& profile = m_library.find(index)->value.profile;
-            const auto& command = m_library.find(profile.command)->value.command;
+            const auto& profile = m_library2.find(index)->value.profile;
+            const auto& command = m_library2.find(profile.command)->value.command;
             ICY_ERROR(exec({ &index, 1 }, command, actions));
         }
         mbox_input send;
@@ -202,9 +214,10 @@ private:
         if (!profile)
             return {};
 
-        for (auto&& index : profile->groups)
+        for (auto&& group_index : profile->groups)
         {
-            for (auto&& binding : m_groups.find(index.key)->value.bindings.vals())
+            const auto& group_val = m_groups.find(group_index.key)->value;
+            for (auto&& binding : group_val.bindings.vals())
             {
                 auto ok = false;
                 if (binding.event.etype == mbox::event_type::recv_input)
@@ -212,14 +225,23 @@ private:
                     if (!profile->in_group(binding.event.group))
                         continue;
 
-                    const auto& input = m_library.find(binding.event.reference)->value.input;
+                    const auto& input = find_virt(group_val, binding.event.reference)->value.input;
+                    auto key_event_type = key_event::none;
+                    switch (input.itype)
+                    {
+                    case mbox::input_type::button_down: key_event_type = key_event::press; break;
+                    case mbox::input_type::button_up: key_event_type = key_event::release; break;
+                    }
+                    
+                    const auto itype = input.itype;
+
                     for (auto&& msg : event.data)
                     {
                         if (msg.type != input_type::key)
                             continue;
                         ok |= true
                             && input.button == msg.key.key
-                            && input.event == msg.key.event
+                            && key_event_type == msg.key.event
                             && key_mod_and(input.ctrl, msg.key.ctrl)
                             && key_mod_and(input.alt, msg.key.alt)
                             && key_mod_and(input.shift, msg.key.shift);                        
@@ -235,40 +257,47 @@ private:
                     for (auto&& msg : event.data)
                         ok |= msg.type == input_type::active && !msg.active;
                 }
-                if (ok)
-                    ICY_ERROR(exec({ &index.key, 1 }, binding.command, actions));
+                if (!ok)
+                    continue;
+
+                array<guid> default_groups;
+                ICY_ERROR(default_groups.push_back(group_index.key));
+                array<guid> exec_groups;
+                ICY_ERROR(make_groups(binding.group, default_groups, exec_groups));
+                ICY_ERROR(exec(exec_groups, find_virt(group_val, binding.command)->value.command, actions));
             }
         }
         return {};
     }
+    icy::error_type make_groups(const icy::guid& group, const icy::const_array_view<icy::guid> groups, icy::array<icy::guid>& exec_groups) noexcept
+    {
+        if (group == mbox::group_multicast)
+        {
+            for (auto&& index : m_profiles.keys())
+            {
+                const auto it = std::find(groups.begin(), groups.end(), index);
+                if (it == groups.end())
+                    ICY_ERROR(exec_groups.push_back(index));
+            }
+        }
+        else if (group == mbox::group_default)
+        {
+            ICY_ERROR(exec_groups.assign(groups));
+        }
+        else if (group == mbox::group_broadcast)
+        {
+            exec_groups.clear();
+            ICY_ERROR(exec_groups.push_back(mbox::group_broadcast));
+        }
+        else
+        {
+            ICY_ERROR(exec_groups.push_back(group));
+        }
+        return icy::error_type();
+    };
     icy::error_type exec(icy::const_array_view<icy::guid> groups, const mbox::value_command& cmd, icy::array<mbox_action>& actions) noexcept
     {
         using namespace icy;
-        const auto make_groups = [this](const icy::guid& group, const_array_view<guid> groups, array<guid>& exec_groups)
-        {
-            if (group == mbox::group_multicast)
-            {
-                for (auto&& index : m_groups.keys())
-                {
-                    const auto it = std::find(groups.begin(), groups.end(), index);
-                    if (it == groups.end())
-                        ICY_ERROR(exec_groups.push_back(index));
-                }
-            }
-            else if (group == mbox::group_default)
-            {
-                ICY_ERROR(exec_groups.assign(groups));
-            }
-            else if (group == mbox::group_broadcast)
-            {
-                ICY_ERROR(exec_groups.assign(m_groups.keys()));
-            }
-            else
-            {
-                ICY_ERROR(exec_groups.push_back(group));
-            }
-            return error_type();
-        };
         
         array<guid> cmd_groups;
         ICY_ERROR(make_groups(cmd.group, groups, cmd_groups));
@@ -281,67 +310,72 @@ private:
             ICY_ERROR(make_groups(action.group, cmd_groups, action_groups));
             if (action_groups.empty())
                 continue;
-            
-            const auto& ref = *m_library.find(action.reference);
-            mbox_action new_action;
-            new_action.reference = action.reference;
-            
-            switch (action.atype)
+
+            for (auto&& group : action_groups)
             {
-            case mbox::action_type::enable_bindings_list:
-            case mbox::action_type::disable_bindings_list:
-            {
-                new_action.type = action.atype == mbox::action_type::enable_bindings_list ?
-                    mbox_action_type::insert_binding : mbox_action_type::remove_binding;
-                for (auto&& index : ref.value.directory.indices)
+                const auto& ref = *find_virt(m_groups.find(group)->value, action.reference);
+                mbox_action new_action;
+                new_action.reference = action.reference;
+
+                switch (action.atype)
                 {
-                    new_action.reference = index;
-                    for (auto&& group : action_groups)
+                case mbox::action_type::enable_bindings_list:
+                case mbox::action_type::disable_bindings_list:
+                {
+                    new_action.type = action.atype == mbox::action_type::enable_bindings_list ?
+                        mbox_action_type::insert_binding : mbox_action_type::remove_binding;
+                    for (auto&& index : ref.value.directory.indices)
                     {
+                        new_action.reference = index;
                         new_action.group = group;
                         ICY_ERROR(actions.push_back(new_action));
                     }
+                    new_action.type = mbox_action_type::none;
+                    break;
                 }
-                new_action.type = mbox_action_type::none;
-                break;
-            }
-            case mbox::action_type::enable_binding:
-            case mbox::action_type::disable_binding:
-            {
-                new_action.type = action.atype == mbox::action_type::enable_binding ?
-                    mbox_action_type::insert_binding : mbox_action_type::remove_binding;
-                break;
-            }
-            case mbox::action_type::execute_command:
-            {
-                ICY_ERROR(exec(action_groups, ref.value.command, actions));
-                break;
-            }
+                case mbox::action_type::enable_binding:
+                case mbox::action_type::disable_binding:
+                {
+                    new_action.type = action.atype == mbox::action_type::enable_binding ?
+                        mbox_action_type::insert_binding : mbox_action_type::remove_binding;
+                    break;
+                }
+                case mbox::action_type::execute_command:
+                {
+                    ICY_ERROR(exec(action_groups, ref.value.command, actions));
+                    break;
+                }
 
-            case mbox::action_type::send_input:
-            {
-                new_action.type = mbox_action_type::send_input;
-                break;
-            }
+                case mbox::action_type::send_input:
+                {
+                    new_action.type = mbox_action_type::send_input;
+                    break;
+                }
 
-            case mbox::action_type::set_focus:
-            {
-                new_action.type = mbox_action_type::set_focus;
-                new_action.group = action.reference;
-                ICY_ERROR(actions.push_back(new_action));
-                new_action.type = mbox_action_type::none;
-                break;
-            }
+                case mbox::action_type::set_focus:
+                {
+                    new_action.type = mbox_action_type::set_focus;
+                    new_action.group = action.reference;
+                    ICY_ERROR(actions.push_back(new_action));
+                    new_action.type = mbox_action_type::none;
+                    break;
+                }
 
-            }
-            if (new_action.type != mbox_action_type::none)
-            {
-                for (auto&& group : action_groups)
+                case mbox::action_type::replace_command:
+                case mbox::action_type::replace_input:
+                {
+                    new_action.type = mbox_action_type::create_virt;
+                    new_action.assign = action.assign;
+                    break;
+                }
+                }
+                if (new_action.type != mbox_action_type::none)
                 {
                     new_action.group = group;
                     ICY_ERROR(actions.push_back(new_action));
                 }
             }
+          
         }
         return {};
     }
@@ -360,13 +394,13 @@ private:
                 if (it != group->value.bindings.end())
                     return error_type();
 
-                const auto& source = m_library.find(action.reference)->value.binding;
-                const auto& command = m_library.find(source.command)->value.command;
+                const auto& source = find_base(group->value, action.reference)->value.binding;
+                //const auto& command = find_virt(group->value, source.command)->value.command;
                 mbox_binding new_binding;
                 new_binding.group = source.group;
-                new_binding.event = m_library.find(source.event)->value.event;
-                new_binding.command.group = command.group;
-                ICY_ERROR(new_binding.command.actions.assign(command.actions));
+                new_binding.event = find_base(group->value, source.event)->value.event;
+                new_binding.command = find_virt(group->value, source.command)->index;
+                //ICY_ERROR(new_binding.command.actions.assign(command.actions));
                 ICY_ERROR(group->value.bindings.insert(guid(action.reference), std::move(new_binding)));
                 break;
             }
@@ -377,6 +411,25 @@ private:
                     group->value.bindings.erase(it);
                 break;
             }
+
+            case mbox_action_type::create_virt:
+            {
+                //group->value.library.insert(action.reference);
+                ICY_ERROR(group->value.virt.find_or_insert(guid(action.reference), guid(action.assign)));
+              /*  const auto it = group->value.virt.find(action.reference);
+                if (it != group->value.virt.end())
+                {
+                    it->value = action.assign;
+                    if (it->key == it->value)
+                        group->value.virt.erase(it);
+                }
+                else
+                {
+                    ICY_ERROR(group->value.virt.insert(guid(action.reference), guid(action.assign)));
+                }*/
+                break;
+            }
+
             case mbox_action_type::set_focus:
             case mbox_action_type::send_input:
             {
@@ -393,10 +446,62 @@ private:
 
                     if (action.type == mbox_action_type::send_input)
                     {
-                        const auto& input = m_library.find(action.reference)->value.input;
-                        auto msg = key_message(input.button, input.event,
-                            uint32_t(input.ctrl), uint32_t(input.alt), uint32_t(input.shift));
-                        ICY_ERROR(buffer->value.push_back(msg));
+                        const auto& input = find_virt(group->value, action.reference)->value.input;
+
+                        auto down = false;
+                        auto up = false;
+
+                        switch (input.itype)
+                        {
+                        case mbox::input_type::button_down:
+                            down = true;
+                            break;
+                        case mbox::input_type::button_up:
+                            up = true;
+                            break;
+                        case mbox::input_type::button_press:
+                            down = true;
+                            up = true;
+                            break;
+                        }
+
+                        const auto add_mod = [down, up, &buffer](const key_mod mod, const key left, const key right, const key_event event)
+                        {
+                            if ((down || up) && mod)
+                            {
+                                if (mod.left())
+                                {
+                                    const auto msg = key_message(left, event);
+                                    ICY_ERROR(buffer->value.push_back(msg));
+                                }
+                                else if (mod.right())
+                                {
+                                    const auto msg = key_message(left, event);
+                                    ICY_ERROR(buffer->value.push_back(msg));
+                                }
+                            }
+                            return error_type();
+                        };
+                        ICY_ERROR(add_mod(input.ctrl, key::left_ctrl, key::right_ctrl, key_event::press));
+                        ICY_ERROR(add_mod(input.alt, key::left_alt, key::right_alt, key_event::press));
+                        ICY_ERROR(add_mod(input.shift, key::left_shift, key::right_shift, key_event::press));
+                        
+                        if (down)
+                        {
+                            const auto msg = key_message(input.button, key_event::press,
+                                uint32_t(input.ctrl), uint32_t(input.alt), uint32_t(input.shift));
+                            ICY_ERROR(buffer->value.push_back(msg));
+                        }
+                        if (up)
+                        {
+                            const auto msg = key_message(input.button, key_event::release,
+                                uint32_t(input.ctrl), uint32_t(input.alt), uint32_t(input.shift));
+                            ICY_ERROR(buffer->value.push_back(msg));
+                        }
+
+                        ICY_ERROR(add_mod(input.shift, key::left_shift, key::right_shift, key_event::release));
+                        ICY_ERROR(add_mod(input.alt, key::left_alt, key::right_alt, key_event::release));
+                        ICY_ERROR(add_mod(input.ctrl, key::left_ctrl, key::right_ctrl, key_event::release));
                     }
                     else
                     {
@@ -411,9 +516,22 @@ private:
         }
         return {};
     }
+    const mbox::base* find_virt(const mbox_group& group, const icy::guid& index) const noexcept
+    {
+        const auto virt = group.virt.find(index);
+        if (virt == group.virt.end())
+            return m_library2.find(index);
+        else
+            return m_library2.find(virt->value);
+    }
+    const mbox::base* find_base(const mbox_group&, const icy::guid& index) const noexcept
+    {
+        return m_library2.find(index);
+    }
 private:
-    mbox::library m_library;
+    mbox::library m_library2;
     mbox_server_network& m_network;
     icy::map<icy::guid, mbox_profile> m_profiles;
     icy::map<icy::guid, mbox_group> m_groups;
+
 };

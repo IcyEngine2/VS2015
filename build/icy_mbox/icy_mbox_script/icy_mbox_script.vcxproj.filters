@@ -47,8 +47,13 @@
     <ClInclude Include="..\..\..\source\icy_mbox\script\icy_mbox_script_common.hpp">
       <Filter>Source Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\source\icy_mbox\script\icy_mbox_script_form2.hpp">
+    <ClInclude Include="..\..\..\source\icy_mbox\script\icy_mbox_script_form.hpp">
       <Filter>Source Files</Filter>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="..\..\..\icy_types.natvis">
+      <Filter>Resource Files</Filter>
+    </Natvis>
   </ItemGroup>
 </Project>

@@ -90,7 +90,7 @@ struct __declspec(align(SYSTEM_CACHE_ALIGNMENT_SIZE)) heap_stat_data
 };
 struct __declspec(align(SYSTEM_CACHE_ALIGNMENT_SIZE)) heap_trac_data 
 {
-    icy::detail::spin_lock<> lock;
+    icy::detail::rw_spin_lock lock;
     debug_trace_unit* units = nullptr;
 };
 class heap_base
@@ -623,7 +623,7 @@ void* heap_base::alloc(size_t size) noexcept
         trace_ptr->size = trace_len;
         trace_ptr->user_data = data_ptr;
         memcpy(trace_ptr->func_data, stack, trace_len * sizeof(void*));
-        ICY_LOCK_GUARD(m_trace.lock);
+        ICY_LOCK_GUARD_WRITE(m_trace.lock);
         trace_ptr->prev = m_trace.units;
         trace_ptr->size;
         m_trace.units = trace_ptr;
@@ -647,7 +647,7 @@ void heap_base::free(const void* data_ptr) noexcept
     }
     if (m_init.debug_trace)
     {
-        ICY_LOCK_GUARD(m_trace.lock);
+        ICY_LOCK_GUARD_WRITE(m_trace.lock);
         debug_trace_unit* prev = nullptr;
         debug_trace_unit* next = m_trace.units;
         while (next)

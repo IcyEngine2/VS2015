@@ -661,7 +661,7 @@ error_type network_system_tcp::connect(network_tcp_connection& conn, const netwo
     if (!network_func_bind || !network_func_listen || !network_func_connect)
         return make_stdlib_error(std::errc::function_not_supported);
 
-	ICY_LOCK_GUARD(conn.m_lock);
+	ICY_LOCK_GUARD_WRITE(conn.m_lock);
 	conn.m_time = {};
 
 	if (!conn.m_socket)
@@ -707,7 +707,7 @@ error_type network_system_tcp::accept(network_tcp_connection& conn) noexcept
     if (!network_func_accept)
         return make_stdlib_error(std::errc::function_not_supported);
 
-	ICY_LOCK_GUARD(conn.m_lock);
+	ICY_LOCK_GUARD_WRITE(conn.m_lock);
 
 	if (!conn.m_socket)
 	{
@@ -735,7 +735,7 @@ error_type network_system_tcp::accept(network_tcp_connection& conn) noexcept
 }
 error_type network_system_tcp::send(network_tcp_connection& conn, const const_array_view<uint8_t> buffer) noexcept
 {
-	ICY_LOCK_GUARD(conn.m_lock);
+    ICY_LOCK_GUARD_WRITE(conn.m_lock);
 	network_tcp_request* ref = nullptr;
 	ICY_ERROR(network_tcp_request::create(network_request_type::send, buffer.size(), conn, ref));
 	memcpy(ref->buffer, buffer.data(), buffer.size());
@@ -743,7 +743,7 @@ error_type network_system_tcp::send(network_tcp_connection& conn, const const_ar
 }
 error_type network_system_tcp::recv(network_tcp_connection& conn, const size_t capacity) noexcept
 {
-	ICY_LOCK_GUARD(conn.m_lock);
+    ICY_LOCK_GUARD_WRITE(conn.m_lock);
 	network_tcp_request* ref = nullptr;
 	ICY_ERROR(network_tcp_request::create(network_request_type::recv, capacity, conn, ref));
 	return ref->recv(ref->capacity);
@@ -753,7 +753,7 @@ error_type network_system_tcp::disconnect(network_tcp_connection& conn) noexcept
     if (!network_func_disconnect)
         return make_stdlib_error(std::errc::function_not_supported);
 
-	ICY_LOCK_GUARD(conn.m_lock);
+    ICY_LOCK_GUARD_WRITE(conn.m_lock);
 	network_tcp_request* ref = nullptr;
 	ICY_ERROR(network_tcp_request::create(network_request_type::disconnect, 0, conn, ref));
 	if (!network_func_disconnect(conn.m_socket, &ref->overlapped, TF_REUSE_SOCKET, 0))
@@ -786,7 +786,7 @@ error_type network_system_tcp::loop(network_tcp_reply& reply, uint32_t& code, co
         if (conn)
         {
             reply.type = network_request_type::timeout;
-            ICY_LOCK_GUARD(reply.conn->m_lock);
+            ICY_LOCK_GUARD_WRITE(reply.conn->m_lock);
         }
         else // if (!entry.dwNumberOfBytesTransferred)
         {
@@ -798,7 +798,7 @@ error_type network_system_tcp::loop(network_tcp_reply& reply, uint32_t& code, co
     {
         conn = reply.conn = &request->connection;
     }
-    ICY_LOCK_GUARD(conn->m_lock);
+    ICY_LOCK_GUARD_WRITE(conn->m_lock);
 
     auto ptr = std::find(conn->m_requests.begin(), conn->m_requests.end(), request);
     if (ptr == conn->m_requests.end())
@@ -940,7 +940,7 @@ error_type network_system_udp::send(const network_address& address, const const_
     request->address_size = request->address.size();
     auto ptr = request.get();
     {
-        ICY_LOCK_GUARD(m_lock);
+        ICY_LOCK_GUARD_WRITE(m_lock);
         ICY_ERROR(m_requests.push_back(std::move(request)));
     }
     ICY_ERROR(ptr->send(m_socket));
@@ -955,7 +955,7 @@ error_type network_system_udp::recv(const size_t capacity) noexcept
     request->address_size = request->address.size();
     auto ptr = request.get();
     {
-        ICY_LOCK_GUARD(m_lock);
+        ICY_LOCK_GUARD_WRITE(m_lock);
         ICY_ERROR(m_requests.push_back(std::move(request)));
     }
     ICY_ERROR(ptr->recv(m_socket));
@@ -985,7 +985,7 @@ error_type network_system_udp::loop(network_udp_request& reply, uint32_t& exit, 
     }
 
     const auto request = reinterpret_cast<network_udp_request_ex*>(reinterpret_cast<char*>(entry.lpOverlapped) - offset);
-    ICY_LOCK_GUARD(m_lock);
+    ICY_LOCK_GUARD_WRITE(m_lock);
     auto index = 0_z;
     for (; index < m_requests.size(); ++index)
     {

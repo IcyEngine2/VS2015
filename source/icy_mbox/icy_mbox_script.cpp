@@ -67,6 +67,16 @@ string_view mbox::to_string(const mbox::variable_type type) noexcept
     }
     return {};
 }
+string_view mbox::to_string(const mbox::input_type type) noexcept
+{
+    switch (type)
+    {
+    case input_type::button_press: return "Button Press"_s;
+    case input_type::button_down: return "Button Down"_s;
+    case input_type::button_up: return "Button Up"_s;
+    }
+    return {};
+}
 string_view mbox::to_string(const mbox::event_type type) noexcept
 {
     switch (type)
@@ -110,6 +120,9 @@ string_view mbox::to_string(const mbox::action_type type) noexcept
     case action_type::enable_bindings_list: return "Enable Bindings List"_s;
     case action_type::disable_binding: return "Disable Binding"_s;
     case action_type::disable_bindings_list: return "Disable Bindings List"_s;
+
+    case action_type::replace_input: return "Replace Input"_s;
+    case action_type::replace_command: return "Replace Command"_s;
     }
     return {};
 }
@@ -193,7 +206,7 @@ error_type mbox::base::copy(const base& src, base& dst) noexcept
         dst_value.alt = src_value.alt;
         dst_value.button = src_value.button;
         dst_value.ctrl = src_value.ctrl;
-        dst_value.event = src_value.event;
+        dst_value.itype = src_value.itype;
         dst_value.shift = src_value.shift;
         ICY_ERROR(to_string(src_value.macro, dst_value.macro));
         break;
@@ -536,6 +549,21 @@ error_type mbox::library::is_valid(const base& base) noexcept
                 break;
             }
 
+            case mbox::action_type::replace_input:
+            {
+                const auto rhs = find(action.assign);
+                if (!lhs || !rhs || lhs->type != mbox::type::input || rhs->type != mbox::type::input)
+                    return make_stdlib_error(std::errc::invalid_argument);
+                break;
+            }
+                
+            case mbox::action_type::replace_command:
+            {
+                const auto rhs = find(action.assign);
+                if (!lhs || !rhs || lhs->type != mbox::type::command || rhs->type != mbox::type::command)
+                    return make_stdlib_error(std::errc::invalid_argument);
+                break;
+            }
             }
         }
         break;
@@ -863,7 +891,7 @@ error_type mbox::library::to_json(const base& base, icy::json& obj) noexcept
     case type::input:
     {
         const auto& value = base.value.input;
-        ICY_ERROR(json_data.insert(str_key_event, ::to_string(value.event)));
+        ICY_ERROR(json_data.insert(str_key_type, to_string(value.itype)));
         ICY_ERROR(json_data.insert(str_key_button, to_string(value.button)));
         if (const auto integer = uint32_t(value.ctrl))
              ICY_ERROR(json_data.insert(str_key_ctrl, integer));
@@ -1115,7 +1143,7 @@ error_type mbox::library::from_json(const json& json_input, mbox::base& output) 
                 }
             }
         }
-        ICY_ERROR(to_value(json_data->get(str_key_event), value.event));
+        ICY_ERROR(to_value(json_data->get(str_key_type), value.itype));
         ICY_ERROR(to_string(json_data->get(str_key_macro), value.macro));
         
         break;

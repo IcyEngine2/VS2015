@@ -15,7 +15,7 @@ using namespace icy;
 using namespace icy;
 
 ICY_STATIC_NAMESPACE_BEG
-icy::detail::spin_lock<> g_lock;
+icy::detail::rw_spin_lock g_lock;
 icy::thread_system* g_list = nullptr;
 struct LDR_DATA_TABLE_ENTRY 
 {
@@ -92,20 +92,20 @@ ICY_STATIC_NAMESPACE_END
 
 void icy::thread_system::notify(const uint32_t index, const bool attach) noexcept
 {
-    ICY_LOCK_GUARD(g_lock);
+    ICY_LOCK_GUARD_WRITE(g_lock);
     for (auto ptr = g_list; ptr; ptr = ptr->m_prev)
         (*ptr)(index, attach);
 }
 icy::thread_system::thread_system() noexcept
 {
-    ICY_LOCK_GUARD(g_lock);
+    ICY_LOCK_GUARD_WRITE(g_lock);
     m_prev = g_list;
     static const bool g_init = dll_init();
     g_list = this;
 }
 icy::thread_system::~thread_system() noexcept
 {
-    ICY_LOCK_GUARD(g_lock);
+    ICY_LOCK_GUARD_WRITE(g_lock);
     thread_system* prev = nullptr;
     thread_system* next = g_list;
     while (next)

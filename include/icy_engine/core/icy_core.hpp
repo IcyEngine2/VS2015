@@ -526,23 +526,16 @@ namespace icy
         {
 
         }
-        guid(const uint64_t x0, const uint64_t x1) noexcept : x0(x0), x1(x1)
+        guid(const uint64_t x0, const uint64_t x1) noexcept
         {
-
+            *reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(this) + 0x00) = x0;
+            *reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(this) + 0x08) = x1;
         }
         int compare(const guid& rhs) const noexcept
         {
             return memcmp(this, &rhs, sizeof(guid));
         }
-        union
-        {
-            unsigned char bytes[16];
-            struct
-            {
-                uint64_t x0;
-                uint64_t x1;
-            };
-        };
+        unsigned char bytes[16];
     };
     error_type create_guid(guid& guid) noexcept;
 
@@ -728,3 +721,4 @@ namespace icy
     error_type win32_message(const string_view text, const string_view header) noexcept;
 }
 #endif
+

@@ -87,4 +87,46 @@
   </Expand>
 </Type>
 
+  <Type Name="icy::detail::hex_dummy_low">
+    <DisplayString Condition="((c % 15) == 0x00)">0</DisplayString>
+    <DisplayString Condition="((c % 15) == 0x01)">1</DisplayString>
+    <DisplayString Condition="((c % 15) == 0x02)">2</DisplayString>
+    <DisplayString Condition="((c % 15) == 0x03)">3</DisplayString>
+    <DisplayString Condition="((c % 15) == 0x04)">4</DisplayString>
+    <DisplayString Condition="((c % 15) == 0x05)">5</DisplayString>
+    <DisplayString Condition="((c % 15) == 0x06)">6</DisplayString>
+    <DisplayString Condition="((c % 15) == 0x07)">7</DisplayString>
+    <DisplayString Condition="((c % 15) == 0x08)">8</DisplayString>
+    <DisplayString Condition="((c % 15) == 0x09)">9</DisplayString>
+    <DisplayString Condition="((c % 15) == 0x0a)">A</DisplayString>
+    <DisplayString Condition="((c % 15) == 0x0b)">B</DisplayString>
+    <DisplayString Condition="((c % 15) == 0x0c)">C</DisplayString>
+    <DisplayString Condition="((c % 15) == 0x0d)">D</DisplayString>
+    <DisplayString Condition="((c % 15) == 0x0e)">E</DisplayString>
+    <DisplayString Condition="((c % 15) == 0x0f)">F</DisplayString>
+  </Type>
+
+  <Type Name="icy::detail::hex_dummy_high">
+    <DisplayString Condition="((c >> 4) == 0x00)">0</DisplayString>
+    <DisplayString Condition="((c >> 4) == 0x01)">1</DisplayString>
+    <DisplayString Condition="((c >> 4) == 0x02)">2</DisplayString>
+    <DisplayString Condition="((c >> 4) == 0x03)">3</DisplayString>
+    <DisplayString Condition="((c >> 4) == 0x04)">4</DisplayString>
+    <DisplayString Condition="((c >> 4) == 0x05)">5</DisplayString>
+    <DisplayString Condition="((c >> 4) == 0x06)">6</DisplayString>
+    <DisplayString Condition="((c >> 4) == 0x07)">7</DisplayString>
+    <DisplayString Condition="((c >> 4) == 0x08)">8</DisplayString>
+    <DisplayString Condition="((c >> 4) == 0x09)">9</DisplayString>
+    <DisplayString Condition="((c >> 4) == 0x0a)">A</DisplayString>
+    <DisplayString Condition="((c >> 4) == 0x0b)">B</DisplayString>
+    <DisplayString Condition="((c >> 4) == 0x0c)">C</DisplayString>
+    <DisplayString Condition="((c >> 4) == 0x0d)">D</DisplayString>
+    <DisplayString Condition="((c >> 4) == 0x0e)">E</DisplayString>
+    <DisplayString Condition="((c >> 4) == 0x0f)">F</DisplayString>
+  </Type>
+
+  <Type Name="icy::guid">
+    <DisplayString>{(_GUID&amp;)(bytes)}</DisplayString>
+  </Type>
+
 </AutoVisualizer>

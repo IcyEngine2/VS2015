@@ -2,7 +2,7 @@
 
 #include <icy_qtgui/icy_qtgui.hpp>
 #include "../icy_mbox_script.hpp"
-#include "icy_mbox_script_form2.hpp"
+#include "icy_mbox_script_form.hpp"
 
 class mbox_context
 {

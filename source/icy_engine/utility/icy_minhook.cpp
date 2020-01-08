@@ -10,7 +10,7 @@
 
 using namespace icy;
 
-static detail::spin_lock<> g_hook_lock;
+static detail::rw_spin_lock g_hook_lock;
 static uint32_t g_hook_count = 0;
 static error_type make_minhook_error(const MH_STATUS code) noexcept
 {
@@ -24,7 +24,7 @@ void hook_base::shutdown() noexcept
 
     MH_RemoveHook(m_new_func);
     m_new_func = nullptr;
-    ICY_LOCK_GUARD(g_hook_lock);
+    ICY_LOCK_GUARD_WRITE(g_hook_lock);
     --g_hook_count;
     if (g_hook_count == 0)
         MH_Uninitialize();
@@ -36,7 +36,7 @@ error_type hook_base::initialize(void* const old_func, void* const new_func) noe
 
     shutdown();
     {
-        ICY_LOCK_GUARD(g_hook_lock);
+        ICY_LOCK_GUARD_WRITE(g_hook_lock);
         if (g_hook_count == 0)
         {
             if (const auto error = MH_Initialize())

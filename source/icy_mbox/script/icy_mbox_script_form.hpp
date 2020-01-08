@@ -151,6 +151,7 @@ public:
         if (it == m_data.end())
             return icy::make_stdlib_error(std::errc::invalid_argument);
         ICY_ERROR(model.gui->scroll(value, model.gui->node(model, std::distance(m_data.begin(), it), 0)));
+        m_select = index;
         return {};
     }
     icy::error_type reset(mbox::library& library, const mbox::base& base) noexcept;

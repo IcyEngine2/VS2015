@@ -1,5 +1,5 @@
 #include "icy_mbox_script_context.hpp"
-#include "icy_mbox_script_form2.hpp"
+#include "icy_mbox_script_form.hpp"
 
 using namespace icy;
 

@@ -15,6 +15,8 @@
 #pragma comment(lib, "icy_engine_networkd")
 #else
 #pragma comment(lib, "icy_engine_core")
+#pragma comment(lib, "icy_engine_image")
+#pragma comment(lib, "icy_engine_network")
 #endif
 #pragma comment(lib, "dxgi")
 
@@ -140,6 +142,7 @@ error_type mbox_application::initialize() noexcept
     ICY_ERROR(m_pause.push_back({ key_message(key::slash, key_event::press), pause_type::begin }));
     ICY_ERROR(m_pause.push_back({ key_message(key::esc, key_event::press), pause_type::end }));
     ICY_ERROR(m_pause.push_back({ key_message(key::enter, key_event::press), pause_type::toggle }));
+    ICY_ERROR(m_pause.push_back({ key_message(key::p, key_event::press, 3), pause_type::toggle }));
 
     
     string libname;
@@ -252,46 +255,59 @@ error_type mbox_application::window_callback(const input_message& input, bool& c
                         new_paused = false;
                         break;
                     case pause_type::toggle:
-                        new_paused = !m_paused;
+                        new_paused = !new_paused;
                         break;
                     }
                 }
             }
         }
     }
-
+    auto changed = m_paused != new_paused;
+    m_paused = new_paused;
     auto send = false;
 
     switch (input.type)
     {
     case input_type::text:
-        if (!(m_paused || new_paused))
+        if (!new_paused && !changed)
             cancel = true;
         break;
 
     case input_type::active:
-        send = true;
+        if (!new_paused || changed)
+            send = true;
         break;
 
     case input_type::mouse:
-        send = !new_paused;
+        if (!new_paused)
+            send = true;
         break;
 
     case input_type::key:
-        if (m_paused && new_paused)
-            cancel = true;
-        else
-            send = true;
+        if (!new_paused && !changed)
+            cancel = send = true;
         break;
     }
 
-    m_paused = new_paused;
     if (send)
     {
         array<input_message> vec;
         ICY_ERROR(vec.push_back(input));
         ICY_ERROR(m_send_input.push(std::move(vec)));
         ICY_ERROR(m_tcp_network.stop(network_code_update));
+    }
+    if (changed)
+    {
+        const auto defname = string_view(m_info.window_name,
+            strnlen(m_info.window_name, _countof(m_info.window_name)));
+
+        string str;
+
+        if (m_paused)
+            ICY_ERROR(str.append("[PAUSED] "_s));
+
+        ICY_ERROR(str.append(defname));
+        ICY_ERROR(m_window_hook.rename(str));
     }
     return {};
 }
@@ -374,7 +390,9 @@ error_type network_udp_thread::run() noexcept
 }
 error_type mbox_hook::callback(const input_message& input, bool& cancel) noexcept
 {
-    return instance().window_callback(input, cancel);
+    if (const auto error = instance().window_callback(input, cancel))
+        instance().log("Window Callback"_s, error);
+    return {};
 }
 
 error_type network_tcp_thread::run() noexcept
@@ -387,13 +405,13 @@ error_type network_tcp_thread::run() noexcept
     ICY_MBOX_LOG("TCP Network initialize"_s, network.initialize());
 
     auto now = clock_type::now();
-    auto retry = 2u;
-    const auto retry_regen = std::chrono::seconds(5);
+    auto retry = 1u;
+   // const auto retry_regen = std::chrono::seconds(5);
     for (auto k = 0u; k < retry; ++k)
     {
-        if (clock_type::now() - now > retry_regen)
-            retry += 1;
-        now = clock_type::now();
+        //if (clock_type::now() - now > retry_regen)
+        //    retry += 1;
+       // now = clock_type::now();
 
         ICY_MBOX_LOG("TCP Network launch"_s, network.launch(0, network_address_type::ip_v4, 0));
 
@@ -412,8 +430,6 @@ error_type network_tcp_thread::run() noexcept
                 return log("Connect fail"_s, reply.error);
             else if (reply.type == network_request_type::connect)
                 break;
-            else
-                return log("Bad request"_s);
         }
         conn.timeout(max_timeout);
         ICY_ERROR(log("Connect OK"));
@@ -550,7 +566,7 @@ error_type network_tcp_thread::run() noexcept
                     return log("Process send command"_s, reply.error);
                 sending = false;
             }
-            else
+            else if (reply.type == network_request_type::disconnect || reply.type == network_request_type::shutdown)
             {
                 break;
                 // return log("Disconnected"_s, reply.error);

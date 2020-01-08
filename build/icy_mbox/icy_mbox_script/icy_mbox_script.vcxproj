@@ -92,9 +92,12 @@
     <ClInclude Include="..\..\..\source\icy_mbox\icy_mbox_script.hpp" />
     <ClInclude Include="..\..\..\source\icy_mbox\script\icy_mbox_script_common.hpp" />
     <ClInclude Include="..\..\..\source\icy_mbox\script\icy_mbox_script_context.hpp" />
-    <ClInclude Include="..\..\..\source\icy_mbox\script\icy_mbox_script_form2.hpp" />
     <ClInclude Include="..\..\..\source\icy_mbox\script\icy_mbox_script_editor.hpp" />
     <ClInclude Include="..\..\..\source\icy_mbox\script\icy_mbox_script_explorer.hpp" />
+    <ClInclude Include="..\..\..\source\icy_mbox\script\icy_mbox_script_form.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="..\..\..\icy_types.natvis" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -20,7 +20,7 @@ namespace icy
     template<typename T> class shared_ptr;
     namespace detail
     {
-        template<size_t spin = 0> class spin_lock
+        /*template<size_t spin = 0> class spin_lock
         {
         public:
             spin_lock() noexcept : m_flag{ ATOMIC_FLAG_INIT }
@@ -66,7 +66,7 @@ namespace icy
             }
 		private:
             std::atomic_flag m_flag;
-        };
+        };*/
         class rw_spin_lock
         {
         public:

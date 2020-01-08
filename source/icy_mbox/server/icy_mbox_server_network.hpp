@@ -122,7 +122,7 @@ public:
                 break;
             else if (code == network_code_update)
             {
-                ICY_LOCK_GUARD(m_lock);
+                ICY_LOCK_GUARD_WRITE(m_lock);
                 for (auto&& val : m_data)
                 {
                     if (!val.sending && !val.send.empty())
@@ -218,7 +218,7 @@ public:
                 }
                 else if (reply.type == network_request_type::send)
                 {
-                    ICY_LOCK_GUARD(m_lock);
+                    ICY_LOCK_GUARD_WRITE(m_lock);
                     val->sending = false;
 
                     if (val->send.empty())
@@ -236,7 +236,7 @@ public:
 
             if (val)
             {
-                ICY_LOCK_GUARD(m_lock);
+                ICY_LOCK_GUARD_WRITE(m_lock);
                 ICY_ERROR(reset(*val));
             }
         }
@@ -268,7 +268,7 @@ private:
         if (!size)
             return {};
         using namespace icy;
-        ICY_LOCK_GUARD(m_lock);
+        ICY_LOCK_GUARD_WRITE(m_lock);
         for (auto&& val : m_data)
         {
             if (val.key == key)
@@ -285,6 +285,6 @@ private:
     }        
 private:
     icy::network_system_tcp m_system;
-    icy::detail::spin_lock<> m_lock;
+    icy::detail::rw_spin_lock m_lock;
     icy::array<value_type> m_data;
 };

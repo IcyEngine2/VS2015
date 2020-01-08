@@ -47,7 +47,7 @@ error_type window_hook::initialize(HWND__* hwnd) noexcept
 }
 error_type window_hook::send(const const_array_view<input_message> vec) noexcept
 {
-    ICY_LOCK_GUARD(m_lock);
+    ICY_LOCK_GUARD_WRITE(m_lock);
     for (auto&& msg : vec)
         ICY_ERROR(m_queue.push_back(msg));
     if (!PostMessageW(m_handle, WM_NULL, 0, 0))
@@ -57,8 +57,7 @@ error_type window_hook::send(const const_array_view<input_message> vec) noexcept
 error_type window_hook::rename(const icy::string_view name) noexcept
 {
     ICY_ERROR(to_utf16(name, m_name));
-    if (!PostMessageW(m_handle, WM_NULL, 0, 0))
-        return last_system_error();
+    PostMessageW(m_handle, WM_NULL, 0, 0);
     return {};
 }
 
@@ -73,7 +72,7 @@ LRESULT __stdcall window_hook::proc(HWND__* hwnd, uint32_t msg, WPARAM wparam, L
     {
     case WM_NULL:
     {
-        ICY_LOCK_GUARD(g_instance->m_lock);
+        ICY_LOCK_GUARD_WRITE(g_instance->m_lock);
         auto instance = g_instance;
         g_instance = nullptr;
         if (!instance->m_queue.empty())
@@ -109,7 +108,7 @@ LRESULT __stdcall window_hook::proc(HWND__* hwnd, uint32_t msg, WPARAM wparam, L
         auto cancel = false;
         if (const auto error = g_instance->callback(input_message(L""), cancel))
             g_instance->m_error = error;
-        else if (cancel)
+        if (cancel)
             return 0;
         break;
     }
@@ -134,7 +133,7 @@ LRESULT __stdcall window_hook::proc(HWND__* hwnd, uint32_t msg, WPARAM wparam, L
         auto cancel = false;
         if (const auto error = g_instance->callback(key_input, cancel))
             g_instance->m_error = error;
-        else if (cancel)
+        if (cancel)
             return 0;
         break;
     }
@@ -157,7 +156,7 @@ LRESULT __stdcall window_hook::proc(HWND__* hwnd, uint32_t msg, WPARAM wparam, L
         auto cancel = false;
         if (const auto error = g_instance->callback(mouse_input, cancel))
             g_instance->m_error = error;
-        else if (cancel)
+        if (cancel)
             return 0;
         break;
     }

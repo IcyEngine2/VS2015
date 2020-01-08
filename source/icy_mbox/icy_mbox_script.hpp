@@ -35,6 +35,14 @@ namespace mbox
         string,
         _total,
     };
+    enum class input_type : uint32_t
+    {
+        none,
+        button_down,
+        button_up,
+        button_press,
+        _total,
+    };
     enum class event_type : uint32_t
     {
         none,
@@ -72,16 +80,21 @@ namespace mbox
         join_group,
         leave_group,
         set_focus,              //  profile
+        
         enable_binding,
         enable_bindings_list,
         disable_binding,
         disable_bindings_list,
+
+        replace_input,
+        replace_command,
+        
         _total,
     };
     struct value_input
     {
         icy::key button = icy::key::none;
-        icy::key_event event = icy::key_event::none;
+        input_type itype = input_type::none;
         uint32_t ctrl = 0;
         uint32_t alt = 0;
         uint32_t shift = 0;
@@ -247,6 +260,7 @@ namespace mbox
     };
 
     icy::string_view to_string(const mbox::type type) noexcept;
+    icy::string_view to_string(const mbox::input_type type) noexcept;
     icy::string_view to_string(const mbox::variable_type type) noexcept;
     icy::string_view to_string(const mbox::event_type type) noexcept;
     icy::string_view to_string(const mbox::action_type type) noexcept;

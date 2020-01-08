@@ -4,6 +4,7 @@
 #include <icy_engine/graphics/icy_graphics.hpp>
 #include <icy_engine/core/icy_string.hpp>
 #include <icy_engine/core/icy_array.hpp>
+#include <icy_engine/core/icy_input.hpp>
 #include <Windows.h>
 
 using namespace icy;
@@ -13,6 +14,7 @@ using namespace icy;
 ICY_STATIC_NAMESPACE_BEG
 static decltype(&::TranslateMessage) win32_translate_message;
 static decltype(&::DispatchMessageW) win32_dispatch_message;
+static decltype(&::GetKeyboardState) win32_get_keyboard_state;
 static decltype(&::PeekMessageW) win32_peek_message;
 static decltype(&::PostMessageW) win32_post_message;
 static decltype(&::DefWindowProcW) win32_def_window_proc;
@@ -55,6 +57,20 @@ struct win32_flag_enum
 using win32_flag = decltype(win32_flag_enum::none);
 static const auto win32_normal_style = WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME;
 static const auto win32_popup_style = WS_POPUP;
+static std::bitset<256> key_state() noexcept
+{
+    uint8_t keyboard[0x100];
+    win32_get_keyboard_state(keyboard);
+    std::bitset<256> keys;
+    const auto mask = 0x80;
+    keys[uint32_t(key::left_ctrl)] = (keyboard[VK_LCONTROL] & mask) != 0;
+    keys[uint32_t(key::left_alt)] = (keyboard[VK_LMENU] & mask) != 0;
+    keys[uint32_t(key::left_shift)] = (keyboard[VK_LSHIFT] & mask) != 0;
+    keys[uint32_t(key::right_ctrl)] = (keyboard[VK_RCONTROL] & mask) != 0;
+    keys[uint32_t(key::right_alt)] = (keyboard[VK_RMENU] & mask) != 0;
+    keys[uint32_t(key::right_shift)] = (keyboard[VK_RSHIFT] & mask) != 0;
+    return keys;
+}
 ICY_STATIC_NAMESPACE_END
 static error_type win32_name(const HWND hwnd, string& str) noexcept
 {
@@ -107,6 +123,7 @@ error_type window_data::initialize(const window_flags flags) noexcept
 
     ICY_WIN32_FUNC(win32_translate_message, TranslateMessage);
     ICY_WIN32_FUNC(win32_dispatch_message, DispatchMessageW);
+    ICY_WIN32_FUNC(win32_get_keyboard_state, GetKeyboardState);
     ICY_WIN32_FUNC(win32_peek_message, PeekMessageW);
     ICY_WIN32_FUNC(win32_post_message, PostMessageW);
     ICY_WIN32_FUNC(win32_def_window_proc, DefWindowProcW);
@@ -169,25 +186,25 @@ LRESULT WINAPI window_data::proc(const HWND hwnd, const UINT msg, const WPARAM w
     };
     
     switch (msg)
-	{
-	case WM_PAINT:
-		break;
-
-	case WM_MENUCHAR:
-		return MAKELRESULT(0, MNC_CLOSE);
-
-	case WM_SETCURSOR:
-		//window->g_cursor.wnd_proc({ hwnd, msg, wparam, lparam });
-		//if (LOWORD(lparam) == HTCLIENT)
-		//    return TRUE;
+    {
+    case WM_PAINT:
         break;
 
-	case WM_SYSCOMMAND:
-		if ((wparam & 0xFFF0) == SC_KEYMENU)
-			return 0;
-		break;
+    case WM_MENUCHAR:
+        return MAKELRESULT(0, MNC_CLOSE);
 
-	case WM_CLOSE:
+    case WM_SETCURSOR:
+        //window->g_cursor.wnd_proc({ hwnd, msg, wparam, lparam });
+        //if (LOWORD(lparam) == HTCLIENT)
+        //    return TRUE;
+        break;
+
+    case WM_SYSCOMMAND:
+        if ((wparam & 0xFFF0) == SC_KEYMENU)
+            return 0;
+        break;
+
+    case WM_CLOSE:
         //  internal
         window->m_error = event::post(window, event_type::window_close, false);
         if (window->m_flags == window_flags::quit_on_close)
@@ -207,9 +224,9 @@ LRESULT WINAPI window_data::proc(const HWND hwnd, const UINT msg, const WPARAM w
             window->m_error = on_resize();
         window->m_win32_flags &= ~(win32_flag::resizing1 | win32_flag::resizing2);
         break;
-   
-	case WM_SIZE:
-	{
+
+    case WM_SIZE:
+    {
         if (wparam == SIZE_MINIMIZED)
         {
             window->m_win32_flags |= win32_flag::minimized;
@@ -227,14 +244,51 @@ LRESULT WINAPI window_data::proc(const HWND hwnd, const UINT msg, const WPARAM w
             window->m_error = on_resize();
         }
         break;
-	}
-	case WM_ACTIVATE:
-	{
+    }
+    case WM_ACTIVATE:
+    {
         const auto active = LOWORD(wparam);
         window->m_error = event::post(window, event_type::window_active, active != WA_INACTIVE);
-		break;
-	}
-	}
+        break;
+    }
+
+    case WM_KEYDOWN:
+    case WM_KEYUP:
+    case WM_SYSKEYDOWN:
+    case WM_SYSKEYUP:
+    {
+        key_message key_input;
+        auto count = detail::from_winapi(key_input, wparam, lparam, key_state());
+        for (auto k = 0u; k < count; ++k)
+        {
+            if (const auto error = event::post(window, event_type::window_input, input_message(key_input)))
+            {
+                window->m_error = error;
+                break;
+            }
+        }
+        break;
+    }
+    case WM_MOUSEMOVE:
+    case WM_LBUTTONDOWN:
+    case WM_RBUTTONDOWN:
+    case WM_MBUTTONDOWN:
+    case WM_XBUTTONDOWN:
+    case WM_LBUTTONUP:
+    case WM_RBUTTONUP:
+    case WM_MBUTTONUP:
+    case WM_XBUTTONUP:
+    case WM_LBUTTONDBLCLK:
+    case WM_RBUTTONDBLCLK:
+    case WM_MBUTTONDBLCLK:
+    case WM_XBUTTONDBLCLK:
+    {
+        mouse_message mouse_input;
+        detail::from_winapi(mouse_input, 0, 0, msg, wparam, lparam, key_state());
+        window->m_error = event::post(window, event_type::window_input, input_message(mouse_input));
+        break;
+    }
+    }
 	return win32_def_window_proc(hwnd, msg, wparam, lparam);
 };
 error_type window_data::loop(const duration_type timeout) noexcept
@@ -263,7 +317,8 @@ error_type window_data::loop(const duration_type timeout) noexcept
                     {
                         return {};
                     }
-                    else if (event->type == event_type::window_close)
+                    else if (event->type == event_type::window_close && 
+                        shared_ptr<event_queue>(event->source).get() == this)
                     {
                         //  external
                         if (event->data<bool>())
@@ -277,9 +332,6 @@ error_type window_data::loop(const duration_type timeout) noexcept
                     }
                 }
             }
-			//if (win32_msg.hwnd != data->hwnd)
-			//	continue;
-			//g_input.wnd_proc(msg);
 		}
         if (display)
             ICY_ERROR(display->draw());

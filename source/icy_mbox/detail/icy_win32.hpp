@@ -21,7 +21,7 @@ private:
     static long long __stdcall proc(HWND__*, uint32_t, unsigned long long, long long) noexcept;    
 private:
     HWND__* m_handle = nullptr;
-    icy::detail::spin_lock<> m_lock;
+    icy::detail::rw_spin_lock m_lock;
     icy::array<icy::input_message> m_queue;
     icy::array<wchar_t> m_name;
     icy::error_type m_error;
