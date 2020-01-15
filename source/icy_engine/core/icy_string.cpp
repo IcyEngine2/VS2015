@@ -1,6 +1,5 @@
 #include <icy_engine/core/icy_string.hpp>
 #include <icy_engine/core/icy_array.hpp>
-#include <icy_engine/core/icy_map.hpp>
 #include <guiddef.h>
 #include <Windows.h>
 #define snscanf _snscanf_s
@@ -553,7 +552,7 @@ error_type string::replace(const string_view find, const string_view replace) no
 	}
 	return {};
 }
-error_type icy::emplace(map<string, string>& map, const string_view key, const string_view val) noexcept
+/*error_type icy::emplace(map<string, string>& map, const string_view key, const string_view val) noexcept
 {
 	string new_key;
 	string new_val;
@@ -562,6 +561,7 @@ error_type icy::emplace(map<string, string>& map, const string_view key, const s
 	ICY_ERROR(map.find_or_insert(std::move(new_key), std::move(new_val)));
 	return {};
 }
+*/
 error_type icy::to_utf16(const string_view value, array<wchar_t>& wide) noexcept
 {
 	auto size = 0_z;

@@ -43,12 +43,9 @@ public:
     {
         using namespace icy;
         string_view type;
-        string_view arg;
-
-        auto ctrl = key_mod(0u);
-        auto alt = key_mod(0u);
-        auto shift = key_mod(0u);
-
+        string arg;
+        auto mod = key_mod::none;
+        
         if (msg.type == input_type::key)
         {
             if (msg.key.event == key_event::press)
@@ -58,10 +55,8 @@ public:
             else if (msg.key.event == key_event::release)
                 type = "Key release"_s;
 
-            arg = to_string(msg.key.key);
-            ctrl = msg.key.ctrl;
-            alt = msg.key.alt;
-            shift = msg.key.shift;
+            to_string(to_string(msg.key.key), arg);
+            mod = msg.key.mod;
         }
         else if (msg.type == input_type::mouse)
         {
@@ -73,19 +68,18 @@ public:
                 type = "Btn release"_s;
 
             if (msg.mouse.button == mouse_button::left)
-                arg = "Left"_s;
+                to_string("Left"_s, arg);
             else if (msg.mouse.button == mouse_button::right)
-                arg = "Right"_s;
+                to_string("Right"_s, arg);
             else if (msg.mouse.button == mouse_button::mid)
-                arg = "Middle"_s;
+                to_string("Middle"_s, arg);
             else if (msg.mouse.button == mouse_button::x1)
-                arg = "Extra[1]"_s;
+                to_string("Extra[1]"_s, arg);
             else if (msg.mouse.button == mouse_button::x2)
-                arg = "Extra[2]"_s;
+                to_string("Extra[2]"_s, arg);
 
-            ctrl = msg.mouse.ctrl;
-            alt = msg.mouse.alt;
-            shift = msg.mouse.shift;
+            arg.appendf(" %1 %2", int(msg.mouse.point.x), int(msg.mouse.point.y));
+            mod = msg.mouse.mod;
         }
         else if (msg.type == input_type::active)
         {
@@ -107,29 +101,29 @@ public:
             ICY_ERROR(mods.append(text));
             return error_type();
         };
-        if (ctrl.right())
+        if (mod & key_mod::rctrl)
         {
             ICY_ERROR(append_mod("RCtrl"_s));
         }
-        else if (ctrl.left())
+        else if (mod & key_mod::lctrl)
         {
             ICY_ERROR(append_mod("Ctrl"_s));
         }
 
-        if (alt.right())
+        if (mod & key_mod::ralt)
         {
             ICY_ERROR(append_mod("RAlt"_s));
         }
-        else if (alt.left())
+        else if (mod & key_mod::lalt)
         {
             ICY_ERROR(append_mod("Alt"_s));
         }
 
-        if (shift.right())
+        if (mod & key_mod::rshift)
         {
             ICY_ERROR(append_mod("RShift"_s));
         }
-        else if (shift.left())
+        else if (mod & key_mod::lshift)
         {
             ICY_ERROR(append_mod("Shift"_s));
         }

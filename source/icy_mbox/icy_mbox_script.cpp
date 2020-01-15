@@ -290,6 +290,7 @@ error_type mbox::library::initialize() noexcept
     base_root.index = root;
     ICY_ERROR(to_string("Root"_s, base_root.name));
     ICY_ERROR(m_data.insert(guid(root), std::move(base_root)));
+    ++m_version;
     return {};
 }
 error_type mbox::library::load_from(const string_view filename) noexcept
@@ -320,7 +321,7 @@ error_type mbox::library::load_from(const string_view filename) noexcept
     ICY_ERROR(m_data.insert(guid(mbox::root), std::move(root)));
     
     success = true;
-
+    ++m_version;
     return {};
 }
 error_type mbox::library::save_to(const string_view filename) noexcept
@@ -349,7 +350,7 @@ error_type mbox::library::save_to(const string_view filename) noexcept
 error_type mbox::library::is_valid(const base& base) noexcept
 {
     const auto parent = m_data.find(base.parent);
-    if (parent == m_data.end() || find(base.index))
+    if (parent == m_data.end() && base.index != mbox::root)
         return make_stdlib_error(std::errc::invalid_argument);
 
     if (base.name.empty())
@@ -587,6 +588,17 @@ error_type mbox::library::is_valid(const base& base) noexcept
         break;
     }
 
+    case mbox::type::group:
+    {
+        for (auto&& profile : base.value.group.profiles)
+        {
+            const auto ptr = find(profile);
+            if (!ptr || ptr->type != mbox::type::profile)
+                return make_stdlib_error(std::errc::invalid_argument);                
+        }
+        break;
+    }
+
     default:
         return make_stdlib_error(std::errc::invalid_argument);
     }
@@ -707,10 +719,46 @@ error_type mbox::library::path(const icy::guid& index, icy::string& str) noexcep
 }
 error_type mbox::library::remove(const icy::guid& index, remove_query& query) noexcept
 {
-    return make_stdlib_error(std::errc::function_not_supported);    
+    const auto base = find(index);
+    if (!base || index == mbox::root)
+        return make_stdlib_error(std::errc::invalid_argument);
+
+    mbox::library tmp;
+    ICY_ERROR(mbox::library::copy(*this, tmp));
+
+    query.m_library = this;
+    query.m_indices.clear();
+
+    ICY_ERROR(query.m_indices.push_back(index));
+    tmp.m_data.erase(tmp.m_data.find(index));
+
+    while (true)
+    {
+        auto all_valid = true;
+        for (auto it = tmp.m_data.begin(); it != tmp.m_data.end();)
+        {
+            if (tmp.is_valid(it->value) != error_type())
+            {
+                ICY_ERROR(query.m_indices.push_back(it->key));
+                it = tmp.m_data.erase(it);
+                all_valid = false;
+            }
+            else
+            {
+                ++it;
+            }
+        }
+        if (all_valid)
+            break;
+    }
+    query.m_version = m_version;
+    return {}; 
 }
 error_type mbox::library::insert(const base& base) noexcept
 {
+    if (m_data.try_find(base.index))
+        return make_stdlib_error(std::errc::invalid_argument);
+
     ICY_ERROR(is_valid(base));
     auto& parent = m_data.find(base.parent)->value;
     
@@ -791,6 +839,7 @@ error_type mbox::library::insert(const base& base) noexcept
             parent_indices->pop_back();
         return error;
     }
+    ++m_version;
     return {};
 }
 error_type mbox::library::modify(const base& base) noexcept
@@ -844,17 +893,57 @@ error_type mbox::library::modify(const base& base) noexcept
         mbox::base old_base;
         ICY_ERROR(mbox::base::copy(it->value, old_base));
         ICY_ERROR(mbox::base::copy(base, it->value));
-        if (!is_valid(it->value))
+        if (const auto error = is_valid(it->value))
         {
             it->value = std::move(old_base);
-            return make_stdlib_error(std::errc::invalid_argument);
+            return error;
         }
         break;
     }
     }
+    ++m_version;
     return {};
 }
+error_type mbox::library::remove_query::commit() noexcept
+{
+    if (!m_library || m_library->m_version != m_version)
+        return make_stdlib_error(std::errc::invalid_argument);
 
+    mbox::library lib;
+    ICY_ERROR(mbox::library::copy(*m_library, lib));
+
+    for (auto&& index : m_indices)
+        lib.m_data.erase(lib.m_data.find(index));
+    
+    for (auto&& base : lib.m_data)
+    {
+        switch (base.value.type)
+        {
+        case mbox::type::list_bindings:
+        case mbox::type::list_commands:
+        case mbox::type::list_events:
+        case mbox::type::list_inputs:
+        case mbox::type::list_timers:
+        case mbox::type::list_variables:
+        case mbox::type::directory:
+        {
+            array<guid> new_indices;
+            for (auto&& child : base.value.value.directory.indices)
+            {
+                if (lib.m_data.try_find(child))
+                    ICY_ERROR(new_indices.push_back(child));
+            }
+            base.value.value.directory.indices = std::move(new_indices);
+            break;
+        }
+        default:
+            break;
+        }
+    }
+    m_library->m_data = std::move(lib.m_data);
+    ++m_version;
+    return {};
+}
 error_type mbox::library::to_json(const base& base, icy::json& obj) noexcept
 {
     obj = json_type::object;

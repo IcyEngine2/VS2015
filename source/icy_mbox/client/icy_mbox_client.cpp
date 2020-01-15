@@ -528,9 +528,10 @@ error_type network_tcp_thread::run() noexcept
                     {
                         const auto ptr = reinterpret_cast<const input_message*>(reply.bytes.data());
                         const auto len = reply.bytes.size() / sizeof(*ptr);
-                        const auto vec = const_array_view<input_message>(ptr, len);
+                        const auto vec = const_array_view<input_message>(ptr, len);                      
                         if (const auto error = instance().m_window_hook.send(vec))
                             return log("Append recv input buffer"_s, error);
+                     
                     }
                     else if (last_cmd.type == mbox::command_type::image)
                     {
@@ -547,6 +548,7 @@ error_type network_tcp_thread::run() noexcept
                         {
                             instance().m_info.profile = ptr->profile;
                             auto name = string_view(ptr->window_name, strnlen(ptr->window_name, _countof(ptr->window_name)));
+                            memcpy(instance().m_info.window_name, name.bytes().data(), name.bytes().size());
                             if (const auto error = instance().m_window_hook.rename(name))
                                 return log("Set profile"_s, error);
                         }

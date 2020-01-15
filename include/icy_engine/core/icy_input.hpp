@@ -58,19 +58,27 @@ namespace icy
 		text,
         active,
 	};
+    struct key_mod_enum
+    {
+        enum : uint32_t
+        {
+            none    =   0x00,
+            lctrl   =   0x01,
+            lalt    =   0x02,
+            lshift  =   0x04,
+            rctrl   =   0x08,
+            ralt    =   0x10,
+            rshift  =   0x20,
+        };
+    };
+    using key_mod = decltype(key_mod_enum::none);
 	using mouse_event = decltype(mouse_event_enum::_total);
 	using mouse_button = decltype(mouse_button_enum::_total);
 		
     struct key_message
     {
-        key_message
-        (
-            const key key = key::none, 
-            const key_event event = key_event::none, 
-            const uint32_t ctrl = 0,
-            const uint32_t alt = 0, 
-            const uint32_t shift = 0
-        ) noexcept : key(key), event(event), ctrl(ctrl), alt(alt), shift(shift)
+        key_message(const key key = key::none, const key_event event = key_event::none, 
+            const key_mod mod = key_mod::none) noexcept : key(key), event(event), mod(mod)
         {
 
         }
@@ -81,11 +89,9 @@ namespace icy
         }
         const key key;
         const key_event event;
-        const uint32_t ctrl;
-        const uint32_t alt;
-        const uint32_t shift;
+        const key_mod mod;
     };
-    class key_mod
+    /*class key_mod
     {
     public:
         //  pass in key_message .control or .alt or .shift
@@ -116,7 +122,7 @@ namespace icy
         }
     private:
         const uint32_t m_value;
-    };
+    };*/
     struct mouse_message
     {
         mouse_message() noexcept
@@ -143,11 +149,9 @@ namespace icy
             double wheel;
             mouse_button button;
         };
+        key_mod mod;
         struct
         {
-            uint32_t ctrl : 2;
-            uint32_t alt : 2;
-            uint32_t shift : 2;
             union
             {
                 struct
@@ -203,25 +207,17 @@ namespace icy
 		};
 		const input_type type;
 	};
-    namespace detail
+    inline void key_mod_set(key_mod& mod, const std::bitset<256>& buffer) noexcept
     {
-        inline auto fill_key_mod(key_message& msg, const std::bitset<256>& buffer) noexcept
-        {
-            msg = 
-            { 
-                msg.key, 
-                msg.event, 
-                uint32_t((buffer[size_t(key::left_ctrl)] << 0)  | (buffer[size_t(key::right_ctrl)] << 1)),
-                uint32_t((buffer[size_t(key::left_alt)] << 0)   | (buffer[size_t(key::right_alt)] << 1)),
-                uint32_t((buffer[size_t(key::left_shift)] << 0) | (buffer[size_t(key::right_shift)] << 1))
-            };
-        }
-		inline auto fill_key_mod(mouse_message& msg, const std::bitset<256>& buffer) noexcept
-        {
-            msg.ctrl = uint32_t((buffer[size_t(key::left_ctrl)] << 0) | (buffer[size_t(key::right_ctrl)] << 1));
-            msg.alt = uint32_t((buffer[size_t(key::left_alt)] << 0) | (buffer[size_t(key::right_alt)] << 1));
-            msg.shift = uint32_t((buffer[size_t(key::left_shift)] << 0) | (buffer[size_t(key::right_shift)] << 1));
-        }
+        mod = key_mod(mod | (buffer[size_t(key::left_ctrl)] ? key_mod::lctrl : 0));
+        mod = key_mod(mod | (buffer[size_t(key::left_alt)] ? key_mod::lalt : 0));
+        mod = key_mod(mod | (buffer[size_t(key::left_shift)] ? key_mod::lshift : 0));
+        mod = key_mod(mod | (buffer[size_t(key::right_ctrl)] ? key_mod::rctrl : 0));
+        mod = key_mod(mod | (buffer[size_t(key::right_alt)] ? key_mod::ralt : 0));
+        mod = key_mod(mod | (buffer[size_t(key::right_shift)] ? key_mod::rshift : 0));
+    }
+    namespace detail
+    {       
 		key scan_vk_to_key(uint16_t vkey, uint16_t scan, const bool isE0) noexcept;
 		uint16_t from_winapi(key_message& msg, const size_t wParam, const ptrdiff_t lParam, const std::bitset<256>& buffer) noexcept;
 		uint16_t from_winapi(key_message& key, const tagMSG& msg, const std::bitset<256> & buffer) noexcept;
@@ -236,6 +232,7 @@ namespace icy
 		return lhs ? (lhs & rhs) != 0 : true;
 	}
 	error_type to_string(const key_message& key, string& str) noexcept;
+    error_type to_string(const key_mod mod, string& str) noexcept;
     string_view to_string(const key key) noexcept;
 }
 

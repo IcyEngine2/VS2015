@@ -1,5 +1,6 @@
 #include "icy_mbox_script_context.hpp"
 #include "icy_mbox_script_form.hpp"
+#include "icy_mbox_script_common.hpp"
 
 using namespace icy;
 
@@ -122,11 +123,39 @@ icy::error_type mbox_context::menu(const icy::guid& index) noexcept
     {
         mbox::library::remove_query query;
         ICY_ERROR(m_library->remove(index, query));
-        if (query.indices().size() == 1)
+        string str;
+        ICY_ERROR(str.appendf("Delete %1 elements (includes children/references)?", query.indices().size()));
+        
+        map<string, guid> map;
+        for (auto&& index : query.indices())
         {
-            
+            string path;
+            ICY_ERROR(m_library->path(index, path));
+            array<string_view> words;
+            ICY_ERROR(split(path, words, '/'));
+            string name;
+            for (auto k = words.size(); k; --k)
+            {
+                if (k != words.size())
+                    ICY_ERROR(name.append("/"_s));
+                ICY_ERROR(name.append(words[k - 1]));
+            }
+            ICY_ERROR(map.insert(std::move(name), guid(index)));
         }
-        //ICY_ERROR(event::post(nullptr, mbox_event_type_delete, mbox_event(base->index)));
+        for (auto&& pair : map)
+        {
+            ICY_ERROR(str.append("\r\n"_s));
+            ICY_ERROR(str.append(pair.key));
+        }
+        
+        auto yesno = false;
+        ICY_ERROR(win32_message(str, "Confirm delete"_s, &yesno));
+        if (yesno)
+        {
+            const auto index_saved = base->index;
+            ICY_ERROR(query.commit());
+            ICY_ERROR(event::post(nullptr, mbox_event_type_delete, mbox_event_data_delete(index_saved)));
+        }
     }
     else if (action.index)
     {

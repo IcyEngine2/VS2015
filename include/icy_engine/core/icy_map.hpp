@@ -1,6 +1,7 @@
 #pragma once
 
 #include "icy_array.hpp"
+#include "icy_string.hpp"
 
 namespace icy
 {
@@ -516,20 +517,99 @@ namespace icy
 				*it = iterator{ *this, index };
 			return {};
 		}
+        error_type insert(const key_type& new_key, value_type&& new_val, iterator* it = nullptr) noexcept
+        {
+            static_assert(std::is_trivially_destructible<key_type>::value, "KEY MUST BE TRIVIAL");
+            return insert(key_type(new_key), std::move(new_val), it);
+        }
+        error_type insert(key_type&& new_key, const value_type& new_val, iterator* it = nullptr) noexcept
+        {
+            static_assert(std::is_trivially_destructible<value_type>::value, "VALUE MUST BE TRIVIAL");
+            return insert(std::move(new_key), value_type(new_val), it);
+        }
+        error_type insert(const key_type& new_key, const value_type& new_val, iterator* it = nullptr) noexcept
+        {
+            static_assert(std::is_trivially_destructible<key_type>::value, "KEY MUST BE TRIVIAL");
+            static_assert(std::is_trivially_destructible<value_type>::value, "VALUE MUST BE TRIVIAL");
+            return insert(key_type(new_key), value_type(new_val), it);
+        }
 		error_type find_or_insert(key_type&& key, value_type&& val, iterator* it = nullptr) noexcept
 		{
 			auto jt = find(key);
 			if (jt == end())
-				return insert(std::move(key), std::move(val), it);
+                return insert(std::move(key), std::move(val), it);
 			if (it)
 				*it = jt;
             return {};
 		}
+        error_type find_or_insert(const key_type& new_key, value_type&& new_val, iterator* it = nullptr) noexcept
+        {
+            static_assert(std::is_trivially_destructible<key_type>::value, "KEY MUST BE TRIVIAL");
+            return find_or_insert(key_type(new_key), std::move(new_val), it);
+        }
+        error_type find_or_insert(key_type&& new_key, const value_type& new_val, iterator* it = nullptr) noexcept
+        {
+            static_assert(std::is_trivially_destructible<value_type>::value, "VALUE MUST BE TRIVIAL");
+            return find_or_insert(std::move(new_key), value_type(new_val), it);
+        }
+        error_type find_or_insert(const key_type& new_key, const value_type& new_val, iterator* it = nullptr) noexcept
+        {
+            static_assert(std::is_trivially_destructible<key_type>::value, "KEY MUST BE TRIVIAL");
+            static_assert(std::is_trivially_destructible<value_type>::value, "VALUE MUST BE TRIVIAL");
+            return find_or_insert(key_type(new_key), value_type(new_val), it);
+        }
 	private:
 		array<T> m_vals;
 		array<K> m_keys;
 	};
-	class string;
-	class string_view;
-	error_type emplace(map<string, string>& map, const string_view key, const string_view val) noexcept;
+
+    template<typename T>
+    class dictionary : public map<string, T>
+    {
+    public:
+        using type = dictionary;
+        using base = map<string, T>;
+        using typename base::key_type;
+        using typename base::size_type;
+        using typename base::difference_type;
+        using typename base::value_type;
+        using typename base::const_pair_type;
+        using typename base::pair_type;
+        using typename base::const_pointer;
+        using typename base::pointer;
+        using typename base::const_reference;
+        using typename base::reference;
+        using typename base::const_iterator;
+        using typename base::iterator;
+        using typename base::const_reverse_iterator;
+        using typename base::reverse_iterator;
+    public:
+        template<typename U>
+        error_type insert(const U& new_key, T&& new_val, iterator* it = nullptr) noexcept
+        {
+            string key;
+            ICY_ERROR(to_string(new_key, key));
+            return base::insert(std::move(key), std::move(new_val), it);
+        }
+        template<typename U>
+        error_type insert(const U& new_key, const T& new_val, iterator* it = nullptr) noexcept
+        {
+            static_assert(std::is_trivially_destructible<T>::value, "VALUE TYPE MUST BE TRIVIAL");
+            return insert(new_key, T(new_val), it);
+        }
+        template<typename U>
+        error_type find_or_insert(const U& new_key, T&& new_val, iterator* it = nullptr) noexcept
+        {
+            string key;
+            ICY_ERROR(to_string(new_key, key));
+            return base::find_or_insert(std::move(key), std::move(new_val), it);
+        }
+        template<typename U>
+        error_type find_or_insert(const U& new_key, const T& new_val, iterator* it = nullptr) noexcept
+        {
+            static_assert(std::is_trivially_destructible<T>::value, "VALUE TYPE MUST BE TRIVIAL");
+            return find_or_insert(new_key, T(new_val), it);
+        }
+    };
+	//error_type emplace(map<string, string>& map, const string_view key, const string_view val) noexcept;
 }

@@ -16,6 +16,9 @@
   <ItemGroup>
     <ClInclude Include="..\..\include\icy_qtgui\icy_qtgui.hpp" />
   </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="..\..\qt5.natvis" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <ProjectGuid>{4D337F45-E466-4650-9782-63FAEA81F1B1}</ProjectGuid>

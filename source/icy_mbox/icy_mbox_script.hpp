@@ -203,6 +203,7 @@ namespace mbox
         private:
             mbox::library* m_library = nullptr;
             icy::array<icy::guid> m_indices;
+            size_t m_version = 0;
         };
     public:
         icy::error_type initialize() noexcept;
@@ -249,6 +250,7 @@ namespace mbox
                 ICY_ERROR(mbox::base::copy(pair.value, tmp));
                 ICY_ERROR(dst.m_data.insert(icy::guid(pair.key), std::move(tmp)));
             }
+            dst.m_version = src.m_version;
             return {};
         }
     private:
@@ -256,6 +258,7 @@ namespace mbox
         icy::error_type to_json(const base& base, icy::json& json_output) noexcept;
         icy::error_type from_json(const icy::json& json_input, base& output) noexcept;
     private:
+        size_t m_version = 0;
         icy::map<icy::guid, base> m_data;
     };
 

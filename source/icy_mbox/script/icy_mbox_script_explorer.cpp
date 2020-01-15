@@ -48,6 +48,11 @@ icy::error_type mbox_explorer::exec(const icy::event event) noexcept
         ICY_ERROR(m_gui->insert_rows(node.parent(), node.row(), 1));
         ICY_ERROR(append(node.parent(), node.row(), *base));
     }
+    else if (event->type == mbox_event_type_delete)
+    {
+        ICY_ERROR(reset());
+        return {};
+    }
     else if (event->type == mbox_event_type_modify)
     {
         const auto& event_data = event->data<mbox_event_data_modify>();

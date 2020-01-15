@@ -15,18 +15,22 @@
 
 using namespace icy;
 
-error_type mbox_form_key_value_base::reset(mbox::library& library, const mbox::base& base) noexcept
+error_type mbox_form_key_value_base::reset(mbox::library& library, const mbox::base& base, const bool no_default_groups) noexcept
 {
+    if (m_model)
+    {
+        ICY_ERROR(m_model.gui->destroy(m_model));
+        m_model = *m_model.gui;
+    }
     //if (base.index != guid() && base.index == m_select)
     //   return {};
-
     m_data.clear();
     m_select = guid();
-    ICY_ERROR(model.gui->clear(model));
     if (base.type == mbox::type::none)
         return {};
 
-    ICY_ERROR(model.gui->insert_cols(model, 0, 1));
+    ICY_ERROR(m_model.initialize());
+    ICY_ERROR(m_model.gui->insert_cols(m_model, 0, 1));
 
     array<guid> indices;
     const_array_view<guid> indices_ref;
@@ -52,37 +56,39 @@ error_type mbox_form_key_value_base::reset(mbox::library& library, const mbox::b
         }
         ICY_ERROR(map.insert(std::move(path), guid(index)));
     }
-    ICY_ERROR(model.gui->insert_rows(model, 0, map.size()));
+    ICY_ERROR(m_model.gui->insert_rows(m_model, 0, map.size()));
     auto row = 0u;
     for (auto&& pair : map)
     {
-        const auto node = model.gui->node(model, row++, 0);
-        ICY_ERROR(model.gui->text(node, pair.key));
-        ICY_ERROR(model.gui->udata(node, pair.value));
+        const auto node = m_model.gui->node(m_model, row++, 0);
+        ICY_ERROR(m_model.gui->text(node, pair.key));
+        ICY_ERROR(m_model.gui->udata(node, pair.value));
     }
     if (!map.empty())
         m_select = map.begin()->value;
     
-    if (base.index == guid() && base.type == mbox::type::group)
+    if (base.index == guid() && base.type == mbox::type::group && no_default_groups == false)
     {
         const std::pair<string_view, guid> group[] = {
         { mbox::str_group_default, mbox::group_default },
         { mbox::str_group_broadcast, mbox::group_broadcast },
         { mbox::str_group_multicast, mbox::group_multicast } };        
 
-        ICY_ERROR(model.gui->insert_rows(model, 0, _countof(group)));
+        ICY_ERROR(m_model.gui->insert_rows(m_model, 0, _countof(group)));
         row = 0u;
         for (auto&& pair : group)
         {
-            const auto node = model.gui->node(model, row++, 0);
-            ICY_ERROR(model.gui->text(node, pair.first));
-            ICY_ERROR(model.gui->udata(node, pair.second));
+            const auto node = m_model.gui->node(m_model, row++, 0);
+            ICY_ERROR(m_model.gui->text(node, pair.first));
+            ICY_ERROR(m_model.gui->udata(node, pair.second));
             ICY_ERROR(m_data.push_back(pair.second));
         }
         m_select = mbox::group_default;
     }
     for (auto&& pair : map)
         ICY_ERROR(m_data.push_back(pair.value));
+
+    ICY_ERROR(m_model.gui->bind(value, m_model));
     return {};
 }
 
@@ -160,14 +166,14 @@ error_type mbox_form_value_input::create(mbox::base& base) noexcept
     using namespace icy;
 
     auto& value = base.value.input;
-    if (!m_button.select || !m_event.select)
+    if (!m_button.select() || !m_event.select())
         return make_stdlib_error(std::errc::invalid_argument);
 
-    value.ctrl = m_ctrl.select;
-    value.alt = m_alt.select;
-    value.shift = m_shift.select;
-    value.itype = mbox::input_type(m_event.select);
-    value.button = key(m_button.select);
+    value.ctrl = m_ctrl.select();
+    value.alt = m_alt.select();
+    value.shift = m_shift.select();
+    value.itype = mbox::input_type(m_event.select());
+    value.button = key(m_button.select());
     ICY_ERROR(to_string(m_macro.string, value.macro));
 
     return {};
@@ -247,7 +253,6 @@ error_type mbox_form_value_type::initialize(const gui_widget parent, const mbox:
 
 
         ICY_ERROR(m_type.scroll(type));
-        m_type.select = type;
         ICY_ERROR(m_group.scroll(group));
         ICY_ERROR(on_select(type));
 
@@ -264,6 +269,7 @@ error_type mbox_form_value_type::initialize(const gui_widget parent, const mbox:
                 ICY_ERROR(m_reference_list.scroll(ref_list->index));
                 ICY_ERROR(m_reference_base.reset(m_library, *ref_list));
                 ICY_ERROR(m_reference_base.scroll(reference));
+                m_reference_cache = reference;
             }
         }
 
@@ -280,6 +286,7 @@ error_type mbox_form_value_type::initialize(const gui_widget parent, const mbox:
                 ICY_ERROR(m_secondary_list.scroll(sec_list->index));
                 ICY_ERROR(m_secondary_base.reset(m_library, *sec_list));
                 ICY_ERROR(m_secondary_base.scroll(secondary));
+                m_secondary_cache = secondary;
             }
         }
     }
@@ -298,29 +305,38 @@ error_type mbox_form_value_type::initialize(const gui_widget parent, const mbox:
 }
 error_type mbox_form_value_type::exec(const event event) noexcept
 {
+    if (event->type != event_type::gui_select)
+        return {};
+        
+    const auto old_type = m_type.select();
     ICY_ERROR(m_type.exec(event));
     ICY_ERROR(m_group.exec(event)); 
     ICY_ERROR(m_reference_list.exec(event));
     ICY_ERROR(m_reference_base.exec(event));
     ICY_ERROR(m_secondary_list.exec(event));
     ICY_ERROR(m_secondary_base.exec(event));
-
-    if (event->type == event_type::gui_select)
+    
+    const auto& event_data = event->data<gui_event>();
+    if (event_data.widget == m_type.value && old_type != m_type.select())
     {
-        const auto& event_data = event->data<gui_event>();
-        if (event_data.widget == m_type.value)
+        ICY_ERROR(on_select(m_type.select()));
+    }
+    else if (event_data.widget == m_reference_list.value)
+    {
+        if (const auto ptr = m_library.find(m_reference_list.select()))
         {
-            ICY_ERROR(on_select(m_type.select));
+            ICY_ERROR(m_reference_base.reset(m_library, *ptr));
+            if (m_mode != mbox_form_mode::create)
+                m_reference_base.scroll(m_reference_cache);
         }
-        else if (event_data.widget == m_reference_list.value)
+    }
+    else if (event_data.widget == m_secondary_list.value)
+    {
+        if (const auto ptr = m_library.find(m_secondary_list.select()))
         {
-            if (const auto ptr = m_library.find(m_reference_list.select()))
-                ICY_ERROR(m_reference_base.reset(m_library, *ptr));
-        }
-        else if (event_data.widget == m_secondary_list.value)
-        {
-            if (const auto ptr = m_library.find(m_secondary_list.select()))
-                ICY_ERROR(m_secondary_base.reset(m_library, *ptr));
+            ICY_ERROR(m_secondary_base.reset(m_library, *ptr));
+            if (m_mode != mbox_form_mode::create)
+                m_secondary_base.scroll(m_secondary_cache);
         }
     }
     return {};
@@ -335,7 +351,7 @@ error_type mbox_form_value_type::on_select(const uint32_t type) noexcept
     
     if (m_mtype == mbox::type::event)
     {
-        switch (auto type = mbox::event_type(m_type.select))
+        switch (auto type = mbox::event_type(m_type.select()))
         {
         case mbox::event_type::variable_changed:
         case mbox::event_type::variable_equal:
@@ -375,7 +391,7 @@ error_type mbox_form_value_type::on_select(const uint32_t type) noexcept
     }
     else // action
     {
-        switch (const auto type = mbox::action_type(m_type.select))
+        switch (const auto type = mbox::action_type(m_type.select()))
         {
         case mbox::action_type::variable_assign:
         case mbox::action_type::variable_inc:
@@ -449,7 +465,7 @@ error_type mbox_form_value_type::on_select(const uint32_t type) noexcept
 
     mbox::base list_reference; list_reference.type = list_1;
     mbox::base list_secondary; list_secondary.type = list_2;
-    ICY_ERROR(m_reference_list.reset(m_library, list_reference));
+    ICY_ERROR(m_reference_list.reset(m_library, list_reference, list_1  == mbox::type::group));
     ICY_ERROR(m_secondary_list.reset(m_library, list_secondary));
 
 
@@ -480,11 +496,11 @@ error_type mbox_form_value_type::on_select(const uint32_t type) noexcept
 
 error_type mbox_form_value_event::create(mbox::base& base) noexcept
 {
-    if (!m_type.select)
+    if (!m_type.select())
         return make_stdlib_error(std::errc::invalid_argument);
 
     auto& value = base.value.event;
-    value.etype = mbox::event_type(m_type.select);
+    value.etype = mbox::event_type(m_type.select());
     value.group = m_group.select();
 
     switch (value.etype)
@@ -530,11 +546,11 @@ error_type mbox_form_value_event::create(mbox::base& base) noexcept
 
 error_type mbox_form_value_action::create(mbox::base& base) noexcept
 {
-    if (!m_type.select || base.value.command.actions.empty())
+    if (!m_type.select() || base.value.command.actions.empty())
         return make_stdlib_error(std::errc::invalid_argument);
 
     auto& value = base.value.command.actions.back();
-    value.atype = mbox::action_type(m_type.select);
+    value.atype = mbox::action_type(m_type.select());
     value.group = m_group.select();
 
     if (value.atype == mbox::action_type::disable_bindings_list ||
@@ -542,6 +558,16 @@ error_type mbox_form_value_action::create(mbox::base& base) noexcept
         value.atype == mbox::action_type::set_focus) 
     {
         if (m_reference_list.select() == guid())
+            return make_stdlib_error(std::errc::invalid_argument);
+        value.reference = m_reference_list.select();
+        return {};
+    }
+    else if (value.atype == mbox::action_type::join_group)
+    {
+        if (m_reference_list.select() == guid() || 
+            m_reference_list.select() == mbox::group_broadcast ||
+            m_reference_list.select() == mbox::group_default ||
+            m_reference_list.select() == mbox::group_multicast)
             return make_stdlib_error(std::errc::invalid_argument);
         value.reference = m_reference_list.select();
         return {};
@@ -873,12 +899,13 @@ error_type mbox_form_value_profile::create(mbox::base& base) noexcept
 }
 error_type mbox_form_value_profile::exec(const icy::event event) noexcept
 {
+    const auto old_cmd = m_command_list.select();
     ICY_ERROR(m_command_list.exec(event));
     ICY_ERROR(m_command_base.exec(event));
     if (event->type == event_type::gui_select)
     {
         const auto& event_data = event->data<gui_event>();
-        if (event_data.widget == m_command_list.value)
+        if (event_data.widget == m_command_list.value && old_cmd != m_command_list.select())
         {
             if (const auto ptr = m_library.find(m_command_list.select()))
                 ICY_ERROR(m_command_base.reset(m_library, *ptr));
@@ -967,6 +994,8 @@ error_type mbox_form_value_binding::create(mbox::base& base) noexcept
 }
 error_type mbox_form_value_binding::exec(const icy::event event) noexcept
 {
+    const auto old_evt = m_event_list.select();
+    const auto old_cmd = m_command_list.select();
     ICY_ERROR(m_group.exec(event));
     ICY_ERROR(m_event_list.exec(event));
     ICY_ERROR(m_event_base.exec(event));
@@ -975,19 +1004,15 @@ error_type mbox_form_value_binding::exec(const icy::event event) noexcept
     if (event->type == event_type::gui_select)
     {
         const auto& event_data = event->data<gui_event>();
-        if (event_data.widget == m_event_list.value)
+        if (event_data.widget == m_event_list.value && old_evt != m_event_list.select())
         {
-            const auto list_ptr = m_library.find(m_event_list.select());
-            const auto base_ptr = m_library.find(m_event_base.select());
-            if (list_ptr && (!base_ptr || base_ptr->parent != list_ptr->index))
-                ICY_ERROR(m_event_base.reset(m_library, *list_ptr));
+            if (const auto ptr = m_library.find(m_event_list.select()))
+                ICY_ERROR(m_event_base.reset(m_library, *ptr));
         }
-        else if (event_data.widget == m_command_list.value)
+        else if (event_data.widget == m_command_list.value && old_cmd != m_command_list.select())
         {
-            const auto list_ptr = m_library.find(m_command_list.select());
-            const auto base_ptr = m_library.find(m_command_base.select());
-            if (list_ptr && (!base_ptr || base_ptr->parent != list_ptr->index))
-                ICY_ERROR(m_command_base.reset(m_library, *list_ptr));
+            if (const auto ptr = m_library.find(m_command_list.select()))
+                ICY_ERROR(m_command_base.reset(m_library, *ptr));
         }
     }
     return {};
@@ -1015,6 +1040,7 @@ error_type mbox_form::initialize(const mbox::base& base) noexcept
     case mbox::type::list_events:
     case mbox::type::list_bindings:
     case mbox::type::list_commands:
+    case mbox::type::group:
         break;
     case mbox::type::input:
         m_value = make_unique<mbox_form_value_input>(m_mode, gui, m_library);

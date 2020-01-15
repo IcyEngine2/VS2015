@@ -158,13 +158,14 @@ key icy::detail::scan_vk_to_key(uint16_t vkey, uint16_t scan, const bool isE0) n
 }
 uint16_t icy::detail::from_winapi(key_message& msg, const size_t wParam, const ptrdiff_t lParam, const std::bitset<256> & buffer) noexcept
 {
-    fill_key_mod(msg, buffer);
+    auto mod = key_mod::none;
+    key_mod_set(mod, buffer);
 	const auto key = scan_vk_to_key(LOWORD(wParam), WORD((lParam >> 16) & 0x00FF), !!((lParam >> 24) & 0x01));
 	const auto event =
 		((lParam >> 31) & 0x01) ? key_event::release :
 		((lParam >> 30) & 0x01) ? key_event::hold :
 		key_event::press;
-	msg = key_message(key, event, msg.ctrl, msg.alt, msg.shift);
+	msg = key_message(key, event, mod);
 	return LOWORD(lParam);
 }
 uint16_t icy::detail::from_winapi(key_message& key, const MSG& msg, const std::bitset<256> & buffer) noexcept
@@ -180,7 +181,7 @@ void icy::detail::from_winapi(mouse_message& mouse, const uint32_t offset_x, con
 	mouse.x1 = (word & MK_XBUTTON1) ? 1 : 0;
 	mouse.x2 = (word & MK_XBUTTON2) ? 1 : 0;
 
-	fill_key_mod(mouse, buffer);
+	key_mod_set(mouse.mod, buffer);
 
 	auto point = POINT{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
     if (msg == WM_MOUSEWHEEL)
@@ -258,7 +259,7 @@ tagMSG icy::detail::to_winapi(const key_message& key) noexcept
                 (scan << 16) | // scan
                 ((key.event == key_event::hold) << 30) |    // was down
                 ((key.event == key_event::release) << 31);  // is up
-            if (key_mod{ key.alt })
+            if (key.mod & (key_mod::lalt | key_mod::ralt))
                 msg.message = unsigned(key.event == key_event::release ? WM_SYSKEYUP : WM_SYSKEYDOWN);
             else
                 msg.message = unsigned(key.event == key_event::release ? WM_KEYUP : WM_KEYDOWN);
@@ -271,10 +272,6 @@ tagMSG icy::detail::to_winapi(const mouse_message& mouse) noexcept
 	uint32_t map[mouse_button::_total][mouse_event::_total]{};
 	static const bool _init_once = [&map]
 	{
-		map[mouse_button::left][mouse_event::btn_press] = WM_LBUTTONDOWN;
-		map[mouse_button::left][mouse_event::btn_hold] = WM_LBUTTONDOWN;
-		map[mouse_button::left][mouse_event::btn_release] = WM_LBUTTONUP;
-		map[mouse_button::left][mouse_event::btn_double] = WM_LBUTTONDBLCLK;
 
 		map[mouse_button::right][mouse_event::btn_press] = WM_RBUTTONDOWN;
 		map[mouse_button::right][mouse_event::btn_hold] = WM_RBUTTONDOWN;
@@ -302,8 +299,8 @@ tagMSG icy::detail::to_winapi(const mouse_message& mouse) noexcept
 	auto msg = MSG{};
 	msg.lParam = MAKELONG(mouse.point.x, mouse.point.y);
 
-	const auto shift = uint32_t(mouse.shift != 0);
-	const auto ctrl = uint32_t(mouse.ctrl != 0);
+	const auto shift = (mouse.mod & (key_mod::lshift | key_mod::rshift)) != 0;
+	const auto ctrl = (mouse.mod & (key_mod::lctrl | key_mod::rctrl)) != 0;
 
 	msg.wParam = 0
 		| (mouse.left << 0)
@@ -331,7 +328,50 @@ tagMSG icy::detail::to_winapi(const mouse_message& mouse) noexcept
 	}
 	default:
 	{
-		msg.message = map[mouse.button][mouse.event];
+        switch (mouse.button)
+        {
+        case mouse_button::left:
+            switch (mouse.event)
+            {
+            case mouse_event::btn_press: msg.message = WM_LBUTTONDOWN; break;
+            case mouse_event::btn_hold: msg.message = WM_LBUTTONDOWN; break;
+            case mouse_event::btn_release: msg.message = WM_LBUTTONUP; break;
+            case mouse_event::btn_double: msg.message = WM_LBUTTONDBLCLK; break;
+            }
+            break;
+
+        case mouse_button::right:
+            switch (mouse.event)
+            {
+            case mouse_event::btn_press: msg.message = WM_RBUTTONDOWN; break;
+            case mouse_event::btn_hold: msg.message = WM_RBUTTONDOWN; break;
+            case mouse_event::btn_release: msg.message = WM_RBUTTONUP; break;
+            case mouse_event::btn_double: msg.message = WM_RBUTTONDBLCLK; break;
+            }
+            break;
+
+        case mouse_button::mid:
+            switch (mouse.event)
+            {
+            case mouse_event::btn_press: msg.message = WM_MBUTTONDOWN; break;
+            case mouse_event::btn_hold: msg.message = WM_MBUTTONDOWN; break;
+            case mouse_event::btn_release: msg.message = WM_MBUTTONUP; break;
+            case mouse_event::btn_double: msg.message = WM_MBUTTONDBLCLK; break;
+            }
+            break;
+
+        case mouse_button::x1:
+        case mouse_button::x2:
+            switch (mouse.event)
+            {
+            case mouse_event::btn_press: msg.message = WM_XBUTTONDOWN; break;
+            case mouse_event::btn_hold: msg.message = WM_XBUTTONDOWN; break;
+            case mouse_event::btn_release: msg.message = WM_XBUTTONUP; break;
+            case mouse_event::btn_double: msg.message = WM_XBUTTONDBLCLK; break;
+            }
+            break;
+        }
+
 		msg.wParam |=
 			(mouse.button == mouse_button::x1) << 16 |
 			(mouse.button == mouse_button::x2) << 17;
@@ -351,31 +391,36 @@ tagMSG icy::detail::to_winapi(const input_message& input) noexcept
 	}
 	return{};
 }
+error_type icy::to_string(const icy::key_mod mod, string& str) noexcept
+{
+    const auto func = [&str, &mod](const key_mod left, const key_mod right, const string_view string) -> error_type
+    {
+        if (mod & (left | right))
+        {
+            if ((mod & left) == 0)
+            {
+                ICY_ERROR(str.append("Right "_s));
+            }
+            else if ((mod & right) == 0)
+            {
+                ICY_ERROR(str.append("Left "_s));
+            }
+            ICY_ERROR(str.append(string));
+            ICY_ERROR(str.append(" + "_s));
+        }
+        return {};
+    };
+    ICY_ERROR(func(key_mod::lctrl, key_mod::rctrl, "Ctrl"_s));
+    ICY_ERROR(func(key_mod::lalt, key_mod::ralt, "Alt"_s));
+    ICY_ERROR(func(key_mod::lshift, key_mod::rshift, "Shift"_s));
+    return {};
+}
 error_type icy::to_string(const key_message& key, string& str) noexcept
 {
 	if (key.key == key::none) 
 		return {};
 
-	const auto func = [&str](const uint32_t val, const string_view string) -> error_type
-	{
-		if (const auto mod = key_mod{ val })
-		{
-			if (!mod.left())
-			{
-				ICY_ERROR(str.append("right "_s));
-			}
-			else if (!mod.right())
-			{
-				ICY_ERROR(str.append("left "_s));
-			}
-			ICY_ERROR(str.append(string));
-			ICY_ERROR(str.append(" + "_s));
-		}
-		return {};
-	};
-	ICY_ERROR(func(key.ctrl, "Ctrl"_s));
-	ICY_ERROR(func(key.shift, "Shift"_s));
-	ICY_ERROR(func(key.alt, "Alt"_s));
+    ICY_ERROR(to_string(key.mod, str));
 	for (auto&& pair : key_array)
 	{
 		if (pair.key == key.key)

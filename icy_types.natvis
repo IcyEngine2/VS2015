@@ -59,6 +59,37 @@
   </Expand>  
 </Type>
 
+
+<Type Name="icy::set&lt;*&gt;">
+  <DisplayString Condition="m_size == 0">null</DisplayString>
+  <DisplayString Condition="m_size == 1 ">[{m_size}]{{ { m_ptr[0] } }}</DisplayString>
+  <DisplayString Condition="m_size == 2 ">[{m_size}]{{ { m_ptr[0] }, { m_ptr[1] } }}</DisplayString>
+  <DisplayString Condition="m_size == 3 ">[{m_size}]{{ { m_ptr[0] }, { m_ptr[1] }, { m_ptr[2] } }}</DisplayString>
+  <DisplayString Condition="m_size == 4 ">[{m_size}]{{ { m_ptr[0] }, { m_ptr[1] }, { m_ptr[2] }, { m_ptr[3] } }}</DisplayString>
+  <DisplayString Condition="m_size == 5 ">[{m_size}]{{ { m_ptr[0] }, { m_ptr[1] }, { m_ptr[2] }, { m_ptr[3] }, { m_ptr[4] } }}</DisplayString>
+  <DisplayString Condition="m_size == 6 ">[{m_size}]{{ { m_ptr[0] }, { m_ptr[1] }, { m_ptr[2] }, { m_ptr[3] }, { m_ptr[4] }, { m_ptr[5] } }}</DisplayString>
+  <DisplayString Condition="m_size == 7 ">[{m_size}]{{ { m_ptr[0] }, { m_ptr[1] }, { m_ptr[2] }, { m_ptr[3] }, { m_ptr[4] }, { m_ptr[5] }, { m_ptr[6] } }}</DisplayString>
+  <DisplayString Condition="m_size == 8 ">[{m_size}]{{ { m_ptr[0] }, { m_ptr[1] }, { m_ptr[2] }, { m_ptr[3] }, { m_ptr[4] }, { m_ptr[5] }, { m_ptr[6] }, { m_ptr[7] } }}</DisplayString>
+  <DisplayString Condition="m_size == 9 ">[{m_size}]{{ { m_ptr[0] }, { m_ptr[1] }, { m_ptr[2] }, { m_ptr[3] }, { m_ptr[4] }, { m_ptr[5] }, { m_ptr[6] }, { m_ptr[7] }, { m_ptr[8] } }}</DisplayString>
+  <DisplayString Condition="m_size == 10">[{m_size}]{{ { m_ptr[0] }, { m_ptr[1] }, { m_ptr[2] }, { m_ptr[3] }, { m_ptr[4] }, { m_ptr[5] }, { m_ptr[6] }, { m_ptr[7] }, { m_ptr[8] }, { m_ptr[9] } }}</DisplayString>
+  <DisplayString Condition="m_size == 11">[{m_size}]{{ { m_ptr[0] }, { m_ptr[1] }, { m_ptr[2] }, { m_ptr[3] }, { m_ptr[4] }, { m_ptr[5] }, { m_ptr[6] }, { m_ptr[7] }, { m_ptr[8] }, { m_ptr[9] }, { m_ptr[10] } }}</DisplayString>
+  <DisplayString Condition="m_size == 12">[{m_size}]{{ { m_ptr[0] }, { m_ptr[1] }, { m_ptr[2] }, { m_ptr[3] }, { m_ptr[4] }, { m_ptr[5] }, { m_ptr[6] }, { m_ptr[7] }, { m_ptr[8] }, { m_ptr[9] }, { m_ptr[10] }, { m_ptr[11] } }}</DisplayString>
+  <DisplayString Condition="m_size == 13">[{m_size}]{{ { m_ptr[0] }, { m_ptr[1] }, { m_ptr[2] }, { m_ptr[3] }, { m_ptr[4] }, { m_ptr[5] }, { m_ptr[6] }, { m_ptr[7] }, { m_ptr[8] }, { m_ptr[9] }, { m_ptr[10] }, { m_ptr[11] }, { m_ptr[12] } }}</DisplayString>
+  <DisplayString Condition="m_size == 14">[{m_size}]{{ { m_ptr[0] }, { m_ptr[1] }, { m_ptr[2] }, { m_ptr[3] }, { m_ptr[4] }, { m_ptr[5] }, { m_ptr[6] }, { m_ptr[7] }, { m_ptr[8] }, { m_ptr[9] }, { m_ptr[10] }, { m_ptr[11] }, { m_ptr[12] }, { m_ptr[13] } }}</DisplayString>
+  <DisplayString Condition="m_size == 15">[{m_size}]{{ { m_ptr[0] }, { m_ptr[1] }, { m_ptr[2] }, { m_ptr[3] }, { m_ptr[4] }, { m_ptr[5] }, { m_ptr[6] }, { m_ptr[7] }, { m_ptr[8] }, { m_ptr[9] }, { m_ptr[10] }, { m_ptr[11] }, { m_ptr[12] }, { m_ptr[13] }, { m_ptr[14] } }}</DisplayString>
+  <DisplayString Condition="m_size == 16">[{m_size}]{{ { m_ptr[0] }, { m_ptr[1] }, { m_ptr[2] }, { m_ptr[3] }, { m_ptr[4] }, { m_ptr[5] }, { m_ptr[6] }, { m_ptr[7] }, { m_ptr[8] }, { m_ptr[9] }, { m_ptr[10] }, { m_ptr[11] }, { m_ptr[12] }, { m_ptr[13] }, { m_ptr[14] }, { m_ptr[15] } }}</DisplayString>
+  <DisplayString Condition="m_size >  16">[{m_size}]{{ { m_ptr[0] }, { m_ptr[1] }, { m_ptr[2] }, { m_ptr[3] }, { m_ptr[4] }, { m_ptr[5] }, { m_ptr[6] }, { m_ptr[7] }, { m_ptr[8] }, { m_ptr[9] }, { m_ptr[10] }, { m_ptr[11] }, { m_ptr[12] }, { m_ptr[13] }, { m_ptr[14] }, { m_ptr[15] }, ... }}</DisplayString>
+  <Expand> 
+    <Item Name="[size]" ExcludeView="simple">m_size</Item>  
+    <Item Name="[capacity]" ExcludeView="simple">$T2</Item>  
+    <Item Name="[dynamic]" ExcludeView="simple">m_ptr == (void*)(&amp;m_buffer) ? false : true</Item>
+    <ArrayItems>  
+      <Size>m_size</Size>  
+      <ValuePointer>m_ptr</ValuePointer>  
+    </ArrayItems>  
+  </Expand>  
+</Type>
+
 <Type Name="icy::string_iterator">
   <DisplayString>{ m_ptr, s8 }</DisplayString>
 </Type>  
@@ -126,7 +157,7 @@
   </Type>
 
   <Type Name="icy::guid">
-    <DisplayString>{(_GUID&amp;)(bytes)}</DisplayString>
+    <DisplayString>{(_GUID&amp;)(*this)}</DisplayString>
   </Type>
 
 </AutoVisualizer>

@@ -618,6 +618,7 @@ namespace icy
         virtual uint32_t destroy(const gui_image image) noexcept = 0;
         virtual uint32_t clear(const gui_node root) noexcept = 0;
         virtual uint32_t scroll(const gui_widget widget, const gui_node node) noexcept = 0;
+        virtual uint32_t scroll(const gui_widget tabs, const gui_widget widget) noexcept = 0;
     protected:
         ~gui_system() noexcept = default;
     };
@@ -882,6 +883,10 @@ namespace icy
         error_type scroll(const gui_widget widget, const gui_node node) noexcept
         {
             ICY_GUI_ERROR(m_system->scroll(widget, node));
+        }
+        error_type scroll(const gui_widget tabs, const gui_widget widget) noexcept
+        {
+            ICY_GUI_ERROR(m_system->scroll(tabs, widget));
         }
     private:
 #if ICY_QTGUI_STATIC

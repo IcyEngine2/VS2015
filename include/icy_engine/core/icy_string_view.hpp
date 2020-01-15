@@ -135,6 +135,10 @@ namespace icy
 		{
 
 		}
+        string_view(const string_view& rhs) noexcept : m_ptr(rhs.m_ptr), m_size(rhs.m_size)
+        {
+
+        }
 		string_view(const string_iterator first, const string_iterator last) noexcept :
 			string_view{ first.m_ptr, last.m_ptr }
 		{

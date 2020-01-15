@@ -7,8 +7,20 @@
 #include <system_error>
 #include <intrin.h>
 
+namespace icy
+{
+    namespace detail
+    {
+        template<typename X>
+        inline X icy_error_func(const X& error) noexcept
+        {
+            return error;
+        }
+    }
+}
+
 #pragma region ICY_MACRO
-#define ICY_ERROR(X) if (const auto error_ = (X)) return error_
+#define ICY_ERROR(X) if (const auto error_ = (X)) return icy::detail::icy_error_func(error_)
 #define ICY_ANONYMOUS_VARIABLE(str) _CRT_CONCATENATE(str, __COUNTER__)
 #define ICY_SCOPE_EXIT_EX auto ICY_ANONYMOUS_VARIABLE(ICY_SCOPE_EXIT_) = icy::detail::scope_guard_exit<void>{} + 
 #define ICY_SCOPE_FAIL_EX auto ICY_ANONYMOUS_VARIABLE(ICY_SCOPE_FAIL_) = icy::detail::scope_guard_conditional<void, true>{} + 
@@ -520,11 +532,12 @@ namespace icy
     error_type to_string(const error_type error, string& str) noexcept;
     error_type to_string(const error_type error, string& str, const string_view locale) noexcept;
 
-    struct guid : public detail::rel_ops<guid>
+    class guid : public detail::rel_ops<guid>
     {
-        guid() noexcept : bytes{}
+    public:
+        guid() noexcept
         {
-
+            memset(this, 0, sizeof(*this));
         }
         guid(const uint64_t x0, const uint64_t x1) noexcept
         {
@@ -533,9 +546,14 @@ namespace icy
         }
         int compare(const guid& rhs) const noexcept
         {
-            return memcmp(this, &rhs, sizeof(guid));
+            const auto value = memcmp(this, &rhs, sizeof(*this));
+            return value > 0 ? 1 : value < 0 ? -1 : 0;
         }
-        unsigned char bytes[16];
+    private:
+        uint32_t Data1;
+        uint16_t Data2;
+        uint16_t Data3;
+        uint8_t Data4[8];
     };
     error_type create_guid(guid& guid) noexcept;
 
@@ -718,7 +736,7 @@ enum class dll_main : uint32_t
 namespace icy
 {
     HINSTANCE__* win32_instance() noexcept;
-    error_type win32_message(const string_view text, const string_view header) noexcept;
+    error_type win32_message(const string_view text, const string_view header, bool* yesno = nullptr) noexcept;
 }
 #endif
 

@@ -56,7 +56,11 @@ public:
         {
             const auto& event_data = event->data<icy::gui_event>();
             if (event_data.widget == value)
-                select = uint32_t(event_data.data.as_node().udata().as_uinteger());
+            {
+                const auto udata = event_data.data.as_node().udata();
+                if (udata.type() == icy::gui_variant_type::uinteger)
+                    m_select = uint32_t(udata.as_uinteger());
+            }
         }
         return {};
     }
@@ -74,10 +78,16 @@ public:
     icy::error_type scroll(const uint32_t value) noexcept
     {
         const auto it = m_data.find(value);
-        if (it != m_data.end())
-            return model.gui->scroll(this->value, model.gui->node(model, it->value, 0));
-        else
+        if (it == m_data.end())
             return icy::make_stdlib_error(std::errc::invalid_argument);
+
+        ICY_ERROR(model.gui->scroll(this->value, model.gui->node(model, it->value, 0)));
+        //m_select = value;
+        return {};
+    }
+    uint32_t select() const noexcept
+    {
+        return m_select;
     }
     template<typename T>
     icy::error_type append(const T value) noexcept
@@ -105,9 +115,9 @@ public:
     }
 public:
     icy::gui_model_scoped model;
-    uint32_t select = 0;
 private:
     icy::map<uint32_t, uint32_t> m_data;
+    uint32_t m_select = 0;
 };
 class mbox_form_key_value_text : public mbox_form_key_value_pair
 {
@@ -132,37 +142,37 @@ public:
 class mbox_form_key_value_base : public mbox_form_key_value_pair
 {
 public:
-    mbox_form_key_value_base(icy::gui_queue& gui) noexcept : mbox_form_key_value_pair(gui), model(gui) 
+    mbox_form_key_value_base(icy::gui_queue& gui) noexcept : mbox_form_key_value_pair(gui), m_model(gui)
     {
 
     }
     icy::error_type initialize(const icy::string_view text, const icy::gui_widget parent) noexcept
     {
         ICY_ERROR(mbox_form_key_value_pair::initialize(text, parent, icy::gui_widget_type::combo_box));
-        ICY_ERROR(model.initialize());
-        ICY_ERROR(model.gui->bind(value, model));
         return {};
     }
     icy::error_type scroll(const icy::guid& index) noexcept
     {
-        if (index == m_select)
-            return {};
+        //if (index == m_select)
+        //    return {};
         const auto it = std::find(m_data.begin(), m_data.end(), index);
         if (it == m_data.end())
-            return icy::make_stdlib_error(std::errc::invalid_argument);
-        ICY_ERROR(model.gui->scroll(value, model.gui->node(model, std::distance(m_data.begin(), it), 0)));
-        m_select = index;
+            return {};// icy::make_stdlib_error(std::errc::invalid_argument);
+        ICY_ERROR(m_model.gui->scroll(value, m_model.gui->node(m_model, std::distance(m_data.begin(), it), 0)));
+        //m_select = index;
         return {};
     }
-    icy::error_type reset(mbox::library& library, const mbox::base& base) noexcept;
+    icy::error_type reset(mbox::library& library, const mbox::base& base, const bool no_default_groups = false) noexcept;
     icy::error_type exec(const icy::event event) noexcept
     {
         if (event->type == icy::event_type::gui_select)
         {
             const auto& event_data = event->data<icy::gui_event>();
-            if (event_data.widget == value && 
-                event_data.data.as_node().udata().type() == icy::gui_variant_type::guid)
-                m_select = event_data.data.as_node().udata().as_guid();
+            if (event_data.widget == value)
+            {
+                if (event_data.data.as_node().udata().type() == icy::gui_variant_type::guid)
+                    m_select = event_data.data.as_node().udata().as_guid();
+            }
         }
         return {};
     }
@@ -171,10 +181,10 @@ public:
         return m_select;
     }
 public:
-    icy::gui_model_scoped model;
 private:
     icy::array<icy::guid> m_data;
     icy::guid m_select;
+    icy::gui_model_scoped m_model;
 };
 
 class mbox_form_value
@@ -241,6 +251,8 @@ protected:
     mbox_form_key_value_base m_reference_base;
     mbox_form_key_value_base m_secondary_list;
     mbox_form_key_value_base m_secondary_base;
+    icy::guid m_reference_cache;
+    icy::guid m_secondary_cache;
 };
 class mbox_form_value_event : public mbox_form_value_type
 {

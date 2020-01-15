@@ -528,7 +528,7 @@ error_type timer::initialize(const size_t count, const duration_type timeout) no
     return {};
 }
 
-error_type icy::win32_message(const string_view text, const string_view header) noexcept
+error_type icy::win32_message(const string_view text, const string_view header, bool* const yesno) noexcept
 {
     library lib("user32.dll");
     ICY_ERROR(lib.initialize());
@@ -538,7 +538,9 @@ error_type icy::win32_message(const string_view text, const string_view header) 
         array<wchar_t> whdr;
         ICY_ERROR(to_utf16(text, wtxt));
         ICY_ERROR(to_utf16(header, whdr));
-        func(nullptr, wtxt.data(), whdr.data(), MB_OK);
+        const auto value = func(nullptr, wtxt.data(), whdr.data(), yesno ? MB_YESNO : MB_OK);
+        if (yesno)
+            *yesno = value == IDYES;
     }
     else
     {

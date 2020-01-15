@@ -160,6 +160,7 @@ enum class qtgui_event_type : uint32_t
     destroy_image,
     clear_model,
     scroll,
+    scroll_tabs,
 };
 
 class qtgui_event_create_widget : public QEvent
@@ -540,6 +541,19 @@ public:
     const gui_widget widget;
     const gui_node node;
 };
+class qtgui_event_scroll_tabs : public QEvent
+{
+public:
+    qtgui_event_scroll_tabs(const gui_widget tabs, const gui_widget widget) :
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::scroll_tabs))),
+        tabs(tabs), widget(widget)
+    {
+
+    }
+public:
+    const gui_widget tabs;
+    const gui_widget widget;
+};
 
 class qtgui_splitter : public QSplitter
 {
@@ -690,6 +704,7 @@ private:
     uint32_t destroy(const gui_image image) noexcept override;
     uint32_t clear(const gui_node root) noexcept override;
     uint32_t scroll(const gui_widget widget, const gui_node node) noexcept override;
+    uint32_t scroll(const gui_widget tabs, const gui_widget widget) noexcept override;
 private:
     std::errc process(const qtgui_event_create_widget& event);
     std::errc process(const qtgui_event_create_action& event);
@@ -720,6 +735,7 @@ private:
     std::errc process(const qtgui_event_destroy_image& event);
     std::errc process(const qtgui_event_clear_model& event);
     std::errc process(const qtgui_event_scroll& event);
+    std::errc process(const qtgui_event_scroll_tabs& event);
 private:
     detail::intrusive_mpsc_queue m_queue;
     QWidget m_root;
@@ -884,6 +900,9 @@ bool qtgui_system::notify(QObject* object, QEvent* event) noexcept
                     break;
                 case qtgui_event_type::scroll:
                     error = process(*static_cast<qtgui_event_scroll*>(event));
+                    break;
+                case qtgui_event_type::scroll_tabs:
+                    error = process(*static_cast<qtgui_event_scroll_tabs*>(event));
                     break;
                 default:
                     error = std::errc::function_not_supported;
@@ -1327,6 +1346,16 @@ uint32_t qtgui_system::scroll(const gui_widget widget, const gui_node node) noex
     ICY_CATCH;
     return {};
 }
+uint32_t qtgui_system::scroll(const gui_widget tabs, const gui_widget widget) noexcept
+{
+    try
+    {
+        const auto event = new qtgui_event_scroll_tabs(tabs, widget);
+        qApp->postEvent(this, event);
+    }
+    ICY_CATCH;
+    return {};
+}
 
 std::errc qtgui_system::process(const qtgui_event_create_widget& event)
 {
@@ -1384,8 +1413,24 @@ std::errc qtgui_system::process(const qtgui_event_create_widget& event)
         break;
 
     case gui_widget_type::tabs:
-        widget = new QTabWidget(parent);
+    {
+        auto tabs = new QTabWidget(parent);
+        widget = tabs;
+        tabs->setTabsClosable(true);
+        QObject::connect(tabs, &QTabWidget::tabCloseRequested, [func, tabs](int index)
+            {
+                const auto widget = tabs->widget(index);
+                if (widget)
+                    func(widget->property(qtgui_property_name), event_type::gui_update);
+            });
+        QObject::connect(tabs, &QTabWidget::currentChanged, [func, tabs](int index)
+            {
+                const auto widget = tabs->widget(index);
+                if (widget)
+                    func(widget->property(qtgui_property_name), event_type::gui_select);
+            });
         break;
+    }
 
     case gui_widget_type::label:
         widget = new QLabel(parent);
@@ -1427,6 +1472,8 @@ std::errc qtgui_system::process(const qtgui_event_create_widget& event)
     case gui_widget_type::combo_box:
     {
         const auto combo_box = new QComboBox(parent);
+        //combo_box->setEditable(true);
+        //combo_box->lineEdit()->setReadOnly(true);
         widget = combo_box;
         QObject::connect(combo_box, static_cast<void(QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
             [combo_box, func](const int index)
@@ -1519,24 +1566,24 @@ std::errc qtgui_system::process(const qtgui_event_create_widget& event)
         {
             dialog->setOption(QInputDialog::InputDialogOption::UsePlainTextEditForTextInput);
             QObject::connect(dialog, &QInputDialog::finished,
-                [func, dialog](int result) { if (result) func(dialog->textValue(), event_type::gui_update); });
+                [func, dialog](int result) { func(result ? dialog->textValue() : QVariant(), event_type::gui_update); });
         }
         else if (event.wtype == gui_widget_type::dialog_input_integer)
         {
             dialog->setInputMode(QInputDialog::InputMode::IntInput);
             QObject::connect(dialog, &QInputDialog::finished,
-                [func, dialog](int result) { if (result) func(dialog->intValue(), event_type::gui_update); });
+                [func, dialog](int result) { func(result ? dialog->intValue() : QVariant(), event_type::gui_update); });
         }
         else if (event.wtype == gui_widget_type::dialog_input_double)
         {
             dialog->setInputMode(QInputDialog::InputMode::DoubleInput);
             QObject::connect(dialog, &QInputDialog::finished,
-                [func, dialog](int result) { if (result) func(dialog->doubleValue(), event_type::gui_update); });
+                [func, dialog](int result) { func(result ? dialog->doubleValue() : QVariant(), event_type::gui_update); });
         }
         else
         {
             QObject::connect(dialog, &QInputDialog::finished,
-                [func, dialog](int result) { if (result) func(dialog->textValue(), event_type::gui_update); });
+                [func, dialog](int result) { func(result ? dialog->textValue() : QVariant(), event_type::gui_update); });
         }
         widget = dialog;
         break;
@@ -1550,7 +1597,7 @@ std::errc qtgui_system::process(const qtgui_event_create_widget& event)
     {
         dialog->setModal(true);
     }
-    else if (const auto view = qobject_cast<QAbstractItemView*>(widget))
+    if (const auto view = qobject_cast<QAbstractItemView*>(widget))
     {
         view->setContextMenuPolicy(Qt::ContextMenuPolicy::CustomContextMenu);
         view->setSelectionBehavior(QAbstractItemView::SelectionBehavior::SelectRows);
@@ -1558,11 +1605,11 @@ std::errc qtgui_system::process(const qtgui_event_create_widget& event)
         QObject::connect(view, &QAbstractItemView::customContextMenuRequested, 
             [view, func](const QPoint& point){ func(view->indexAt(point), event_type::gui_context); });        
     }
-    else if (const auto tabs = qobject_cast<QTabWidget*>(parent))
+    if (const auto tabs = qobject_cast<QTabWidget*>(parent))
     {
         tabs->addTab(widget, QString::number(tabs->count()));
     }
-    else if (const auto button = qobject_cast<QAbstractButton*>(widget))
+    if (const auto button = qobject_cast<QAbstractButton*>(widget))
     {
         QObject::connect(button, &QAbstractButton::clicked, 
             [button, func](bool checked) { func(checked, event_type::gui_update); });
@@ -2196,10 +2243,34 @@ std::errc qtgui_system::process(const qtgui_event_scroll& event)
     }
     else if (const auto combo = qobject_cast<QComboBox*>(widget))
     {
-        combo->setCurrentIndex(combo->findData(qIndex.data(Qt::UserRole)));
+        const auto index = combo->findData(qIndex.data(Qt::UserRole));
+        //combo->view()->selectionModel()->select(qIndex, QItemSelectionModel::SelectionFlag::Select);
+        //auto oText = combo->currentText();
+        //combo->blockSignals(true);
+        combo->setCurrentIndex(index);
+        //combo->blockSignals(false);
+        //auto nText = combo->currentText();
+        //combo->setEditText(combo->currentText());
+        //combo->update();
+        //oText == nText;
+        //combo->setCurrentText(qIndex.data(Qt::DisplayRole).toString());
     }
     else
         return std::errc::invalid_argument;
+    return {};
+}
+std::errc qtgui_system::process(const qtgui_event_scroll_tabs& event)
+{
+    if (event.tabs.index >= m_widgets.size() ||
+        event.widget.index >= m_widgets.size())
+        return std::errc::invalid_argument;
+
+    const auto tabs = qobject_cast<QTabWidget*>(m_widgets[event.tabs.index]);
+    const auto widget = m_widgets[event.widget.index];
+    if (!tabs || !widget)
+        return std::errc::invalid_argument;
+
+    tabs->setCurrentWidget(widget);
     return {};
 }
 
@@ -2237,7 +2308,9 @@ int qtgui_model::columnCount(const QModelIndex& index) const
 QVariant qtgui_model::data(const QModelIndex& index, int role) const
 {
     const auto& node = m_nodes[index.internalId()];
-    if (role == Qt::ItemDataRole::DisplayRole)
+    if (role == Qt::ItemDataRole::DisplayRole ||
+        role == Qt::ItemDataRole::EditRole ||
+        role == Qt::ItemDataRole::AccessibleTextRole)
         return node.text;
     else if (role == Qt::ItemDataRole::DecorationRole)
         return node.icon;

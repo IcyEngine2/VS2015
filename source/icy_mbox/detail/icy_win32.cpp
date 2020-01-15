@@ -49,7 +49,9 @@ error_type window_hook::send(const const_array_view<input_message> vec) noexcept
 {
     ICY_LOCK_GUARD_WRITE(m_lock);
     for (auto&& msg : vec)
+    {
         ICY_ERROR(m_queue.push_back(msg));
+    }
     if (!PostMessageW(m_handle, WM_NULL, 0, 0))
         return last_system_error();
     return {};
@@ -77,12 +79,44 @@ LRESULT __stdcall window_hook::proc(HWND__* hwnd, uint32_t msg, WPARAM wparam, L
         g_instance = nullptr;
         if (!instance->m_queue.empty())
         {
+            auto has_mouse = false;
+            for (auto&& input : instance->m_queue)
+                has_mouse |= input.type == input_type::mouse;
+
+            /*if (has_mouse)
+            {
+                SetForegroundWindow(hwnd);
+                SetFocus(hwnd);
+                SetActiveWindow(hwnd);
+            }*/
+            
             for (auto&& input : instance->m_queue)
             {
-                if (input.type == input_type::key || input.type == input_type::mouse)
+                if (input.type == input_type::key)
                 {
                     auto next = detail::to_winapi(input);
                     SendMessageW(hwnd, next.message, next.wParam, next.lParam);
+                }
+                else if (input.type == input_type::mouse)
+                {
+                    auto mouse = input.mouse;
+                    //if (mouse.event != mouse_event::btn_press)
+                    //    continue;
+                    
+                    auto move = mouse;
+                    auto press = mouse;
+                    auto release = mouse;
+                    move.delta = {};
+                    move.event = mouse_event::move;
+                    press.event = mouse_event::btn_press;
+                    release.event = mouse_event::btn_release;
+                    //SetCursorPos(mouse.point.x, mouse.point.y);
+                    auto msg_move = detail::to_winapi(move);
+                    auto msg_press = detail::to_winapi(press);
+                    auto msg_release = detail::to_winapi(release);
+                    SendMessageW(hwnd, msg_move.message, msg_move.wParam, msg_move.lParam);
+                    SendMessageW(hwnd, msg_press.message, msg_press.wParam, msg_press.lParam);
+                    SendMessageW(hwnd, msg_release.message, msg_release.wParam, msg_release.lParam);                    
                 }
                 else if (input.type == input_type::active && input.active)
                 {
@@ -91,6 +125,10 @@ LRESULT __stdcall window_hook::proc(HWND__* hwnd, uint32_t msg, WPARAM wparam, L
                     SetActiveWindow(hwnd);
                 }
             }
+
+            //if (has_mouse)
+             //   SetFocus(focus);
+
             instance->m_queue.clear();
         }
         if (!instance->m_name.empty())

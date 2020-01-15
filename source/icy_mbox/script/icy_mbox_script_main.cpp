@@ -37,8 +37,6 @@ using namespace icy;
 
 class mbox_application;
 
-static gui_image g_images[uint32_t(mbox_image::_total)];
-
 class mbox_main_thread : public thread
 {
 public:

@@ -5,12 +5,14 @@
 
 const auto mbox_event_type_create = icy::event_type(icy::event_type::user << 0x00);
 const auto mbox_event_type_modify = icy::event_type(icy::event_type::user << 0x01);
+const auto mbox_event_type_delete = icy::event_type(icy::event_type::user << 0x02);
 using mbox_event_data_create = icy::guid;
 struct mbox_event_data_modify
 {
     icy::guid index;
     icy::string name;
 };
+using mbox_event_data_delete = icy::guid;
 //const auto mbox_event_type_view = icy::event_type(icy::event_type::user << 0x00);
 //const auto mbox_event_type_view_new = icy::event_type(icy::event_type::user << 0x01);
 //const auto mbox_event_type_rename = icy::event_type(icy::event_type::user << 0x02);

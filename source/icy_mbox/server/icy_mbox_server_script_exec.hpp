@@ -123,16 +123,20 @@ public:
                 mouse.ctrl = 0;
                 mouse.alt = 0;
                 mouse.shift = 0;
+                mouse.left = 1;
                 mouse_message press = mouse;
                 mouse_message release = mouse;
+                //move.event = mouse_event::btn_press;
                 press.event = mouse_event::btn_press;
-                release.event = mouse_event::btn_release;
+               // release.event = mouse_event::btn_release;
                 for (auto&& pair : send.data)
                 {                   
+                    if (pair.key == event->data<event_user_recv_input>().key)
+                        continue;
                     //ICY_ERROR(pair.value.push_back(key_message(key::left_ctrl, key_event::press)));
                     //ICY_ERROR(pair.value.push_back(key_message(key::left_alt, key_event::press)));
                     ICY_ERROR(pair.value.push_back(press));
-                    ICY_ERROR(pair.value.push_back(release));
+                    //ICY_ERROR(pair.value.push_back(release));
                     //ICY_ERROR(pair.value.push_back(key_message(key::left_alt, key_event::release)));
                     //ICY_ERROR(pair.value.push_back(key_message(key::left_ctrl, key_event::release)));
                 }
