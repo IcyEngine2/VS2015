@@ -520,7 +520,8 @@ namespace icy
         error_type insert(const key_type& new_key, value_type&& new_val, iterator* it = nullptr) noexcept
         {
             static_assert(std::is_trivially_destructible<key_type>::value, "KEY MUST BE TRIVIAL");
-            return insert(key_type(new_key), std::move(new_val), it);
+            auto key = new_key;
+            return insert(std::move(key), std::move(new_val), it);
         }
         error_type insert(key_type&& new_key, const value_type& new_val, iterator* it = nullptr) noexcept
         {

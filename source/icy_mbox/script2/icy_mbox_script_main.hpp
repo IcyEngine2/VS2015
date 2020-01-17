@@ -11,7 +11,9 @@ static constexpr auto mbox_event_type_edit = icy::event_type(icy::event_type::us
 static constexpr auto mbox_event_type_rename = icy::event_type(icy::event_type::user << 0x04);
 static constexpr auto mbox_event_type_delete = icy::event_type(icy::event_type::user << 0x05);
 static constexpr auto mbox_event_type_create = icy::event_type(icy::event_type::user << 0x06);
-static constexpr auto mbox_event_type_save_cmd = icy::event_type(icy::event_type::user << 0x06);
+static constexpr auto mbox_event_type_save = icy::event_type(icy::event_type::user << 0x07);
+static constexpr auto mbox_event_type_lock = icy::event_type(icy::event_type::user << 0x08);
+static constexpr auto mbox_event_type_unlock = icy::event_type(icy::event_type::user << 0x09);
 
 
 struct mbox_event_data_load_library
@@ -22,10 +24,7 @@ struct mbox_event_data_transaction
 {
     mbox::transaction value;
 };
-struct mbox_event_data_base
-{
-    icy::guid index;
-};
+using mbox_event_data_base = icy::guid;
 struct mbox_event_data_create
 {
     icy::guid parent;
@@ -63,21 +62,62 @@ enum class mbox_model_type : uint32_t
     none,
     explorer,
     directory,
-    command,
+    view_command,
+    edit_command,
 };
 class mbox_model
 {
 public:
     static icy::error_type create(const mbox_model_type type, icy::unique_ptr<mbox_model>& model) noexcept;
+    mbox_model(const mbox_model_type type) noexcept : m_type(type)
+    {
+
+    }
+    mbox_model_type type() const noexcept
+    {
+        return m_type;
+    }
     const icy::gui_node root() const noexcept
     {
         return m_model;
     }
-    virtual icy::error_type reset(const mbox::library& library, const icy::guid& root) noexcept = 0;
-    virtual icy::error_type execute(const icy::const_array_view<mbox::transaction::operation> oper) noexcept = 0;
+    virtual icy::error_type reset(const mbox::library& library, const icy::guid& root, const mbox::type filter = mbox::type::_total) noexcept = 0;
+    virtual icy::error_type exec(const icy::event event) noexcept = 0;
     virtual icy::error_type context(const icy::gui_variant& var) noexcept = 0;
     virtual icy::xgui_node find(const icy::gui_variant& var) noexcept = 0;
+    virtual void lock() noexcept
+    {
+
+    }
+    virtual void unlock() noexcept
+    {
+
+    }
 protected:
+    mbox_model_type m_type;
     icy::xgui_model m_model;
     icy::guid m_root;
+};
+
+class mbox_form_action
+{
+public:
+    static icy::error_type exec(const mbox::library& library, const icy::guid& command, mbox::action& action, bool& saved) noexcept;
+protected:
+    virtual icy::error_type initialize(const mbox::library& library, const mbox::action& action, icy::xgui_widget& parent) noexcept = 0;
+    virtual icy::error_type exec(const icy::event event) noexcept = 0;
+    virtual icy::error_type save(mbox::action& action) const noexcept = 0;
+private:
+    icy::error_type initialize(const icy::string_view command, const mbox::action_type type) noexcept;
+protected:
+    icy::xgui_widget m_window;
+private:
+    icy::xgui_widget m_command_label;
+    icy::xgui_widget m_command_value;
+    icy::xgui_widget m_type_label;
+    icy::xgui_widget m_type_value;
+    icy::xgui_widget m_widget;
+    icy::xgui_widget m_buttons;
+    icy::xgui_widget m_save;
+    icy::xgui_widget m_exit;
 };

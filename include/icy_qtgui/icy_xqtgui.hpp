@@ -53,7 +53,7 @@ namespace icy
         {
             return global_gui->enable(*this, value);
         }
-        error_type text(const gui_image icon) noexcept
+        error_type icon(const gui_image icon) noexcept
         {
             return global_gui->icon(*this, icon);
         }
@@ -232,5 +232,18 @@ namespace icy
         {
             return global_gui->clear(*this);
         }
+    };
+    class xgui_submenu
+    {
+    public:
+        error_type initialize(const string_view text) noexcept
+        {
+            ICY_ERROR(widget.initialize(gui_widget_type::menu, {}, gui_widget_flag::none));
+            ICY_ERROR(action.initialize(text));
+            ICY_ERROR(action.bind(widget));
+            return {};
+        }
+        xgui_widget widget;
+        xgui_action action;
     };
 }

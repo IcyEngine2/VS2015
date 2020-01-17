@@ -16,6 +16,7 @@ namespace mbox
         invalid_group,
         invalid_command,
         invalid_root,
+        invalid_type,
     };
     inline icy::error_type make_mbox_error(const mbox_error_code code) noexcept
     {
@@ -45,51 +46,201 @@ namespace mbox
         button_click,           //  input
         command_execute,        //  command
         command_replace,        //  command A, command B,
-        begin_broadcast,        //  next actions to group; include self
-        begin_multicast,        //  next actions to group; exclude self
-        end_broadcast,
-        end_multicast,
         on_button_press,        //  event; command
         on_button_release,      //  event; command
         _total,
     };
-    inline constexpr auto button_lmb() noexcept { return icy::key(0x01); }
-    inline constexpr auto button_rmb() noexcept { return icy::key(0x02); }
-    inline constexpr auto button_mid() noexcept { return icy::key(0x03); }
-    inline constexpr auto button_x1() noexcept { return icy::key(0x04); }
-    inline constexpr auto button_x2() noexcept { return icy::key(0x05); }
-    inline constexpr auto button_key(const icy::key key) noexcept { return key; }
-    
-    struct button
+    enum class execute_type : uint32_t
+    {
+        self,
+        multicast,
+        broadcast,
+        _total,
+    };
+
+    static constexpr auto button_lmb = icy::key(0x01);
+    static constexpr auto button_rmb = icy::key(0x02);
+    static constexpr auto button_mid = icy::key(0x03);
+    static constexpr auto button_x1 = icy::key(0x04);
+    static constexpr auto button_x2 = icy::key(0x05);
+
+    struct button_type
     {
         icy::key key = icy::key::none;
         icy::key_mod mod = icy::key_mod::none;
     };
 
-    struct action
+    class action
     {
+    public:
+        using button_type = mbox::button_type;
+        using group_type = icy::guid;
+        struct execute_type
+        {
+            icy::guid command;
+            icy::guid group;
+            mbox::execute_type etype = mbox::execute_type::self;
+        };
+        struct replace_type
+        {
+            icy::guid source;
+            icy::guid target;
+        };
+        union event_type
+        {
+            event_type() noexcept
+            {
+                memset(this, 0, sizeof(*this));
+            }
+            event_type(const button_type button) noexcept : button(button) 
+            {
+
+            }
+            event_type(const icy::guid& timer) noexcept : timer(timer)
+            {
+
+            }
+            button_type button;
+            icy::guid timer;
+        };
+        struct connect_type
+        {
+            connect_type() noexcept = default;
+            connect_type(const button_type& button, const icy::guid& command) noexcept : event(button), command(command)
+            {
+
+            }
+            connect_type(const icy::guid& timer, const icy::guid& command) noexcept : event(timer), command(command)
+            {
+
+            }
+            event_type event;
+            icy::guid command;
+        };
+    public:
         action() noexcept
         {
             memset(this, 0, sizeof(*this));
         }
-        action_type type = action_type::none;
+        static action create_group_join(const group_type value) noexcept
+        {
+            action action;
+            action.m_type = action_type::group_join;
+            new (&action.m_group) group_type(value);
+            return action;
+        }
+        static action create_group_leave(const group_type value) noexcept
+        {
+            action action;
+            action.m_type = action_type::group_leave;
+            new (&action.m_group) group_type(value);
+            return action;
+        }
+        static action create_button_press(const button_type value) noexcept
+        {
+            action action;
+            action.m_type = action_type::button_press;
+            new (&action.m_button) button_type(value);
+            return action;
+        }
+        static action create_button_release(const button_type value) noexcept
+        {
+            action action;
+            action.m_type = action_type::button_release;
+            new (&action.m_button) button_type(value);
+            return action;
+        }
+        static action create_button_click(const button_type value) noexcept
+        {
+            action action;
+            action.m_type = action_type::button_click;
+            new (&action.m_button) button_type(value);
+            return action;
+        }
+        static action create_command_execute(const execute_type& value) noexcept
+        {
+            action action;
+            action.m_type = action_type::command_execute;
+            new (&action.m_execute) execute_type(value);
+            return action;
+        }
+        static action create_command_replace(const replace_type& value) noexcept
+        {
+            action action;
+            action.m_type = action_type::command_replace;
+            new (&action.m_replace) replace_type(value);
+            return action;
+        }
+        static action create_on_button_press(const button_type value, const icy::guid& command) noexcept
+        {
+            action action;
+            action.m_type = action_type::on_button_press;
+            new (&action.m_connect) connect_type(value, command);
+            return action;
+        }
+        static action create_on_button_release(const button_type value, const icy::guid& command) noexcept
+        {
+            action action;
+            action.m_type = action_type::on_button_release;
+            new (&action.m_connect) connect_type(value, command);
+            return action;
+        }
+        action_type type() const noexcept
+        {
+            return m_type;
+        }
+        button_type button() const noexcept
+        {
+            ICY_ASSERT(
+                type() == action_type::button_click ||
+                type() == action_type::button_press ||
+                type() == action_type::button_release,
+                "INVALID TYPE");
+            return m_button;
+        }
+        group_type group() const noexcept
+        {
+            ICY_ASSERT(
+                type() == action_type::group_join ||
+                type() == action_type::group_leave,
+                "INVALID TYPE");
+            return m_group;
+        }
+        const execute_type& execute() const noexcept
+        {
+            ICY_ASSERT(type() == action_type::command_execute, "INVALID TYPE");
+            return m_execute;
+        }
+        const replace_type& replace() const noexcept
+        {
+            ICY_ASSERT(type() == action_type::command_replace, "INVALID TYPE");
+            return m_replace;
+        }
+        icy::guid event_command() const noexcept
+        {
+            ICY_ASSERT(
+                type() == action_type::on_button_press ||
+                type() == action_type::on_button_release, 
+                "INVALID TYPE");
+            return m_connect.command;
+        }
+        mbox::button_type event_button() const noexcept
+        {
+            ICY_ASSERT(
+                type() == action_type::on_button_press ||
+                type() == action_type::on_button_release,
+                "INVALID TYPE");
+            return m_connect.event.button;
+        }        
+    private:
+        action_type m_type = action_type::none;
         union
         {
-            button button;
-            icy::guid reference;    // group/command
-            struct
-            {
-                icy::guid source;
-                icy::guid target;
-            } replace;
-            struct
-            {
-                union
-                {
-                    mbox::button button;
-                } event;
-                icy::guid command;
-            } connect;
+            button_type m_button;
+            group_type m_group;
+            execute_type m_execute;
+            replace_type m_replace;
+            connect_type m_connect;
         };
     };
     struct base
@@ -107,6 +258,7 @@ namespace mbox
         icy::guid index;
         icy::guid parent;
         icy::string name;
+        icy::guid target;
         icy::array<action> actions;
     };
     
@@ -194,7 +346,22 @@ namespace mbox
         }
         icy::error_type path(const icy::guid& index, icy::string& str) const noexcept
         {
-            return icy::make_stdlib_error(std::errc::function_not_supported);
+            using namespace icy;
+
+            auto ptr = find(index);
+            if (!ptr)
+                return make_stdlib_error(std::errc::invalid_argument);
+
+            ICY_ERROR(to_string(ptr->name, str));
+            while (true)
+            {
+                ptr = find(ptr->parent);
+                if (!ptr || ptr->index == mbox::root)
+                    break;
+                ICY_ERROR(str.append(" / "_s));
+                ICY_ERROR(str.append(ptr->name));
+            }
+            return {};
         }
         icy::error_type reverse_path(const icy::guid& index, icy::string& str) const noexcept 
         {
@@ -333,5 +500,7 @@ namespace mbox
 
     icy::string_view to_string(const type type) noexcept;
     icy::string_view to_string(const action_type type) noexcept;
-    icy::error_type to_string(const button button, icy::string& str) noexcept;
+    icy::string_view to_string(const execute_type type) noexcept;
+    icy::string_view to_string(const icy::key key) noexcept;
+    icy::error_type to_string(const button_type button, icy::string& str) noexcept;
 }

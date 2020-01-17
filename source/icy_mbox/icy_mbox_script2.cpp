@@ -24,27 +24,41 @@ string_view mbox::to_string(const mbox::action_type type) noexcept
     case action_type::button_click: return "Click Button"_s;
     case action_type::command_execute: return "Execute Command"_s;
     case action_type::command_replace: return "Replace Command"_s;
-    case action_type::begin_broadcast: return "Begin Broadcast"_s;
-    case action_type::begin_multicast: return "Begin Multicast"_s;
-    case action_type::end_broadcast: return "End Broadcast"_s;
-    case action_type::end_multicast: return "End Multicast"_s;
     case action_type::on_button_press: return "On Button Press"_s;
     case action_type::on_button_release: return "On Button Release"_s;
     }
     return {};
 }
-error_type mbox::to_string(const mbox::button button, string& str) noexcept
+string_view mbox::to_string(const key key) noexcept
+{
+    switch (key)
+    {
+    case button_lmb: return "Mouse Left"_s;
+    case button_rmb: return "Mouse Right"_s;
+    case button_mid: return "Mouse Mid"_s;
+    case button_x1: return "Mouse X1"_s;
+    case button_x2: return "Mouse X2"_s;
+    }
+    return icy::to_string(key);
+}
+error_type mbox::to_string(const mbox::button_type button, string& str) noexcept
 {
     ICY_ERROR(to_string(button.mod, str));
-    switch (button.key)
+    ICY_ERROR(str.append(mbox::to_string(button.key)));
+    return {};
+}
+string_view mbox::to_string(const mbox::execute_type type) noexcept
+{
+    switch (type)
     {
-    case button_lmb(): return str.append("LMB"_s);
-    case button_rmb(): return str.append("RMB"_s);
-    case button_mid(): return str.append("Mid"_s);
-    case button_x1(): return str.append("X1"_s);
-    case button_x2(): return str.append("X2"_s);
-    default: return str.append(to_string(button.key));
+    case mbox::execute_type::broadcast:
+        return "Everyone in"_s;
+    case mbox::execute_type::multicast:
+        return "Other in"_s;
+    case mbox::execute_type::self:
+        return "Self"_s;
     }
+    return {};
 }
 
 static error_type mbox_error_to_string(const uint32_t code, const string_view, string& str) noexcept

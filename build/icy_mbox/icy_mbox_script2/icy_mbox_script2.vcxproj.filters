@@ -24,6 +24,9 @@
     <ClCompile Include="..\..\..\source\icy_mbox\icy_mbox_script2.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_mbox\script2\icy_mbox_script_action.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\source\icy_mbox\icy_mbox_script2.hpp">

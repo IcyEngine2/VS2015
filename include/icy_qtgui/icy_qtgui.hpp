@@ -197,35 +197,35 @@ namespace icy
         };
     public:
         static constexpr size_t max_length = 22;
-        gui_variant() noexcept : m_data{}
+        gui_variant() noexcept : m_data{}, m_type(uint8_t(gui_variant_type::none)), m_size(0)
         {
 
         }
-        gui_variant(const boolean_type value) noexcept : m_type(static_cast<char>(gui_variant_type::boolean))
+        gui_variant(const boolean_type value) noexcept : m_type(uint8_t(gui_variant_type::boolean)), m_size(0)
         {
             new (m_data) decltype(value)(value);
         }
-        gui_variant(const sinteger_type value) noexcept : m_type(static_cast<char>(gui_variant_type::sinteger))
+        gui_variant(const sinteger_type value) noexcept : m_type(uint8_t(gui_variant_type::sinteger)), m_size(0)
         {
             new (m_data) decltype(value)(value);
         }
-        gui_variant(const uinteger_type value) noexcept : m_type(static_cast<char>(gui_variant_type::uinteger))
+        gui_variant(const uinteger_type value) noexcept : m_type(uint8_t(gui_variant_type::uinteger)), m_size(0)
         {
             new (m_data) decltype(value)(value);
         }
-        gui_variant(const floating_type value) noexcept : m_type(static_cast<char>(gui_variant_type::floating))
+        gui_variant(const floating_type value) noexcept : m_type(uint8_t(gui_variant_type::floating)), m_size(0)
         {
             new (m_data) decltype(value)(value);
         }
-        gui_variant(const guid_type value) noexcept : m_type(static_cast<char>(gui_variant_type::guid))
+        gui_variant(const guid_type value) noexcept : m_type(uint8_t(gui_variant_type::guid)), m_size(0)
         {
             new (m_data) decltype(value)(value);
         }
-        gui_variant(const gui_node value) noexcept : m_type(static_cast<char>(gui_variant_type::node))
+        gui_variant(const gui_node value) noexcept : m_type(uint8_t(gui_variant_type::node)), m_size(0)
         {
             new (m_data) decltype(value)(value);
         }
-        gui_variant(const string_view str) noexcept : m_data(), m_size(0), m_type(static_cast<char>(gui_variant_type::sstring))
+        gui_variant(const string_view str) noexcept : m_data{}, m_type(uint8_t(gui_variant_type::sstring)), m_size(0)
         {
             const char* const beg = str.bytes().data();
             auto ptr = beg;

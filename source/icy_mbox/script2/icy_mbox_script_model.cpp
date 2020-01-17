@@ -21,8 +21,9 @@ class mbox_model_explorer : public mbox_model
         icy::dictionary<icy::guid> nodes;
     };
 public:
-    error_type reset(const mbox::library& library, const guid& root) noexcept override;
-    error_type execute(const const_array_view<mbox::transaction::operation> oper) noexcept override;
+    using mbox_model::mbox_model;
+    error_type reset(const mbox::library& library, const guid& root, const mbox::type filter) noexcept override;
+    error_type exec(const event event) noexcept override;
     error_type context(const gui_variant& var) noexcept override;
     xgui_node find(const gui_variant& var) noexcept override
     {
@@ -34,6 +35,7 @@ private:
     xgui_node node(const node_type& mbox_node) noexcept;
     error_type initialize(const node_type& mbox_node, xgui_node gui_node) noexcept;
 private:
+    mbox::type m_filter = mbox::type::_total;
     icy::map<icy::guid, node_type> m_data;
 };
 class mbox_model_directory : public mbox_model
@@ -69,8 +71,9 @@ class mbox_model_directory : public mbox_model
         _column_total,
     };
 public:
-    error_type reset(const mbox::library& library, const guid& root) noexcept override;
-    error_type execute(const const_array_view<mbox::transaction::operation> oper) noexcept override;
+    using mbox_model::mbox_model;
+    error_type reset(const mbox::library& library, const guid& root, const mbox::type filter) noexcept override;
+    error_type exec(const event event) noexcept override;
     error_type context(const gui_variant& var) noexcept override;
     xgui_node find(const gui_variant& var) noexcept override
     {
@@ -92,12 +95,21 @@ class mbox_model_command : public mbox_model
         _column_total,
     };
 public:
-    error_type reset(const mbox::library& library, const guid& root) noexcept override;
-    error_type execute(const const_array_view<mbox::transaction::operation> oper) noexcept override;
+    using mbox_model::mbox_model;
+    error_type reset(const mbox::library& library, const guid& root, const mbox::type filter) noexcept override;
+    error_type exec(const event event) noexcept override;
     error_type context(const gui_variant& var) noexcept override;
     xgui_node find(const gui_variant& var) noexcept override
     {
         return {};
+    }
+    void lock() noexcept override
+    {
+        m_type = mbox_model_type::view_command;
+    }
+    void unlock() noexcept override
+    {
+        m_type = mbox_model_type::edit_command;
     }
 private:
     error_type initialize(const size_t row) noexcept;
@@ -113,15 +125,16 @@ error_type mbox_model::create(const mbox_model_type type, unique_ptr<mbox_model>
     switch (type)
     {
     case mbox_model_type::explorer:
-        ptr = make_unique<mbox_model_explorer>();
+        ptr = make_unique<mbox_model_explorer>(type);
         break;
 
     case mbox_model_type::directory:
-        ptr = make_unique<mbox_model_directory>();
+        ptr = make_unique<mbox_model_directory>(type);
         break;
 
-    case mbox_model_type::command:
-        ptr = make_unique<mbox_model_command>();
+    case mbox_model_type::view_command:
+    case mbox_model_type::edit_command:
+        ptr = make_unique<mbox_model_command>(type);
         break;
 
     default:
@@ -148,8 +161,16 @@ static error_type mbox_context(const guid& index, const mbox::type type) noexcep
 
     ICY_ERROR(menu.initialize(gui_widget_type::menu, {}));
     ICY_ERROR(menu_create.initialize(gui_widget_type::menu, {}));
-    ICY_ERROR(action_view.initialize("View"_s));
-    ICY_ERROR(action_edit.initialize("Edit"_s));
+    if (type == mbox::type::command)
+    {
+        ICY_ERROR(action_view.initialize("View"_s));
+        ICY_ERROR(action_edit.initialize("Edit"_s));
+    }
+    else if (type != mbox::type::group)
+    {
+        ICY_ERROR(action_edit.initialize("Open"_s));
+    }
+    
     ICY_ERROR(action_delete.initialize("Delete"_s));
     ICY_ERROR(action_rename.initialize("Rename"_s));
     ICY_ERROR(action_create.initialize("Create"_s));
@@ -167,8 +188,12 @@ static error_type mbox_context(const guid& index, const mbox::type type) noexcep
         }
     }
 
-    ICY_ERROR(menu.insert(action_view));
-    ICY_ERROR(menu.insert(action_edit));
+    if (action_view.index)
+        ICY_ERROR(menu.insert(action_view));
+
+    if (action_edit.index)
+        ICY_ERROR(menu.insert(action_edit));
+
     ICY_ERROR(menu.insert(action_delete));
     ICY_ERROR(menu.insert(action_rename));
     if (!actions_create.empty())
@@ -183,9 +208,9 @@ static error_type mbox_context(const guid& index, const mbox::type type) noexcep
     ICY_ERROR(menu.exec(action));
 
     auto event_type = event_type::none;
-    if (action == action_view)
+    if (action == action_view && action_view.index)
         event_type = mbox_event_type_view;
-    else if (action == action_edit)
+    else if (action == action_edit && action_edit.index)
         event_type = mbox_event_type_edit;
     else if (action == action_rename)
         event_type = mbox_event_type_rename;
@@ -207,17 +232,16 @@ static error_type mbox_context(const guid& index, const mbox::type type) noexcep
     }
     if (event_type != event_type::none)
     {
-        mbox_event_data_base event_data;
-        event_data.index = index;
-        ICY_ERROR(event::post(nullptr, event_type, event_data));
+        ICY_ERROR(event::post(nullptr, event_type, mbox_event_data_base(index)));
     }
     return {};    
 }
 
-error_type mbox_model_explorer::reset(const mbox::library& library, const guid& root) noexcept
+error_type mbox_model_explorer::reset(const mbox::library& library, const guid& root, const mbox::type filter) noexcept
 {
     ICY_ERROR(m_model.clear());
     m_root = root;
+    m_filter = filter;
     m_data.clear();
 
     array<guid> vec;
@@ -231,6 +255,14 @@ error_type mbox_model_explorer::reset(const mbox::library& library, const guid& 
     {
         const auto ptr = library.find(index);
         ICY_ASSERT(ptr, "INVALID PTR");
+
+        if (m_filter == mbox::type::_total)
+            ;
+        else if (ptr->type == mbox::type::directory || ptr->type == m_filter)
+            ;
+        else
+            continue;
+        
         const auto it = m_data.find(ptr->parent);
         ICY_ASSERT(it != m_data.end(), "CORRUPTED NODE");
 
@@ -245,25 +277,35 @@ error_type mbox_model_explorer::reset(const mbox::library& library, const guid& 
     ICY_ERROR(initialize(m_data.find(root)->value, m_model.node(0, 0)));
     return {};
 }
-error_type mbox_model_explorer::execute(const const_array_view<mbox::transaction::operation> vec) noexcept 
+error_type mbox_model_explorer::exec(const event event) noexcept 
 {
-    for (auto&& oper : vec)
+    if (event->type == mbox_event_type_transaction)
     {
-        if (oper.type == mbox::transaction::operation_type::insert)
+        for (auto&& oper : event->data<mbox_event_data_transaction>().value.oper())
         {
-            const auto parent = m_data.find(oper.value.parent);
-            const auto it = parent->value.nodes.lower_bound(oper.value.name);
-            const auto row = std::distance(parent->value.nodes.begin(), it);
-            auto parent_node = node(parent->value);
-            
-            node_type mbox_node;
-            ICY_ERROR(mbox_node.initialize(oper.value));
-            ICY_ERROR(parent_node.insert_rows(row, 1));
-            auto xgui_node = parent_node.node(row, 0);
-            ICY_ERROR(initialize(mbox_node, xgui_node));
-            
-            ICY_ERROR(parent->value.nodes.insert(oper.value.name, oper.value.index));
-            ICY_ERROR(m_data.insert(oper.value.index, std::move(mbox_node)));
+            if (oper.type == mbox::transaction::operation_type::insert)
+            {
+                if (m_filter == mbox::type::_total)
+                    ;
+                else if (oper.value.type == mbox::type::directory || oper.value.type == m_filter)
+                    ;
+                else
+                    continue;
+
+                const auto parent = m_data.find(oper.value.parent);
+                const auto it = parent->value.nodes.lower_bound(oper.value.name);
+                const auto row = std::distance(parent->value.nodes.begin(), it);
+                auto parent_node = node(parent->value);
+
+                node_type mbox_node;
+                ICY_ERROR(mbox_node.initialize(oper.value));
+                ICY_ERROR(parent_node.insert_rows(row, 1));
+                auto xgui_node = parent_node.node(row, 0);
+                ICY_ERROR(initialize(mbox_node, xgui_node));
+
+                ICY_ERROR(parent->value.nodes.insert(oper.value.name, oper.value.index));
+                ICY_ERROR(m_data.insert(oper.value.index, std::move(mbox_node)));
+            }
         }
     }
     return {};
@@ -322,7 +364,7 @@ error_type mbox_model_explorer::initialize(const node_type& mbox_node, xgui_node
     return {};
 }
 
-error_type mbox_model_directory::reset(const mbox::library& library, const guid& root) noexcept
+error_type mbox_model_directory::reset(const mbox::library& library, const guid& root, const mbox::type filter) noexcept
 {
     ICY_ERROR(m_model.clear());
     m_root = root;
@@ -349,48 +391,51 @@ error_type mbox_model_directory::reset(const mbox::library& library, const guid&
     
     return {};
 }
-error_type mbox_model_directory::execute(const const_array_view<mbox::transaction::operation> vec) noexcept
+error_type mbox_model_directory::exec(const event event) noexcept
 {
-    for (auto&& oper : vec)
+    if (event->type == mbox_event_type_transaction)
     {
-        if (oper.type == mbox::transaction::operation_type::insert)
+        for (auto&& oper : event->data<mbox_event_data_transaction>().value.oper())
         {
-            if (oper.value.parent == m_root)
+            if (oper.type == mbox::transaction::operation_type::insert)
             {
-                const auto it = std::lower_bound(m_data.keys().begin(), m_data.keys().end(), oper.value.name);
-                const auto row = std::distance(m_data.keys().begin(), it);
-                ICY_ERROR(m_model.insert_rows(row, 1));
-                node_type new_node;
-                ICY_ERROR(new_node.initialize(oper.value, nullptr));
-                ICY_ERROR(initialize(row, oper.value.name, new_node));
-                ICY_ERROR(m_data.insert(oper.value.name, std::move(new_node)));
-            }
-            else
-            {
-                for (auto&& pair : m_data)
+                if (oper.value.parent == m_root)
                 {
-                    if (oper.value.parent == pair.value.index)
+                    const auto it = std::lower_bound(m_data.keys().begin(), m_data.keys().end(), oper.value.name);
+                    const auto row = std::distance(m_data.keys().begin(), it);
+                    ICY_ERROR(m_model.insert_rows(row, 1));
+                    node_type new_node;
+                    ICY_ERROR(new_node.initialize(oper.value, nullptr));
+                    ICY_ERROR(initialize(row, oper.value.name, new_node));
+                    ICY_ERROR(m_data.insert(oper.value.name, std::move(new_node)));
+                }
+                else
+                {
+                    for (auto&& pair : m_data)
                     {
-                        const auto row = std::distance(m_data.keys().data(), &pair.key);
-                        pair.value.size += 1;
-                        string str_size;
-                        ICY_ERROR(to_string(pair.value.size, str_size));
-                        ICY_ERROR(m_model.node(row, column_size).text(str_size));
+                        if (oper.value.parent == pair.value.index)
+                        {
+                            const auto row = std::distance(m_data.keys().data(), &pair.key);
+                            pair.value.size += 1;
+                            string str_size;
+                            ICY_ERROR(to_string(pair.value.size, str_size));
+                            ICY_ERROR(m_model.node(row, column_size).text(str_size));
+                        }
                     }
                 }
             }
-        }
-        else if (oper.type == mbox::transaction::operation_type::modify) 
-        {
-            auto it = m_data.begin();
-            for (; it != m_data.end(); ++it)
+            else if (oper.type == mbox::transaction::operation_type::modify)
             {
-                if (it->value.index == oper.value.index)
-                    break;
-            }
-            if (it != m_data.end())
-            {
-                
+                auto it = m_data.begin();
+                for (; it != m_data.end(); ++it)
+                {
+                    if (it->value.index == oper.value.index)
+                        break;
+                }
+                if (it != m_data.end())
+                {
+
+                }
             }
         }
     }
@@ -398,7 +443,8 @@ error_type mbox_model_directory::execute(const const_array_view<mbox::transactio
 }
 error_type mbox_model_directory::context(const gui_variant& var) noexcept
 {
-    return make_stdlib_error(std::errc::function_not_supported);
+    return {};
+    //make_stdlib_error(std::errc::function_not_supported);
 }
 error_type mbox_model_directory::initialize(const size_t row, const string_view name, const node_type& node) noexcept
 {
@@ -429,7 +475,7 @@ error_type mbox_model_directory::initialize(const size_t row, const string_view 
     return {};
 }
 
-error_type mbox_model_command::reset(const mbox::library& library, const guid& root) noexcept
+error_type mbox_model_command::reset(const mbox::library& library, const guid& root, const mbox::type filter) noexcept
 {
     ICY_ERROR(m_model.clear());
     m_root = root;
@@ -447,75 +493,225 @@ error_type mbox_model_command::reset(const mbox::library& library, const guid& r
         ICY_ERROR(initialize(row++));
     return {};
 }
-error_type mbox_model_command::execute(const const_array_view<mbox::transaction::operation> oper) noexcept
+error_type mbox_model_command::exec(const event event) noexcept
 {
-    return make_stdlib_error(std::errc::function_not_supported);
+    return {}; // return make_stdlib_error(std::errc::function_not_supported);
 }
 error_type mbox_model_command::context(const gui_variant& var) noexcept
 {
+    auto readonly = false;
+    auto row = m_data.size();
+    mbox::action action;
     if (var.type() == gui_variant_type::none)
     {
         xgui_widget menu;
-        xgui_widget menu_create;
+        xgui_submenu menu_create;
+        xgui_submenu menu_create_group;
+        xgui_submenu menu_create_input;
+        xgui_submenu menu_create_event;
+        xgui_submenu menu_create_button;
+        xgui_action action_lock;
         xgui_action action_save;
-        xgui_action action_create;
-        map<mbox::action_type, xgui_action> actions_create;
 
+        map<mbox::action_type, xgui_action> actions_create;
         ICY_ERROR(menu.initialize(gui_widget_type::menu, {}));
-        ICY_ERROR(menu_create.initialize(gui_widget_type::menu, {}));
+        ICY_ERROR(menu_create.initialize("New Action"_s));
+        ICY_ERROR(menu_create_group.initialize("Group"_s));
+        ICY_ERROR(menu_create_input.initialize("Input"_s));
+        ICY_ERROR(menu_create_event.initialize("Event"_s));
         ICY_ERROR(action_save.initialize("Save"_s));
-        ICY_ERROR(action_create.initialize("Create"_s));
+        ICY_ERROR(action_lock.initialize(m_type == mbox_model_type::view_command ? "Unlock"_s : "Lock"_s));
+        
+        ICY_ERROR(menu_create.widget.insert(menu_create_group.action));
+        ICY_ERROR(menu_create.widget.insert(menu_create_input.action));
+        ICY_ERROR(menu_create.widget.insert(menu_create_event.action));
 
         for (auto k = 1u; k < uint32_t(mbox::action_type::_total); ++k)
         {
             const auto type = mbox::action_type(k);
             xgui_action action;
             ICY_ERROR(action.initialize(mbox::to_string(type)));
-            ICY_ERROR(menu_create.insert(action));
+
+            switch (type)
+            {
+            case mbox::action_type::group_join:             //  group
+            case mbox::action_type::group_leave:            //  group
+                ICY_ERROR(menu_create_group.widget.insert(action));
+                break;
+
+            case mbox::action_type::button_press:
+            case mbox::action_type::button_release:
+            case mbox::action_type::button_click:
+                ICY_ERROR(menu_create_input.widget.insert(action));
+                break;
+
+            case mbox::action_type::on_button_press:
+            case mbox::action_type::on_button_release:
+                ICY_ERROR(menu_create_event.widget.insert(action));
+                break;
+                
+            case mbox::action_type::command_execute:
+            case mbox::action_type::command_replace:
+                ICY_ERROR(menu_create.widget.insert(action));
+                break;
+            }
+
             ICY_ERROR(actions_create.insert(type, std::move(action)));
         }
         ICY_ERROR(menu.insert(action_save));
-        ICY_ERROR(menu.insert(action_create));
-        ICY_ERROR(action_create.bind(menu_create));
+        ICY_ERROR(menu.insert(action_lock));
+        ICY_ERROR(menu.insert(menu_create.action));
 
-        gui_action action;
-        ICY_ERROR(menu.exec(action));
-
-        auto event_type = event_type::none;
-        if (action == action_save)
-            event_type = mbox_event_type_view;
-        else if (action == action_edit)
-            event_type = mbox_event_type_edit;
-        else if (action == action_rename)
-            event_type = mbox_event_type_rename;
-        else if (action == action_delete)
-            event_type = mbox_event_type_delete;
-        else if (action.index)
+        if (m_type == mbox_model_type::view_command)
         {
-            for (auto&& pair : actions_create)
-            {
-                if (pair.value != action)
-                    continue;
+            ICY_ERROR(menu_create.action.enable(false));
+            ICY_ERROR(action_save.enable(false));
+        }
 
-                mbox_event_data_create event_data;
-                event_data.parent = index;
-                event_data.type = pair.key;
-                ICY_ERROR(event::post(nullptr, mbox_event_type_create, event_data));
+        gui_action gui_action;
+        ICY_ERROR(menu.exec(gui_action));
+
+        if (gui_action == action_save)
+        {
+            ICY_ERROR(event::post(nullptr, mbox_event_type_save, mbox_event_data_base(m_root)));
+        }
+        else if (gui_action == action_lock)
+        {
+            ICY_ERROR(event::post(nullptr, m_type == mbox_model_type::view_command ?
+                mbox_event_type_unlock : mbox_event_type_lock, mbox_event_data_base(m_root)));
+        }
+
+        auto type = mbox::action_type::none;
+        for (auto&& pair : actions_create)
+        {
+            if (pair.value == gui_action)
+            {
+                type = pair.key;
                 break;
             }
         }
-        if (event_type != event_type::none)
+        switch (type)
         {
-            mbox_event_data_base event_data;
-            event_data.index = index;
-            ICY_ERROR(event::post(nullptr, event_type, event_data));
+        case mbox::action_type::group_join:
+            action = mbox::action::create_group_join({});
+            break;
+        case mbox::action_type::group_leave:
+            action = mbox::action::create_group_leave({});
+            break;
+        case mbox::action_type::button_press:
+            action = mbox::action::create_button_press({});
+            break;
+        case mbox::action_type::button_release:
+            action = mbox::action::create_button_release({});
+            break;
+        case mbox::action_type::button_click:
+            action = mbox::action::create_button_click({});
+            break;
+        case mbox::action_type::command_execute:
+            action = mbox::action::create_command_execute({});
+            break;
+        case mbox::action_type::command_replace:
+            action = mbox::action::create_command_replace({});
+            break;
+        case mbox::action_type::on_button_press:
+            action = mbox::action::create_on_button_press({}, {});
+            break;
+        case mbox::action_type::on_button_release:
+            action = mbox::action::create_on_button_release({}, {});
+            break;
         }
-        return {};
     }
-    else
+    else if (var.type() == gui_variant_type::uinteger)
     {
+        row = var.as_uinteger();
+        if (row >= m_data.size())
+            return {};
+            
+        xgui_widget menu;
+        xgui_action view;
+        xgui_action edit;
+        xgui_action remove;
+        xgui_action move_up;
+        xgui_action move_down;
 
+        ICY_ERROR(menu.initialize(gui_widget_type::menu, {}));
+        ICY_ERROR(view.initialize("View"_s));
+        ICY_ERROR(edit.initialize("Edit"_s));
+        ICY_ERROR(remove.initialize("Delete"_s));
+        ICY_ERROR(move_up.initialize("Move up"_s));
+        ICY_ERROR(move_down.initialize("Move down"_s));
+        
+        ICY_ERROR(menu.insert(view));
+        ICY_ERROR(menu.insert(edit));
+        ICY_ERROR(menu.insert(remove));
+        ICY_ERROR(menu.insert(move_up));
+        ICY_ERROR(menu.insert(move_down));
+
+        if (m_type == mbox_model_type::view_command)
+        {
+            ICY_ERROR(edit.enable(false));
+            ICY_ERROR(remove.enable(false));
+            ICY_ERROR(move_up.enable(false));
+            ICY_ERROR(move_down.enable(false));
+        }
+
+        if (row == 0)
+            ICY_ERROR(move_up.enable(false));
+        if (row + 1 == m_data.size())
+            ICY_ERROR(move_down.enable(false));
+
+        gui_action gui_action;
+        ICY_ERROR(menu.exec(gui_action));
+
+        if (gui_action == view)
+        {
+            readonly = true;
+            action = m_data[row];
+        }
+        else if (gui_action == edit)
+        {
+            action = m_data[row];
+        }
+        else if (gui_action == remove)
+        {
+            ICY_ERROR(m_model.remove_rows(row, 1));
+            for (auto k = row + 1; k < m_data.size(); ++k)
+                m_data[k] = std::move(m_data[k]);
+            m_data.pop_back();
+        }
+        else if (gui_action == move_up)
+        {
+            std::swap(m_data[row - 1], m_data[row]);
+            ICY_ERROR(initialize(row - 1));
+            ICY_ERROR(initialize(row - 0));
+        }
+        else if (gui_action == move_down)
+        {
+            std::swap(m_data[row + 1], m_data[row]);
+            ICY_ERROR(initialize(row + 1));
+            ICY_ERROR(initialize(row + 0));
+        }
     }
+
+    if (action.type() == mbox::action_type::none)
+        return {};
+
+    auto saved = !readonly;
+    ICY_ERROR(mbox_form_action::exec(*m_library, m_root, action, saved));
+    if (saved && !readonly)
+    {
+        if (var.type() == gui_variant_type::none)
+        {
+            ICY_ERROR(m_model.insert_rows(m_data.size(), 1));
+            ICY_ERROR(m_data.push_back(action));
+        }
+        else
+        {
+            m_data[row] = action;
+        }
+        ICY_ERROR(initialize(row));
+    }
+    return {};
 }
 error_type mbox_model_command::initialize(const size_t row) noexcept
 {
@@ -524,42 +720,53 @@ error_type mbox_model_command::initialize(const size_t row) noexcept
     string value;
     string args;
 
-    switch (action.type)
+    switch (action.type())
     {
     case mbox::action_type::group_join:
     case mbox::action_type::group_leave:
-    case mbox::action_type::begin_broadcast:
-    case mbox::action_type::begin_multicast:
-    case mbox::action_type::end_broadcast:
-    case mbox::action_type::end_multicast:
         image_type = mbox_image::type_group;
-        ICY_ERROR(m_library->path(action.reference, value));
+        ICY_ERROR(m_library->path(action.group(), value));
         break;
 
     case mbox::action_type::on_button_press:
     case mbox::action_type::on_button_release:
         image_type = mbox_image::type_event;
-        ICY_ERROR(mbox::to_string(action.connect.event.button, value));
-        ICY_ERROR(m_library->path(action.connect.command, args));
+        ICY_ERROR(mbox::to_string(action.event_button(), value));
+        ICY_ERROR(m_library->path(action.event_command(), args));
         break;
 
     case mbox::action_type::button_press:
     case mbox::action_type::button_release:
     case mbox::action_type::button_click:
         image_type = mbox_image::type_input;
-        ICY_ERROR(mbox::to_string(action.button, value));
+        ICY_ERROR(mbox::to_string(action.button(), value));
         break;
 
     case mbox::action_type::command_execute:
-    case mbox::action_type::command_replace:
+    {
         image_type = mbox_image::type_command;
-        ICY_ERROR(m_library->path(action.replace.source, value));
-        ICY_ERROR(m_library->path(action.replace.target, args));
+
+        ICY_ERROR(m_library->path(action.execute().command, value));
+        const auto execute_type = action.execute().etype;
+        ICY_ERROR(to_string(mbox::to_string(execute_type), args));
+        if (execute_type != mbox::execute_type::self)
+        {
+            string str_group;
+            ICY_ERROR(m_library->path(action.execute().group, str_group));
+            args.appendf(" [%1]"_s, string_view(str_group));
+        }
+        break;
+    }
+
+    case mbox::action_type::command_replace:
+        ICY_ERROR(m_library->path(action.replace().source, value));
+        ICY_ERROR(m_library->path(action.replace().target, args));
         break;
     }
 
     ICY_ERROR(m_model.node(row, column_type).icon(find_image(image_type)));
-    ICY_ERROR(m_model.node(row, column_type).text(mbox::to_string(action.type)));
+    ICY_ERROR(m_model.node(row, column_type).text(mbox::to_string(action.type())));
+    ICY_ERROR(m_model.node(row, column_type).udata(row));
     ICY_ERROR(m_model.node(row, column_value).text(value));
     ICY_ERROR(m_model.node(row, column_args).text(args));
     return {};

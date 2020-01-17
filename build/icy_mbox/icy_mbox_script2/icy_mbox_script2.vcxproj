@@ -83,6 +83,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\..\source\icy_mbox\icy_mbox_script2.cpp" />
+    <ClCompile Include="..\..\..\source\icy_mbox\script2\icy_mbox_script_action.cpp" />
     <ClCompile Include="..\..\..\source\icy_mbox\script2\icy_mbox_script_main.cpp" />
     <ClCompile Include="..\..\..\source\icy_mbox\script2\icy_mbox_script_model.cpp" />
   </ItemGroup>

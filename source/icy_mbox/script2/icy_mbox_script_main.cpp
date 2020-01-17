@@ -65,11 +65,6 @@ public:
             ICY_ERROR(m_widget.bind(m_model->root()));
             break;
         }
-        case mbox_event_type_transaction:
-        {
-            ICY_ERROR(m_model->execute(event->data<mbox_event_data_transaction>().value.oper()));
-            break;
-        }
         case event_type::gui_context:
         {
             const auto& event_data = event->data<gui_event>();
@@ -78,11 +73,28 @@ public:
             break;
         }
         }
+        ICY_ERROR(m_model->exec(event));
         return {};
     }
     gui_widget widget() const noexcept
     {
         return m_widget;
+    }
+    void lock() noexcept
+    {
+        if (m_type == mbox_model_type::edit_command)
+        {
+            m_type = mbox_model_type::view_command;
+            m_model->lock();
+        }
+    }
+    void unlock() noexcept
+    {
+        if (m_type == mbox_model_type::view_command)
+        {
+            m_type = mbox_model_type::edit_command;         
+            m_model->unlock();
+        }
     }
 private:
     mbox_model_type m_type = mbox_model_type::none;
@@ -308,19 +320,39 @@ error_type mbox_application::exec(const event event) noexcept
         }
     }
     else if (
+        event->type == mbox_event_type_lock ||
+        event->type == mbox_event_type_unlock)
+    {
+        const auto& event_data = event->data<mbox_event_data_base>();
+        const auto tab = m_vals.find(event_data);
+        const auto base = m_library.find(event_data);
+        if (tab != m_vals.end() && base)
+        {
+            string tab_name;
+            ICY_ERROR(to_string(base->name, tab_name));
+            if (event->type == mbox_event_type_lock)
+                ICY_ERROR(tab_name.append(" [READ]"_s));
+            ICY_ERROR(m_gui->text(m_tabs, tab->value.widget(), tab_name));
+            event->type == mbox_event_type_lock ? tab->value.lock() : tab->value.unlock();
+        }
+    }
+    else if (
         event->type == mbox_event_type_view || 
         event->type == mbox_event_type_edit)
     {
         const auto& event_data = event->data<mbox_event_data_base>();
-        if (const auto ptr = m_vals.try_find(event_data.index))
-        {
-            ICY_ERROR(m_tabs.scroll(ptr->widget()));
-        }
-        else
-        {
-            const auto base = m_library.find(event_data.index);
-            ICY_ASSERT(base, "");
+        const auto base = m_library.find(event_data);
+        if (!base)
+            return make_stdlib_error(std::errc::invalid_argument);
 
+        string tab_name;
+        ICY_ERROR(to_string(base->name, tab_name));
+        if (event->type == mbox_event_type_view)
+            ICY_ERROR(tab_name.append(" [READ]"_s));
+
+        auto ptr = m_vals.try_find(event_data);
+        if (!ptr)
+        {
             auto mtype = mbox_model_type::none;
             if (base->type == mbox::type::directory)
             {
@@ -330,17 +362,21 @@ error_type mbox_application::exec(const event event) noexcept
                 base->type == mbox::type::character ||
                 base->type == mbox::type::command)
             {
-                mtype = mbox_model_type::command;
+                mtype = event->type == mbox_event_type_view ? 
+                    mbox_model_type::view_command :
+                    mbox_model_type::edit_command;
             }
             else
                 ICY_ASSERT(false, "INVALID MODEL TYPE");
 
-            mbox_widget widget(mtype, event_data.index);
+            mbox_widget widget(mtype, event_data);
             ICY_ERROR(widget.initialize(gui_widget_type::grid_view, m_tabs, m_library));
-            ICY_ERROR(m_gui->text(m_tabs, widget.widget(), base->name));
-            ICY_ERROR(m_tabs.scroll(widget.widget()));
-            ICY_ERROR(m_vals.insert(event_data.index, std::move(widget)));
+            auto it = m_vals.end();
+            ICY_ERROR(m_vals.insert(event_data, std::move(widget), &it));
+            ptr = &it->value;
         }
+        ICY_ERROR(m_gui->text(m_tabs, ptr->widget(), tab_name));
+        ICY_ERROR(m_tabs.scroll(ptr->widget()));
     }
     else if (event->type == event_type::gui_update)
     {
