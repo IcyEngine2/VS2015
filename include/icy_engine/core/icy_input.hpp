@@ -69,6 +69,7 @@ namespace icy
             rctrl   =   0x08,
             ralt    =   0x10,
             rshift  =   0x20,
+            _max    =   lctrl | lalt | lshift | rctrl | ralt | rshift,
         };
     };
     using key_mod = decltype(key_mod_enum::none);

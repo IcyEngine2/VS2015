@@ -61,7 +61,7 @@ public:
         {
         case mbox_event_type_load_library:
         {
-            ICY_ERROR(m_model->reset(event->data<mbox_event_data_load_library>().value, m_root));
+            ICY_ERROR(m_model->reset(*event->data<mbox_event_data_load_library>(), m_root));
             ICY_ERROR(m_widget.bind(m_model->root()));
             break;
         }
@@ -177,7 +177,7 @@ error_type mbox_application::initialize() noexcept
     ICY_ERROR(func(g_bytes_group, mbox_image::type_group));
     ICY_ERROR(func(g_bytes_input, mbox_image::type_input));
     ICY_ERROR(func(g_bytes_profile, mbox_image::type_character));
-    //ICY_ERROR(func(g_bytes_timer, mbox_image::type_timer));
+    ICY_ERROR(func(g_bytes_timer, mbox_image::type_timer));
     //ICY_ERROR(func(g_bytes_variable, mbox_image::type_variable));
     ICY_ERROR(func(g_bytes_create, mbox_image::action_create));
     ICY_ERROR(func(g_bytes_remove, mbox_image::action_remove));
@@ -268,7 +268,11 @@ error_type mbox_application::exec(const event event) noexcept
                 if (const auto error = m_library.load_from(path))
                     show_error(error, "Open library"_s);
                 else
+                {
                     m_path = std::move(path);
+                    ICY_ERROR(event::post(nullptr, mbox_event_type_load_library, 
+                        mbox_event_data_load_library(&m_library)));
+                }
             }
         }
         else if (action == m_save_as || action == m_save && m_path.empty())
@@ -313,9 +317,8 @@ error_type mbox_application::exec(const event event) noexcept
             }
             else
             {
-                mbox_event_data_transaction event_data;
-                event_data.value = std::move(txn);
-                ICY_ERROR(event::post(nullptr, mbox_event_type_transaction, std::move(event_data)));
+                ICY_ERROR(event::post(nullptr, mbox_event_type_transaction, 
+                    mbox_event_data_transaction(std::move(txn))));
             }
         }
     }

@@ -16,7 +16,19 @@ namespace mbox
         invalid_group,
         invalid_command,
         invalid_root,
+        invalid_timer,
+        invalid_timer_count,
+        invalid_timer_offset,
+        invalid_timer_period,
         invalid_type,
+        invalid_action_type,
+        invalid_button_key,
+        invalid_button_mod,
+
+        invalid_json_parse,
+        invalid_json_array,
+        invalid_json_object,
+
     };
     inline icy::error_type make_mbox_error(const mbox_error_code code) noexcept
     {
@@ -29,11 +41,7 @@ namespace mbox
         group,
         command,
         character,
-       /* timer,
-        string,
-        integer,
-        boolean,
-        counter,*/
+        timer,
         _total,
     };
     enum class action_type : uint32_t
@@ -44,10 +52,15 @@ namespace mbox
         button_press,           //  input
         button_release,         //  input
         button_click,           //  input
+        timer_start,            //  timer
+        timer_stop,             //  timer
+        timer_pause,            //  timer
+        timer_resume,           //  timer
         command_execute,        //  command
         command_replace,        //  command A, command B,
         on_button_press,        //  event; command
         on_button_release,      //  event; command
+        on_timer,
         _total,
     };
     enum class execute_type : uint32_t
@@ -85,6 +98,15 @@ namespace mbox
         {
             icy::guid source;
             icy::guid target;
+        };
+        struct timer_type
+        {
+            timer_type(const icy::guid& timer, const uint32_t count = 0) noexcept : timer(timer), count(count)
+            {
+
+            }
+            icy::guid timer;
+            uint32_t count;
         };
         union event_type
         {
@@ -157,6 +179,34 @@ namespace mbox
             new (&action.m_button) button_type(value);
             return action;
         }
+        static action create_timer_start(const icy::guid& timer, const uint32_t count) noexcept
+        {
+            action action;
+            action.m_type = action_type::timer_start;
+            new (&action.m_timer) timer_type(timer, count);
+            return action;
+        }
+        static action create_timer_stop(const icy::guid& timer) noexcept
+        {
+            action action;
+            action.m_type = action_type::timer_stop;
+            new (&action.m_timer) timer_type(timer);
+            return action;
+        }
+        static action create_timer_pause(const icy::guid& timer) noexcept
+        {
+            action action;
+            action.m_type = action_type::timer_pause;
+            new (&action.m_timer) timer_type(timer);
+            return action;
+        }
+        static action create_timer_resume(const icy::guid& timer) noexcept
+        {
+            action action;
+            action.m_type = action_type::timer_resume;
+            new (&action.m_timer) timer_type(timer);
+            return action;
+        }
         static action create_command_execute(const execute_type& value) noexcept
         {
             action action;
@@ -185,6 +235,13 @@ namespace mbox
             new (&action.m_connect) connect_type(value, command);
             return action;
         }
+        static action create_on_timer(const icy::guid& value, const icy::guid& command) noexcept
+        {
+            action action;
+            action.m_type = action_type::on_button_release;
+            new (&action.m_connect) connect_type(value, command);
+            return action;
+        }
         action_type type() const noexcept
         {
             return m_type;
@@ -197,6 +254,16 @@ namespace mbox
                 type() == action_type::button_release,
                 "INVALID TYPE");
             return m_button;
+        }
+        timer_type timer() const noexcept
+        {
+            ICY_ASSERT(
+                type() == action_type::timer_start ||
+                type() == action_type::timer_stop  ||
+                type() == action_type::timer_pause ||
+                type() == action_type::timer_resume,
+                "INVALID TYPE");
+            return m_timer;
         }
         group_type group() const noexcept
         {
@@ -224,6 +291,11 @@ namespace mbox
                 "INVALID TYPE");
             return m_connect.command;
         }
+        icy::guid event_timer() const noexcept
+        {
+            ICY_ASSERT(type() == action_type::on_timer, "INVALID TYPE");
+            return m_connect.event.timer;
+        }
         mbox::button_type event_button() const noexcept
         {
             ICY_ASSERT(
@@ -241,7 +313,13 @@ namespace mbox
             execute_type m_execute;
             replace_type m_replace;
             connect_type m_connect;
+            timer_type m_timer;
         };
+    };
+    struct timer
+    {
+        uint32_t offset = 0;
+        uint32_t period = 0;
     };
     struct base
     {
@@ -250,6 +328,7 @@ namespace mbox
             dst.type = src.type;
             dst.index = src.index;
             dst.parent = src.parent;
+            dst.timer = src.timer;
             ICY_ERROR(icy::to_string(src.name, dst.name));
             ICY_ERROR(dst.actions.assign(src.actions));
             return {};
@@ -258,7 +337,7 @@ namespace mbox
         icy::guid index;
         icy::guid parent;
         icy::string name;
-        icy::guid target;
+        timer timer;
         icy::array<action> actions;
     };
     
@@ -281,14 +360,8 @@ namespace mbox
             m_data = std::move(data);
             return {};
         }
-        icy::error_type load_from(const icy::string_view filename) noexcept
-        {
-            return icy::make_stdlib_error(std::errc::function_not_supported);
-        }
-        icy::error_type save_to(const icy::string_view filename) noexcept
-        {
-            return icy::make_stdlib_error(std::errc::function_not_supported);
-        }
+        icy::error_type load_from(const icy::string_view filename) noexcept;
+        icy::error_type save_to(const icy::string_view filename) const noexcept;
         const base* find(const icy::guid& index) const noexcept
         {
             return m_data.try_find(index);
@@ -347,6 +420,9 @@ namespace mbox
         icy::error_type path(const icy::guid& index, icy::string& str) const noexcept
         {
             using namespace icy;
+
+            if (index == guid())
+                return {};
 
             auto ptr = find(index);
             if (!ptr)
@@ -420,8 +496,6 @@ namespace mbox
                 }
             }
         }*/
-        icy::error_type to_json(const base& base, icy::json& json_output) noexcept;
-        icy::error_type from_json(const icy::json& json_input, base& output) noexcept;
         icy::error_type validate(base& base, icy::map<icy::guid, mbox::mbox_error_code>& errors) noexcept;
         icy::error_type validate(icy::map<icy::guid, mbox::mbox_error_code>& errors) noexcept
         {
@@ -472,13 +546,19 @@ namespace mbox
             return {};
         }
         icy::error_type remove(const icy::guid& index) noexcept;
-        icy::error_type insert(const base& base) noexcept
+        icy::error_type insert(base&& base) noexcept
         {
             operation oper;
             oper.type = operation_type::insert;
-            ICY_ERROR(base::copy(base, oper.value));
+            oper.value = std::move(base);
             ICY_ERROR(m_oper.push_back(std::move(oper)));
             return {};
+        }
+        icy::error_type insert(const base& base) noexcept
+        {
+            mbox::base copy;
+            ICY_ERROR(base::copy(base, copy));
+            return insert(std::move(copy));
         }
         icy::error_type modify(const base& base) noexcept
         {

@@ -16,14 +16,8 @@ static constexpr auto mbox_event_type_lock = icy::event_type(icy::event_type::us
 static constexpr auto mbox_event_type_unlock = icy::event_type(icy::event_type::user << 0x09);
 
 
-struct mbox_event_data_load_library
-{
-    mbox::library& value;
-};
-struct mbox_event_data_transaction
-{
-    mbox::transaction value;
-};
+using mbox_event_data_load_library = mbox::library*;
+using mbox_event_data_transaction = mbox::transaction;
 using mbox_event_data_base = icy::guid;
 struct mbox_event_data_create
 {
@@ -39,7 +33,7 @@ enum class mbox_image
     type_directory,
     type_input,
     //type_variable,
-    //type_timer,
+    type_timer,
     type_event,
     type_command,
     //type_binding,

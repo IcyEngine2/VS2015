@@ -161,12 +161,14 @@ static error_type mbox_context(const guid& index, const mbox::type type) noexcep
 
     ICY_ERROR(menu.initialize(gui_widget_type::menu, {}));
     ICY_ERROR(menu_create.initialize(gui_widget_type::menu, {}));
-    if (type == mbox::type::command)
+    if (type == mbox::type::command || 
+        type == mbox::type::character ||
+        type == mbox::type::timer)
     {
         ICY_ERROR(action_view.initialize("View"_s));
         ICY_ERROR(action_edit.initialize("Edit"_s));
     }
-    else if (type != mbox::type::group)
+    else if (type == mbox::type::directory)
     {
         ICY_ERROR(action_edit.initialize("Open"_s));
     }
@@ -281,7 +283,7 @@ error_type mbox_model_explorer::exec(const event event) noexcept
 {
     if (event->type == mbox_event_type_transaction)
     {
-        for (auto&& oper : event->data<mbox_event_data_transaction>().value.oper())
+        for (auto&& oper : event->data<mbox_event_data_transaction>().oper())
         {
             if (oper.type == mbox::transaction::operation_type::insert)
             {
@@ -395,7 +397,7 @@ error_type mbox_model_directory::exec(const event event) noexcept
 {
     if (event->type == mbox_event_type_transaction)
     {
-        for (auto&& oper : event->data<mbox_event_data_transaction>().value.oper())
+        for (auto&& oper : event->data<mbox_event_data_transaction>().oper())
         {
             if (oper.type == mbox::transaction::operation_type::insert)
             {
@@ -508,6 +510,7 @@ error_type mbox_model_command::context(const gui_variant& var) noexcept
         xgui_submenu menu_create;
         xgui_submenu menu_create_group;
         xgui_submenu menu_create_input;
+        xgui_submenu menu_create_timer;
         xgui_submenu menu_create_event;
         xgui_submenu menu_create_button;
         xgui_action action_lock;
@@ -518,12 +521,14 @@ error_type mbox_model_command::context(const gui_variant& var) noexcept
         ICY_ERROR(menu_create.initialize("New Action"_s));
         ICY_ERROR(menu_create_group.initialize("Group"_s));
         ICY_ERROR(menu_create_input.initialize("Input"_s));
+        ICY_ERROR(menu_create_timer.initialize("Timer"_s));
         ICY_ERROR(menu_create_event.initialize("Event"_s));
         ICY_ERROR(action_save.initialize("Save"_s));
         ICY_ERROR(action_lock.initialize(m_type == mbox_model_type::view_command ? "Unlock"_s : "Lock"_s));
         
         ICY_ERROR(menu_create.widget.insert(menu_create_group.action));
         ICY_ERROR(menu_create.widget.insert(menu_create_input.action));
+        ICY_ERROR(menu_create.widget.insert(menu_create_timer.action));
         ICY_ERROR(menu_create.widget.insert(menu_create_event.action));
 
         for (auto k = 1u; k < uint32_t(mbox::action_type::_total); ++k)
@@ -545,8 +550,17 @@ error_type mbox_model_command::context(const gui_variant& var) noexcept
                 ICY_ERROR(menu_create_input.widget.insert(action));
                 break;
 
+            case mbox::action_type::timer_start:
+            case mbox::action_type::timer_stop:
+            case mbox::action_type::timer_pause:
+            case mbox::action_type::timer_resume:
+                ICY_ERROR(menu_create_timer.widget.insert(action));
+                break;
+
+
             case mbox::action_type::on_button_press:
             case mbox::action_type::on_button_release:
+            case mbox::action_type::on_timer:
                 ICY_ERROR(menu_create_event.widget.insert(action));
                 break;
                 
@@ -606,6 +620,18 @@ error_type mbox_model_command::context(const gui_variant& var) noexcept
             break;
         case mbox::action_type::button_click:
             action = mbox::action::create_button_click({});
+            break;
+        case mbox::action_type::timer_start:
+            action = mbox::action::create_timer_start({}, 1);
+            break;
+        case mbox::action_type::timer_stop:
+            action = mbox::action::create_timer_stop({});
+            break;
+        case mbox::action_type::timer_pause:
+            action = mbox::action::create_timer_pause({});
+            break;
+        case mbox::action_type::timer_resume:
+            action = mbox::action::create_timer_resume({});
             break;
         case mbox::action_type::command_execute:
             action = mbox::action::create_command_execute({});
@@ -735,6 +761,11 @@ error_type mbox_model_command::initialize(const size_t row) noexcept
         ICY_ERROR(m_library->path(action.event_command(), args));
         break;
 
+    case mbox::action_type::on_timer:
+        image_type = mbox_image::type_event;
+        ICY_ERROR(m_library->path(action.event_timer(), value));
+        break;
+
     case mbox::action_type::button_press:
     case mbox::action_type::button_release:
     case mbox::action_type::button_click:
@@ -742,10 +773,19 @@ error_type mbox_model_command::initialize(const size_t row) noexcept
         ICY_ERROR(mbox::to_string(action.button(), value));
         break;
 
+    case mbox::action_type::timer_start:
+        ICY_ERROR(to_string(action.timer().count, args));
+        //  fall through
+    case mbox::action_type::timer_stop:
+    case mbox::action_type::timer_pause:
+    case mbox::action_type::timer_resume:
+        image_type = mbox_image::type_timer;
+        ICY_ERROR(m_library->path(action.timer().timer, value));
+        break;
+
     case mbox::action_type::command_execute:
     {
         image_type = mbox_image::type_command;
-
         ICY_ERROR(m_library->path(action.execute().command, value));
         const auto execute_type = action.execute().etype;
         ICY_ERROR(to_string(mbox::to_string(execute_type), args));
