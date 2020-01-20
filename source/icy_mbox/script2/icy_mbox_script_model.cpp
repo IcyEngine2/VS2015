@@ -24,7 +24,7 @@ public:
     using mbox_model::mbox_model;
     error_type reset(const mbox::library& library, const guid& root, const mbox::type filter) noexcept override;
     error_type exec(const event event) noexcept override;
-    error_type context(const gui_variant& var) noexcept override;
+    error_type context(const icy::gui_node node) noexcept override;
     xgui_node find(const gui_variant& var) noexcept override
     {
         if (const auto ptr = m_data.try_find(var.as_guid()))
@@ -74,7 +74,7 @@ public:
     using mbox_model::mbox_model;
     error_type reset(const mbox::library& library, const guid& root, const mbox::type filter) noexcept override;
     error_type exec(const event event) noexcept override;
-    error_type context(const gui_variant& var) noexcept override;
+    error_type context(const icy::gui_node node) noexcept override;
     xgui_node find(const gui_variant& var) noexcept override
     {
         return {};
@@ -98,7 +98,7 @@ public:
     using mbox_model::mbox_model;
     error_type reset(const mbox::library& library, const guid& root, const mbox::type filter) noexcept override;
     error_type exec(const event event) noexcept override;
-    error_type context(const gui_variant& var) noexcept override;
+    error_type context(const icy::gui_node node) noexcept override;
     xgui_node find(const gui_variant& var) noexcept override
     {
         return {};
@@ -111,11 +111,18 @@ public:
     {
         m_type = mbox_model_type::edit_command;
     }
+    error_type save(mbox::base& base) noexcept override;
+    error_type name(string& name) const noexcept override;
+    bool is_changed() const noexcept override
+    {
+        return m_changed;
+    }
 private:
     error_type initialize(const size_t row) noexcept;
 private:
     const mbox::library* m_library = nullptr;
     icy::array<mbox::action> m_data;
+    bool m_changed = false;
 };
 ICY_STATIC_NAMESPACE_END
 
@@ -156,6 +163,7 @@ static error_type mbox_context(const guid& index, const mbox::type type) noexcep
     xgui_action action_edit;
     xgui_action action_delete;
     xgui_action action_rename;
+    xgui_action action_move;
     xgui_action action_create;
     map<mbox::type, xgui_action> actions_create;
 
@@ -175,6 +183,7 @@ static error_type mbox_context(const guid& index, const mbox::type type) noexcep
     
     ICY_ERROR(action_delete.initialize("Delete"_s));
     ICY_ERROR(action_rename.initialize("Rename"_s));
+    ICY_ERROR(action_move.initialize("Move"_s));
     ICY_ERROR(action_create.initialize("Create"_s));
 
     if (type == mbox::type::directory)
@@ -218,6 +227,8 @@ static error_type mbox_context(const guid& index, const mbox::type type) noexcep
         event_type = mbox_event_type_rename;
     else if (action == action_delete)
         event_type = mbox_event_type_delete;
+    else if (action == action_move)
+        event_type = mbox_event_type_move;
     else if (action.index)
     {
         for (auto&& pair : actions_create)
@@ -285,36 +296,81 @@ error_type mbox_model_explorer::exec(const event event) noexcept
     {
         for (auto&& oper : event->data<mbox_event_data_transaction>().oper())
         {
+            if (m_filter == mbox::type::_total)
+                ;
+            else if (oper.value.type == mbox::type::directory || oper.value.type == m_filter)
+                ;
+            else
+                continue;
+
+            if (oper.value.index == m_root)
+            {
+                if (oper.type == mbox::transaction::operation_type::modify)
+                {
+                    ICY_ERROR(m_model.node(0, 0).text(oper.value.name));
+                }
+                continue;
+            }
+            const auto parent = m_data.find(oper.value.parent);
+            if (parent == m_data.end())
+                continue;
+
+            auto parent_node = node(parent->value);
+            auto& nodes = parent->value.nodes;
+
             if (oper.type == mbox::transaction::operation_type::insert)
             {
-                if (m_filter == mbox::type::_total)
-                    ;
-                else if (oper.value.type == mbox::type::directory || oper.value.type == m_filter)
-                    ;
-                else
-                    continue;
-
-                const auto parent = m_data.find(oper.value.parent);
-                const auto it = parent->value.nodes.lower_bound(oper.value.name);
-                const auto row = std::distance(parent->value.nodes.begin(), it);
-                auto parent_node = node(parent->value);
+                const auto new_find = nodes.lower_bound(oper.value.name);
+                const auto new_row = std::distance(nodes.begin(), new_find);
 
                 node_type mbox_node;
                 ICY_ERROR(mbox_node.initialize(oper.value));
-                ICY_ERROR(parent_node.insert_rows(row, 1));
-                auto xgui_node = parent_node.node(row, 0);
+                ICY_ERROR(parent_node.insert_rows(new_row, 1));
+                auto xgui_node = parent_node.node(new_row, 0);
                 ICY_ERROR(initialize(mbox_node, xgui_node));
-
-                ICY_ERROR(parent->value.nodes.insert(oper.value.name, oper.value.index));
+                ICY_ERROR(nodes.insert(oper.value.name, oper.value.index));
                 ICY_ERROR(m_data.insert(oper.value.index, std::move(mbox_node)));
+                continue;
+            }
+            auto old_find = nodes.begin();
+            for (; old_find != nodes.end(); ++old_find)
+            {
+                if (old_find->value == oper.value.index)
+                    break;
+            }
+            const auto global_find = m_data.find(oper.value.index);
+            if (global_find == m_data.end() || old_find == nodes.end())
+                return mbox::make_mbox_error(mbox::mbox_error_code::invalid_index);
+            
+            const auto old_row = std::distance(nodes.begin(), old_find);
+            nodes.erase(old_find);
+
+            const auto new_find = nodes.lower_bound(oper.value.name);
+            const auto new_row = std::distance(nodes.begin(), new_find);
+
+            if (oper.type == mbox::transaction::operation_type::modify)
+            {
+                if (new_row != old_row)
+                {
+                    ICY_ERROR(parent_node.move_rows(old_row, 1, new_row));
+                }
+                auto xgui_node = parent_node.node(new_row, 0);
+                ICY_ERROR(to_string(oper.value.name, global_find->value.name));
+                ICY_ERROR(xgui_node.text(oper.value.name));
+                ICY_ERROR(nodes.insert(oper.value.name, oper.value.index));
+            }
+            else if (oper.type == mbox::transaction::operation_type::remove)
+            {
+                ICY_ERROR(parent_node.remove_rows(old_row, 1));
+                m_data.erase(global_find);
             }
         }
     }
     return {};
 }
-error_type mbox_model_explorer::context(const gui_variant& var) noexcept
+error_type mbox_model_explorer::context(const icy::gui_node node) noexcept
 {
-    const auto index = var.as_guid();
+    const auto index = node.udata().as_guid();
     const auto it = m_data.find(index);
     if (it == m_data.end())
         return {};
@@ -347,6 +403,9 @@ error_type mbox_model_explorer::initialize(const node_type& mbox_node, xgui_node
         break;
     case mbox::type::directory:
         ICY_ERROR(gui_node.icon(find_image(mbox_image::type_directory)));
+        break;
+    case mbox::type::timer:
+        ICY_ERROR(gui_node.icon(find_image(mbox_image::type_timer)));
         break;
     }
     ICY_ERROR(gui_node.text(mbox_node.name));
@@ -443,7 +502,7 @@ error_type mbox_model_directory::exec(const event event) noexcept
     }
     return {};
 }
-error_type mbox_model_directory::context(const gui_variant& var) noexcept
+error_type mbox_model_directory::context(const icy::gui_node) noexcept
 {
     return {};
     //make_stdlib_error(std::errc::function_not_supported);
@@ -495,16 +554,38 @@ error_type mbox_model_command::reset(const mbox::library& library, const guid& r
         ICY_ERROR(initialize(row++));
     return {};
 }
+error_type mbox_model_command::save(mbox::base& base) noexcept
+{
+    base.actions.clear();
+    for (auto&& action : m_data)
+        ICY_ERROR(base.actions.push_back(action));
+    m_changed = false;
+    return {};
+}
 error_type mbox_model_command::exec(const event event) noexcept
 {
+    if (event->type == mbox_event_type_save)
+    {
+        const auto& event_data = event->data<mbox_event_data_base>();
+        if (event_data == m_root)
+        {
+           
+        }
+    }
     return {}; // return make_stdlib_error(std::errc::function_not_supported);
 }
-error_type mbox_model_command::context(const gui_variant& var) noexcept
+error_type mbox_model_command::context(const icy::gui_node node) noexcept
 {
+    const auto changed = [this]
+    {
+        m_changed = true;
+        return event::post(nullptr, mbox_event_type_changed, m_root);        
+    };
+
     auto readonly = false;
     auto row = m_data.size();
     mbox::action action;
-    if (var.type() == gui_variant_type::none)
+    if (!node)
     {
         xgui_widget menu;
         xgui_submenu menu_create;
@@ -539,9 +620,13 @@ error_type mbox_model_command::context(const gui_variant& var) noexcept
 
             switch (type)
             {
-            case mbox::action_type::group_join:             //  group
-            case mbox::action_type::group_leave:            //  group
+            case mbox::action_type::group_join:
+            case mbox::action_type::group_leave:
                 ICY_ERROR(menu_create_group.widget.insert(action));
+                break;
+
+            case mbox::action_type::focus:
+                ICY_ERROR(menu_create.widget.insert(action));
                 break;
 
             case mbox::action_type::button_press:
@@ -591,8 +676,9 @@ error_type mbox_model_command::context(const gui_variant& var) noexcept
         }
         else if (gui_action == action_lock)
         {
-            ICY_ERROR(event::post(nullptr, m_type == mbox_model_type::view_command ?
-                mbox_event_type_unlock : mbox_event_type_lock, mbox_event_data_base(m_root)));
+            m_type = m_type == mbox_model_type::view_command ?
+                mbox_model_type::edit_command : mbox_model_type::view_command;
+            ICY_ERROR(event::post(nullptr, mbox_event_type_changed, m_root));            
         }
 
         auto type = mbox::action_type::none;
@@ -611,6 +697,9 @@ error_type mbox_model_command::context(const gui_variant& var) noexcept
             break;
         case mbox::action_type::group_leave:
             action = mbox::action::create_group_leave({});
+            break;
+        case mbox::action_type::focus:
+            action = mbox::action::create_focus({});
             break;
         case mbox::action_type::button_press:
             action = mbox::action::create_button_press({});
@@ -647,12 +736,10 @@ error_type mbox_model_command::context(const gui_variant& var) noexcept
             break;
         }
     }
-    else if (var.type() == gui_variant_type::uinteger)
+    else if (node.row() < m_data.size())
     {
-        row = var.as_uinteger();
-        if (row >= m_data.size())
-            return {};
-            
+        row = node.row();
+
         xgui_widget menu;
         xgui_action view;
         xgui_action edit;
@@ -702,20 +789,23 @@ error_type mbox_model_command::context(const gui_variant& var) noexcept
         {
             ICY_ERROR(m_model.remove_rows(row, 1));
             for (auto k = row + 1; k < m_data.size(); ++k)
-                m_data[k] = std::move(m_data[k]);
+                m_data[k - 1] = std::move(m_data[k]);
             m_data.pop_back();
+            ICY_ERROR(changed());
         }
         else if (gui_action == move_up)
         {
             std::swap(m_data[row - 1], m_data[row]);
             ICY_ERROR(initialize(row - 1));
             ICY_ERROR(initialize(row - 0));
+            ICY_ERROR(changed());
         }
         else if (gui_action == move_down)
         {
             std::swap(m_data[row + 1], m_data[row]);
             ICY_ERROR(initialize(row + 1));
             ICY_ERROR(initialize(row + 0));
+            ICY_ERROR(changed());
         }
     }
 
@@ -726,7 +816,7 @@ error_type mbox_model_command::context(const gui_variant& var) noexcept
     ICY_ERROR(mbox_form_action::exec(*m_library, m_root, action, saved));
     if (saved && !readonly)
     {
-        if (var.type() == gui_variant_type::none)
+        if (row == m_data.size())
         {
             ICY_ERROR(m_model.insert_rows(m_data.size(), 1));
             ICY_ERROR(m_data.push_back(action));
@@ -736,6 +826,7 @@ error_type mbox_model_command::context(const gui_variant& var) noexcept
             m_data[row] = action;
         }
         ICY_ERROR(initialize(row));
+        ICY_ERROR(changed());
     }
     return {};
 }
@@ -752,6 +843,11 @@ error_type mbox_model_command::initialize(const size_t row) noexcept
     case mbox::action_type::group_leave:
         image_type = mbox_image::type_group;
         ICY_ERROR(m_library->path(action.group(), value));
+        break;
+
+    case mbox::action_type::focus:
+        image_type = mbox_image::type_character;
+        ICY_ERROR(m_library->path(action.focus(), value));
         break;
 
     case mbox::action_type::on_button_press:
@@ -806,8 +902,20 @@ error_type mbox_model_command::initialize(const size_t row) noexcept
 
     ICY_ERROR(m_model.node(row, column_type).icon(find_image(image_type)));
     ICY_ERROR(m_model.node(row, column_type).text(mbox::to_string(action.type())));
-    ICY_ERROR(m_model.node(row, column_type).udata(row));
     ICY_ERROR(m_model.node(row, column_value).text(value));
     ICY_ERROR(m_model.node(row, column_args).text(args));
+    return {};
+}
+error_type mbox_model_command::name(string& str) const noexcept
+{
+    ICY_ERROR(to_string(m_library->find(m_root)->name, str));
+    if (m_type == mbox_model_type::view_command)
+    {
+        ICY_ERROR(str.append(" [LOCK]"_s));
+    }
+    if (m_changed)
+    {
+        ICY_ERROR(str.append(" (*)"_s));
+    }
     return {};
 }

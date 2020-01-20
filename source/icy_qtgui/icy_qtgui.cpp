@@ -141,6 +141,8 @@ enum class qtgui_event_type : uint32_t
     insert_model_cols,
     remove_model_rows,
     remove_model_cols,
+    move_model_rows,
+    move_model_cols,
     show,
     text_widget,
     text_model,
@@ -297,6 +299,39 @@ public:
     const gui_node node;
     const int offset;
     const int count;
+};
+class qtgui_event_move_model_rows : public QEvent
+{
+public:
+    qtgui_event_move_model_rows(const gui_node node_src, const int offset_src,
+        const int count, const gui_node node_dst, const int offset_dst) :
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::move_model_rows))),
+        node_src(node_src), offset_src(offset_src), count(count), node_dst(node_dst), offset_dst(offset_dst)
+    {
+    }
+public:
+    const gui_node node_src;
+    const int offset_src;
+    const int count;
+    const gui_node node_dst;
+    const int offset_dst;
+};
+class qtgui_event_move_model_cols : public QEvent
+{
+public:
+    qtgui_event_move_model_cols(const gui_node node_src, const int offset_src,
+        const int count, const gui_node node_dst, const int offset_dst) :
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::move_model_cols))),
+        node_src(node_src), offset_src(offset_src), count(count), node_dst(node_dst), offset_dst(offset_dst)
+    {
+
+    }
+public:
+    const gui_node node_src;
+    const int offset_src;
+    const int count;
+    const gui_node node_dst;
+    const int offset_dst;
 };
 class qtgui_event_show : public QEvent
 {
@@ -644,10 +679,13 @@ public:
     bool insertColumns(int column, int count, const QModelIndex& parent) override;
     bool removeRows(int row, int count, const QModelIndex& parent) override;
     bool removeColumns(int column, int count, const QModelIndex& parent) override;
+    bool moveRows(const QModelIndex& sourceParent, int sourceRow, int count, const QModelIndex& destinationParent, int destinationChild) override;
+    bool moveColumns(const QModelIndex& sourceParent, int sourceColumn, int count, const QModelIndex& destinationParent, int destinationChild) override;
     void removeChild(const int32_t index);
     QVariant headerData(int section, Qt::Orientation orientation, int role) const override;
     bool setHeaderData(int section, Qt::Orientation orientation, const QVariant& value, int role) override;
     void reset();
+    void updateChildren(const qtgui_node& parent);
 private:
     QList<qtgui_node> m_nodes;
     QQueue<int32_t> m_free;
@@ -683,6 +721,8 @@ private:
     uint32_t insert_cols(const gui_node parent, const size_t offset, const size_t count) noexcept override;
     uint32_t remove_rows(const gui_node parent, const size_t offset, const size_t count) noexcept override;
     uint32_t remove_cols(const gui_node parent, const size_t offset, const size_t count) noexcept override;
+    uint32_t move_rows(const gui_node node_src, const size_t offset_src, const size_t count, const gui_node node_dst, const size_t offset_dst) noexcept override;
+    uint32_t move_cols(const gui_node node_src, const size_t offset_src, const size_t count, const gui_node node_dst, const size_t offset_dst) noexcept override;
     gui_node node(const gui_node parent, const size_t row, const size_t col) noexcept;
     uint32_t show(const gui_widget widget, const bool value) noexcept override;
     uint32_t text(const gui_widget widget, const string_view text) noexcept override;
@@ -716,6 +756,8 @@ private:
     std::errc process(const qtgui_event_insert_model_cols& event);
     std::errc process(const qtgui_event_remove_model_rows& event);
     std::errc process(const qtgui_event_remove_model_cols& event);
+    std::errc process(const qtgui_event_move_model_rows& event);
+    std::errc process(const qtgui_event_move_model_cols& event);
     std::errc process(const qtgui_event_show& event);
     std::errc process(const qtgui_event_text_widget& event);
     std::errc process(const qtgui_event_text_model& event);
@@ -843,6 +885,12 @@ bool qtgui_system::notify(QObject* object, QEvent* event) noexcept
                     break;
                 case qtgui_event_type::remove_model_cols:
                     error = process(*static_cast<qtgui_event_remove_model_cols*>(event));
+                    break;
+                case qtgui_event_type::move_model_rows:
+                    error = process(*static_cast<qtgui_event_move_model_rows*>(event));
+                    break;
+                case qtgui_event_type::move_model_cols:
+                    error = process(*static_cast<qtgui_event_move_model_cols*>(event));
                     break;
                 case qtgui_event_type::show:
                     error = process(*static_cast<qtgui_event_show*>(event));
@@ -1125,6 +1173,32 @@ uint32_t qtgui_system::remove_cols(const gui_node parent, const size_t offset, c
         if (!parent || offset >= INT32_MAX || count >= INT32_MAX)
             return uint32_t(std::errc::invalid_argument);
         const auto event = new qtgui_event_remove_model_rows(parent, int32_t(offset), int32_t(count));
+        qApp->postEvent(this, event);
+    }
+    ICY_CATCH;
+    return {};
+}
+uint32_t qtgui_system::move_rows(const gui_node node_src, const size_t offset_src, const size_t count, const gui_node node_dst, const size_t offset_dst) noexcept
+{
+    try
+    {
+        if (!node_src || !node_dst || offset_src >= INT32_MAX || count >= INT32_MAX || offset_dst >= INT32_MAX)
+            return uint32_t(std::errc::invalid_argument);
+        const auto event = new qtgui_event_move_model_rows(node_src, 
+            int32_t(offset_src), int32_t(count), node_dst, int32_t(offset_dst));
+        qApp->postEvent(this, event);
+    }
+    ICY_CATCH;
+    return {};
+}
+uint32_t qtgui_system::move_cols(const gui_node node_src, const size_t offset_src, const size_t count, const gui_node node_dst, const size_t offset_dst) noexcept
+{
+    try
+    {
+        if (!node_src || !node_dst || offset_src >= INT32_MAX || count >= INT32_MAX || offset_dst >= INT32_MAX)
+            return uint32_t(std::errc::invalid_argument);
+        const auto event = new qtgui_event_move_model_cols(node_src,
+            int32_t(offset_src), int32_t(count), node_dst, int32_t(offset_dst));
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
@@ -1780,6 +1854,40 @@ std::errc qtgui_system::process(const qtgui_event_remove_model_cols& event)
 
     return {};
 }
+std::errc qtgui_system::process(const qtgui_event_move_model_rows& event)
+{
+    if (event.node_src.model() >= m_models.size() ||
+        event.node_dst.model() >= m_models.size() ||
+        event.node_src.model() != event.node_dst.model())
+        return std::errc::invalid_argument;
+
+    const auto model = m_models[event.node_src.model()];
+    if (!model)
+        return std::errc::invalid_argument;
+
+    if (!model->moveRows(model->index(event.node_src),
+        event.offset_src, event.count, model->index(event.node_dst), event.offset_dst))
+        return std::errc::invalid_argument;
+
+    return {};
+}
+std::errc qtgui_system::process(const qtgui_event_move_model_cols& event)
+{
+    if (event.node_src.model() >= m_models.size() ||
+        event.node_dst.model() >= m_models.size() ||
+        event.node_src.model() != event.node_dst.model())
+        return std::errc::invalid_argument;
+
+    const auto model = m_models[event.node_src.model()];
+    if (!model)
+        return std::errc::invalid_argument;
+
+    if (!model->moveColumns(model->index(event.node_src),
+        event.offset_src, event.count, model->index(event.node_dst), event.offset_dst))
+        return std::errc::invalid_argument;
+
+    return {};
+}
 std::errc qtgui_system::process(const qtgui_event_show& event)
 {
     if (event.widget.index >= m_widgets.size())
@@ -2358,6 +2466,7 @@ bool qtgui_model::insertRows(int row, int count, const QModelIndex& parent)
         return true;
 
     QAbstractItemModel::beginInsertRows(parent, r0, r1 - 1);
+    ICY_SCOPE_EXIT{ QAbstractItemModel::endInsertRows(); };
     decltype(node.nodes) newNodes;
 
     for (auto k = 0; k < r0; ++k)
@@ -2400,7 +2509,6 @@ bool qtgui_model::insertRows(int row, int count, const QModelIndex& parent)
     }
     node.nodes = std::move(newNodes);
     node.rowCount += r1 - r0;
-    QAbstractItemModel::endInsertRows();
     return true;
 }
 bool qtgui_model::insertColumns(int column, int count, const QModelIndex& parent)
@@ -2413,7 +2521,8 @@ bool qtgui_model::insertColumns(int column, int count, const QModelIndex& parent
     if (c1 == c0)
         return true;
 
-    QAbstractItemModel::beginInsertRows(parent, c0, c1 - 1);
+    QAbstractItemModel::beginInsertColumns(parent, c0, c1 - 1);
+    ICY_SCOPE_EXIT{ QAbstractItemModel::endInsertColumns(); };
     decltype(node.nodes) newNodes;
 
     for (auto row = 0; row < node.rowCount; ++row)
@@ -2452,7 +2561,6 @@ bool qtgui_model::insertColumns(int column, int count, const QModelIndex& parent
     }
     node.nodes = std::move(newNodes);
     node.colCount += c1 - c0;
-    QAbstractItemModel::endInsertRows();
     return true;
 }
 bool qtgui_model::removeRows(int row, int count, const QModelIndex& parent)
@@ -2469,6 +2577,7 @@ bool qtgui_model::removeRows(int row, int count, const QModelIndex& parent)
         return true;
 
     QAbstractItemModel::beginRemoveRows(parent, r0, r1 - 1);
+    ICY_SCOPE_EXIT{ QAbstractItemModel::endRemoveRows(); };
     decltype(node.nodes) newNodes;
 
     for (auto k = 0; k < node.rowCount; ++k)
@@ -2491,7 +2600,6 @@ bool qtgui_model::removeRows(int row, int count, const QModelIndex& parent)
     }
     node.nodes = std::move(newNodes);
     node.rowCount -= r1 - r0;
-    QAbstractItemModel::endRemoveRows();
     return true;
 }
 bool qtgui_model::removeColumns(int column, int count, const QModelIndex& parent)
@@ -2508,6 +2616,7 @@ bool qtgui_model::removeColumns(int column, int count, const QModelIndex& parent
         return true;
 
     QAbstractItemModel::beginRemoveColumns(parent, c0, c1 - 1);
+    ICY_SCOPE_EXIT{ QAbstractItemModel::endRemoveColumns(); };
     decltype(node.nodes) newNodes;
     
     for (auto row = 0; row < node.rowCount; ++row)
@@ -2530,8 +2639,65 @@ bool qtgui_model::removeColumns(int column, int count, const QModelIndex& parent
     }
     node.nodes = std::move(newNodes);
     node.colCount -= c1 - c0;
-    QAbstractItemModel::endRemoveColumns();
+    
     return true;
+}
+bool qtgui_model::moveRows(const QModelIndex& sourceParent, int sourceRow, int count, const QModelIndex& destinationParent, int destinationChild)
+{
+    if (count < 0 || sourceRow < 0 || destinationChild < 0 || count <= 0)
+        return false;
+
+    auto& srcNode = m_nodes[sourceParent.internalId()];
+    auto& dstNode = m_nodes[destinationParent.internalId()];
+    const auto srcBeg = sourceRow;
+    const auto srcEnd = srcBeg + count;
+    const auto dstBeg = &srcNode == &dstNode && destinationChild >= srcEnd ? destinationChild + 1 : destinationChild;
+    auto delta = dstBeg - srcBeg;
+
+    if (!QAbstractItemModel::beginMoveRows(sourceParent, srcBeg, srcEnd - 1, destinationParent, dstBeg))
+        return false;
+    ICY_SCOPE_EXIT{ QAbstractItemModel::endMoveRows(); };
+    if (&srcNode == &dstNode)
+    {
+        decltype(srcNode.nodes) newNodes;
+        const auto copyRows = [&srcNode, &newNodes](const int beg, const int end)
+        {
+            for (auto row = beg; row < end; ++row)
+            {
+                for (auto col = 0; col < srcNode.colCount; ++col)
+                    newNodes.push_back(srcNode.nodes[row * srcNode.colCount + col]);
+            }
+        };
+        if (delta >= count)
+        {
+            delta -= count;
+            copyRows(0, srcBeg);
+            copyRows(srcEnd, srcEnd + delta);
+            copyRows(srcBeg, srcEnd);
+            copyRows(srcEnd + delta, srcNode.rowCount);
+        }
+        else // if (delta < 0)
+        {
+            delta = -delta;
+            copyRows(0, srcBeg - delta);
+            copyRows(srcBeg, srcEnd);
+            copyRows(srcBeg - delta, srcBeg);
+            copyRows(srcEnd, srcNode.rowCount);
+        }
+        srcNode.nodes = std::move(newNodes);
+        updateChildren(srcNode);
+    }
+    else
+    {
+        updateChildren(srcNode);
+        updateChildren(dstNode);
+        return false;
+    }
+    return true;
+}
+bool qtgui_model::moveColumns(const QModelIndex& sourceParent, int sourceColumn, int count, const QModelIndex& destinationParent, int destinationChild)
+{
+    return false;
 }
 gui_node qtgui_model::node(const QModelIndex& index) const
 {
@@ -2553,6 +2719,18 @@ void qtgui_model::reset()
     m_nodes.push_back(qtgui_node());
     m_free.clear();
     endResetModel();
+}
+void qtgui_model::updateChildren(const qtgui_node& node)
+{
+    for (auto row = 0; row < node.rowCount; ++row)
+    {
+        for (auto col = 0; col < node.colCount; ++col)
+        {
+            const auto child = node.nodes[row * node.colCount + col];
+            m_nodes[child].row = row;
+            m_nodes[child].col = col;
+        }
+    }
 }
 QVariant qtgui_model::headerData(int section, Qt::Orientation orientation, int role) const
 {

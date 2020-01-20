@@ -199,6 +199,7 @@ namespace icy
 				text[k] = wstring[k];
 		}
 		ICY_DEFAULT_COPY_ASSIGN(input_message);
+        const input_type type;
 		const union
 		{
 			key_message key;
@@ -206,7 +207,6 @@ namespace icy
 			wchar_t text[u16_max + 1];
             const bool active;
 		};
-		const input_type type;
 	};
     inline void key_mod_set(key_mod& mod, const std::bitset<256>& buffer) noexcept
     {
@@ -230,7 +230,25 @@ namespace icy
     }
 	inline auto key_mod_and(const uint32_t lhs, const uint32_t rhs) noexcept
 	{
-		return lhs ? (lhs & rhs) != 0 : true;
+        auto need_any_ctrl = lhs & (key_mod::lctrl | key_mod::rctrl);
+        auto need_any_alt = lhs & (key_mod::lalt| key_mod::ralt);
+        auto need_any_shift = lhs & (key_mod::lshift | key_mod::rshift);
+        if (need_any_ctrl)
+        {
+            if ((need_any_ctrl & rhs) == 0)
+                return false;
+        }
+        if (need_any_alt)
+        {
+            if ((need_any_alt & rhs) == 0)
+                return false;
+        }
+        if (need_any_shift)
+        {
+            if ((need_any_shift & rhs) == 0)
+                return false;
+        }
+        return true;
 	}
 	error_type to_string(const key_message& key, string& str) noexcept;
     error_type to_string(const key_mod mod, string& str) noexcept;

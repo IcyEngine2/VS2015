@@ -8,13 +8,13 @@
 #include <icy_engine/utility/icy_minhook.hpp>
 #include <icy_engine/network/icy_network.hpp>
 #include "../icy_mbox_network.hpp"
-#include "../icy_mbox_script.hpp"
+#include "../icy_mbox_script2.hpp"
 #include "icy_mbox_server_config.hpp"
 #include "icy_mbox_server_apps.hpp"
 #include "icy_mbox_server_proc.hpp"  
 #include "icy_mbox_server_network.hpp"
 #include "icy_mbox_server_input_log.hpp"
-#include "icy_mbox_server_script_exec.hpp"
+#include "icy_mbox_server_script2.hpp"
 #if _DEBUG
 #pragma comment(lib, "icy_engine_cored")
 #pragma comment(lib, "icy_engine_networkd")
@@ -71,7 +71,7 @@ private:
     string m_app;
     unique_ptr<mbox_input_log> m_input;
     mbox::library m_library;
-    mbox_script_exec m_script_exec = m_network;
+    mbox_script_thread m_script_thread = m_network;
 };
 
 int main()
@@ -235,7 +235,7 @@ error_type mbox_application::exec() noexcept
 {
     ICY_SCOPE_EXIT{ event::post(nullptr, event_type::global_quit); m_network.wait(); };
     ICY_ERROR(m_main.launch());
-    ICY_ERROR(m_script_exec.launch());
+    ICY_ERROR(m_script_thread.launch());
     ICY_ERROR(m_network.launch());
     ICY_ERROR(m_gui->loop());
     ICY_ERROR(m_network.error());
@@ -507,7 +507,7 @@ error_type mbox_application::context(const gui_node node) noexcept
     ICY_ERROR(m_gui->create(input, "Input"_s));
     
     array<guid> profiles;
-    ICY_ERROR(m_library.enumerate(mbox::type::profile, profiles));
+    ICY_ERROR(m_library.enumerate(mbox::type::character, profiles));
 
     ICY_ERROR(m_gui->create(profile, "Profile"_s));
     map<string, guid> profile_map;

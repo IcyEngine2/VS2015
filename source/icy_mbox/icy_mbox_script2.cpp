@@ -21,6 +21,7 @@ string_view mbox::to_string(const mbox::action_type type) noexcept
     {
     case action_type::group_join: return "Join Group"_s;
     case action_type::group_leave: return "Leave Group"_s;
+    case action_type::focus: return "Focus"_s;
     case action_type::button_press: return "Press Button"_s;
     case action_type::button_release: return "Release Button"_s;
     case action_type::button_click: return "Click Button"_s;
@@ -59,9 +60,9 @@ string_view mbox::to_string(const mbox::execute_type type) noexcept
     switch (type)
     {
     case mbox::execute_type::broadcast:
-        return "Everyone in"_s;
+        return "Everyone"_s;
     case mbox::execute_type::multicast:
-        return "Other in"_s;
+        return "Others"_s;
     case mbox::execute_type::self:
         return "Self"_s;
     }
@@ -81,6 +82,8 @@ static error_type mbox_error_to_string(const uint32_t code, const string_view, s
         return to_string("Invalid name"_s, str);
     case mbox::mbox_error_code::invalid_group:
         return to_string("Invalid group"_s, str);
+    case mbox::mbox_error_code::invalid_focus:
+        return to_string("Invalid focus"_s, str);
     case mbox::mbox_error_code::invalid_command:
         return to_string("Invalid command"_s, str);
     case mbox::mbox_error_code::invalid_timer:
@@ -110,6 +113,118 @@ static error_type mbox_error_to_string(const uint32_t code, const string_view, s
 
 const error_source mbox::error_source_mbox = register_error_source("mbox"_s, mbox_error_to_string);
 
+error_type mbox::transaction::remove(const icy::guid& index) noexcept
+{
+    const auto it = m_library.m_data.find(index);
+    if (it == m_library.m_data.end())
+        return make_mbox_error(mbox_error_code::invalid_index);
+
+    const auto& base = it->value;
+    if (base.type == mbox::type::directory)
+    {
+        array<guid> vec;
+        ICY_ERROR(m_library.children(base.index, false, vec));
+        for (auto&& child : vec)
+            ICY_ERROR(remove(child));
+    }
+    else
+    {
+        for (auto&& pair : m_library.m_data)
+        {
+            if (pair.value.type == mbox::type::character ||
+                pair.value.type == mbox::type::command)
+                ;
+            else
+                continue;
+
+            auto modify = false;
+            for (auto k = 0_z; k < pair.value.actions.size(); ++k)
+            {
+                const auto& action = pair.value.actions[k];
+                if (base.type == mbox::type::group)
+                {
+                    if (action.type() == action_type::group_join)
+                    {
+                        if (action.group() == base.index)
+                            modify = true;
+                    }
+                    else if (action.type() == action_type::group_leave)
+                    {
+                        if (action.group() == base.index)
+                            modify = true;
+                    }
+                    else if (action.type() == action_type::command_execute)
+                    {
+                        auto execute = action.execute();
+                        if (execute.group == base.index)
+                        {
+                            modify = true;
+                        }
+                    }
+                }
+                else if (base.type == mbox::type::character)
+                {
+                    if (action.type() == action_type::focus && action.focus() == base.index)
+                    {
+                        modify = true;
+                    }
+                }
+                else if (base.type == mbox::type::timer)
+                {
+                    if (action.type() == action_type::on_timer && action.event_timer() == base.index)
+                    {
+                        modify = true;
+                    }
+                    else if ((false
+                        || action.type() == action_type::timer_start 
+                        || action.type() == action_type::timer_stop
+                        || action.type() == action_type::timer_pause 
+                        || action.type() == action_type::timer_resume)
+                        && action.timer().timer == base.index)
+                    {
+                        modify = true; 
+                    }
+                }
+                else if (base.type == mbox::type::command)
+                {
+                    if (action.type() == action_type::command_replace)
+                    {
+                        const auto& replace = action.replace();
+                        if (replace.source == base.index || replace.target == base.index)
+                            modify = true;
+                    }
+                    else if (action.type() == action_type::command_execute)
+                    {
+                        const auto& execute = action.execute();
+                        if (execute.command == base.index)
+                            modify = true;
+                    }
+                    else if (
+                        action.type() == action_type::on_button_press ||
+                        action.type() == action_type::on_button_release ||
+                        action.type() == action_type::on_timer)
+                    {
+                        if (action.event_command() == base.index)
+                            modify = true;
+                    }
+                }
+            }
+            if (modify)
+            {
+                operation oper_modify;
+                oper_modify.type = operation_type::none;
+                oper_modify.value.index = pair.value.index;
+                ICY_ERROR(m_oper.push_back(std::move(oper_modify)));
+            }
+        }
+    }
+   
+    operation oper;
+    oper.type = operation_type::remove;
+    ICY_ERROR(mbox::base::copy(base, oper.value));
+    ICY_ERROR(m_oper.push_back(std::move(oper)));
+    return {};
+}
 error_type mbox::transaction::execute(library& target, map<guid, mbox_error_code>* errors) noexcept
 {
     const auto new_version = target.m_version + 1;
@@ -132,16 +247,113 @@ error_type mbox::transaction::execute(library& target, map<guid, mbox_error_code
         {
             const auto it = m_library.m_data.find(oper.value.index);
             if (it == m_library.m_data.end())
-                return make_mbox_error(mbox::mbox_error_code::invalid_index);
+                continue;//  return make_mbox_error(mbox::mbox_error_code::invalid_index);
             base tmp;
             ICY_ERROR(base::copy(oper.value, tmp));
             it->value = std::move(tmp);
         }
-        else
+        else if (oper.type == operation_type::remove)
         {
-            return make_stdlib_error(std::errc::invalid_argument);
+            const auto it = m_library.m_data.find(oper.value.index);
+            if (it == m_library.m_data.end())
+                return make_mbox_error(mbox::mbox_error_code::invalid_index);
+            m_library.m_data.erase(it);
         }
     }
+
+    for (auto&& oper : m_oper)
+    {
+        if (oper.type != operation_type::none)
+            continue;
+
+        const auto it = m_library.m_data.find(oper.value.index);
+        if (it == m_library.m_data.end())
+            continue;
+
+        for (auto&& action : it->value.actions)
+        {
+            switch (action.type())
+            {
+            case action_type::group_join:
+                if (!m_library.find(action.group()))
+                    action = action::create_group_join(guid());
+                break;
+
+            case action_type::group_leave:
+                if (!m_library.find(action.group()))
+                    action = action::create_group_leave(guid());
+                break;
+
+            case action_type::focus:
+                if (!m_library.find(action.focus()))
+                    action = action::create_focus(guid());
+                break;
+
+            case action_type::timer_start:
+                if (!m_library.find(action.timer().timer))
+                    action = action::create_timer_start(guid(), 0);
+                break;
+
+            case action_type::timer_stop:
+                if (!m_library.find(action.timer().timer))
+                    action = action::create_timer_stop(guid());
+                break;
+
+            case action_type::timer_pause:
+                if (!m_library.find(action.timer().timer))
+                    action = action::create_timer_pause(guid());
+                break;
+            case action_type::timer_resume:
+                if (!m_library.find(action.timer().timer))
+                    action = action::create_timer_resume(guid());
+                break;
+
+            case action_type::command_execute:
+            {
+                auto execute = action.execute();
+                if (!m_library.find(execute.command))
+                    execute.command = guid();
+                if (!m_library.find(execute.group))
+                    execute.group = guid();
+                action = mbox::action::create_command_execute(execute);
+                break;
+            }
+
+            case action_type::command_replace:
+            {
+                auto replace = action.replace();
+                if (!m_library.find(replace.source))
+                    replace.source = guid();
+                if (!m_library.find(replace.target))
+                    replace.target = guid();
+                action = mbox::action::create_command_replace(replace);
+                break;
+            }
+
+            case action_type::on_button_press:
+                if (!m_library.find(action.event_command()))
+                    action = action::create_on_button_press(action.event_button(), guid());
+                break;
+
+            case action_type::on_button_release:
+                if (!m_library.find(action.event_command()))
+                    action = action::create_on_button_release(action.event_button(), guid());
+                break;
+
+            case action_type::on_timer:
+            {
+                auto command = action.event_command();
+                auto timer = action.event_timer();
+                if (!m_library.find(command)) command = guid();
+                if (!m_library.find(timer)) timer = guid();
+                action = action::create_on_timer(command, timer);
+                break;
+            }
+            }
+        }
+    }
+
+
     map<guid, mbox_error_code> tmp_errors;
     if (!errors) errors = &tmp_errors;
 
@@ -155,6 +367,13 @@ error_type mbox::transaction::execute(library& target, map<guid, mbox_error_code
 }
 error_type mbox::library::validate(mbox::base& base, map<icy::guid, mbox::mbox_error_code>& errors) noexcept
 {
+    const auto parent = find(base.parent);
+    if (!parent && base.index != mbox::root)
+        return errors.insert(base.index, mbox_error_code::invalid_parent);
+    
+    if (base.name.empty())
+        return errors.insert(base.index, mbox_error_code::invalid_name);
+    
     switch (base.type)
     {
     case mbox::type::character:
@@ -162,12 +381,88 @@ error_type mbox::library::validate(mbox::base& base, map<icy::guid, mbox::mbox_e
     {
         for (auto&& action : base.actions)
         {
+            switch (action.type())
+            {
+            case action_type::group_join:
+            case action_type::group_leave:
+                if (const auto group = find(action.group()))
+                {
+                    if (group->type != type::group)
+                        return errors.insert(base.index, mbox_error_code::invalid_group);
+                }
+                break;
 
+            case action_type::focus:
+                if (const auto focus = find(action.focus()))
+                {
+                    if (focus->type != type::character)
+                        return errors.insert(base.index, mbox_error_code::invalid_focus);
+                }
+                break;
+            
+            case action_type::command_execute:
+                if (const auto command = find(action.execute().command))
+                {
+                    if (command->type != type::command)
+                        return errors.insert(base.index, mbox_error_code::invalid_command);                    
+                }
+                if (const auto group = find(action.execute().group))
+                {
+                    if (group->type != type::group)
+                        return errors.insert(base.index, mbox_error_code::invalid_group);
+                }
+                break;
+                
+            case action_type::command_replace:            
+                if (const auto source = find(action.replace().source))
+                {
+                    if (source->type != type::command)
+                        return errors.insert(base.index, mbox_error_code::invalid_command);
+                }
+                if (const auto target = find(action.replace().target))
+                {
+                    if (target->type != type::command)
+                        return errors.insert(base.index, mbox_error_code::invalid_command);
+                }
+                break;
+            
+
+            case action_type::on_button_press:
+            case action_type::on_button_release:
+                if (const auto command = find(action.event_command()))
+                {
+                    if (command->type != type::command)
+                        return errors.insert(base.index, mbox_error_code::invalid_command);
+                }
+                break;
+
+            case action_type::on_timer:
+                if (const auto command = find(action.event_command()))
+                {
+                    if (command->type != type::command)
+                        return errors.insert(base.index, mbox_error_code::invalid_command);
+                }
+                if (const auto timer = find(action.event_timer()))
+                {
+                    if (timer->type != type::timer)
+                        return errors.insert(base.index, mbox_error_code::invalid_timer);
+                }
+                break;
+
+            case action_type::timer_start:
+            case action_type::timer_stop:
+            case action_type::timer_pause:
+            case action_type::timer_resume:
+                if (const auto timer = find(action.timer().timer))
+                {
+                    if (timer->type != type::timer)
+                        return errors.insert(base.index, mbox_error_code::invalid_timer);
+                }
+                break;
+            }
         }
         break;
     }
-    case mbox::type::group:
-        break;
 
     case mbox::type::directory:
     {
@@ -198,8 +493,6 @@ error_type mbox::library::validate(mbox::base& base, map<icy::guid, mbox::mbox_e
         }
         break;
     }
-    default:
-        break;
     }
     return {};
 }
@@ -219,6 +512,7 @@ static const auto str_key_action_replace_target = "To"_s;
 static const auto str_key_command = "Command"_s;
 static const auto str_key_execute_type = "Execute Type"_s;
 static const auto str_key_group = "Group"_s;
+static const auto str_key_focus = "Focus"_s;
 static const auto str_key_timer = "Timer"_s;
 
 error_type mbox::library::load_from(const icy::string_view filename) noexcept
@@ -317,11 +611,27 @@ error_type mbox::library::load_from(const icy::string_view filename) noexcept
                     case mbox::action_type::group_leave:
                     {
                         guid group;
-                        if (json_action.get(str_key_group).to_value(group))
-                            return make_mbox_error(mbox_error_code::invalid_group);
-
+                        const auto str = json_action.get(str_key_group);
+                        if (!str.empty())
+                        {
+                            if (str.to_value(group))
+                                return make_mbox_error(mbox_error_code::invalid_group);
+                        }
                         base.actions.push_back(type == mbox::action_type::group_join ?
                             action::create_group_join(group) : action::create_group_leave(group));
+                        break;
+                    }
+
+                    case mbox::action_type::focus:
+                    {
+                        guid focus;
+                        const auto str = json_action.get(str_key_focus);
+                        if (!str.empty())
+                        {
+                            if (str.to_value(focus))
+                                return make_mbox_error(mbox_error_code::invalid_group);
+                        }
+                        base.actions.push_back(action::create_focus(focus));
                         break;
                     }
                   
@@ -354,7 +664,9 @@ error_type mbox::library::load_from(const icy::string_view filename) noexcept
                             guid command;
                             if (json_action.get(str_key_command).to_value(command))
                                 return make_mbox_error(mbox_error_code::invalid_command);
-                            ICY_ERROR(base.actions.push_back(action::create_on_button_press(button, command)));
+                            ICY_ERROR(base.actions.push_back(type == mbox::action_type::on_button_press ?
+                                action::create_on_button_press(button, command) : 
+                                action::create_on_button_release(button, command)));
                         }
                         else if (type == mbox::action_type::button_click)
                         {
@@ -362,11 +674,11 @@ error_type mbox::library::load_from(const icy::string_view filename) noexcept
                         }
                         else if (type == mbox::action_type::button_press)
                         {
-                            ICY_ERROR(base.actions.push_back(action::create_button_release(button)));
+                            ICY_ERROR(base.actions.push_back(action::create_button_press(button)));
                         }
                         else if (type == mbox::action_type::button_release)
                         {
-                            ICY_ERROR(base.actions.push_back(action::create_button_press(button)));
+                            ICY_ERROR(base.actions.push_back(action::create_button_release(button)));
                         }
                         break;
 
@@ -378,8 +690,13 @@ error_type mbox::library::load_from(const icy::string_view filename) noexcept
                     case mbox::action_type::on_timer:
                     {
                         guid timer;
-                        if(json_action.get(str_key_timer).to_value(timer))
-                            return make_mbox_error(mbox_error_code::invalid_timer);
+                        const auto str_timer = json_action.get(str_key_timer);
+
+                        if (!str_timer.empty())
+                        {
+                            if (str_timer.to_value(timer))
+                                return make_mbox_error(mbox_error_code::invalid_timer);
+                        }
                         if (type == mbox::action_type::timer_start)
                         {
                             auto count = 0u;
@@ -401,7 +718,8 @@ error_type mbox::library::load_from(const icy::string_view filename) noexcept
                         else if (type == mbox::action_type::on_timer)
                         {
                             guid command;
-                            if (json_action.get(str_key_command).to_value(command))
+                            const auto str_command = json_action.get(str_key_command);
+                            if (!str_command.empty() && str_command.to_value(command))
                                 return make_mbox_error(mbox_error_code::invalid_command);
                             ICY_ERROR(base.actions.push_back(mbox::action::create_on_timer(timer, command)));
                         }
@@ -410,7 +728,9 @@ error_type mbox::library::load_from(const icy::string_view filename) noexcept
                     case mbox::action_type::command_execute:
                     {
                         action::execute_type execute;
-                        if (json_action.get(str_key_command).to_value(execute.command))
+                        const auto str_command = json_action.get(str_key_command);
+
+                        if (!str_command.empty() && str_command.to_value(execute.command))
                             return make_mbox_error(mbox_error_code::invalid_command);
 
                         if (to_string(execute_type::broadcast) == json_action.get(str_key_execute_type))
@@ -427,9 +747,14 @@ error_type mbox::library::load_from(const icy::string_view filename) noexcept
                     case mbox::action_type::command_replace:
                     {
                         action::replace_type replace;
-                        if (json_action.get(str_key_action_replace_source).to_value(replace.source))
+                        const auto str_source = json_action.get(str_key_action_replace_source);
+                        if (!str_source.empty() && str_source.to_value(replace.source))
                             return make_mbox_error(mbox_error_code::invalid_command);
-                        json_action.get(str_key_action_replace_target).to_value(replace.target);
+
+                        const auto str_target = json_action.get(str_key_action_replace_target);
+                        if (!str_target.empty() && str_target.to_value(replace.target))
+                            return make_mbox_error(mbox_error_code::invalid_command);
+
                         ICY_ERROR(base.actions.push_back(mbox::action::create_command_replace(replace)));
                         break;
                     }
@@ -536,6 +861,13 @@ error_type mbox::library::save_to(const icy::string_view filename) const noexcep
                     string str_group;
                     ICY_ERROR(to_string(action.group(), str_group));
                     ICY_ERROR(json_action.insert(str_key_group, str_group));
+                    break;
+                }
+                case action_type::focus:
+                {
+                    string str_focus;
+                    ICY_ERROR(to_string(action.focus(), str_focus));
+                    ICY_ERROR(json_action.insert(str_key_focus, str_focus));
                     break;
                 }
                 case action_type::timer_start:

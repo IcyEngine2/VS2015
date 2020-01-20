@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../icy_mbox_network.hpp"
-#include "../icy_mbox_script.hpp"
+#include "../icy_mbox_script2.hpp"
 #include <icy_qtgui/icy_qtgui.hpp>
 #include <icy_engine/core/icy_input.hpp>
 

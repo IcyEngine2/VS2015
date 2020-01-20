@@ -56,7 +56,7 @@ namespace icy
         }
         const_iterator find(const T& key) const noexcept
         {
-            return icy::binary_search(begin(), end(), key, pred);
+            return icy::binary_search(cbegin(), cend(), key, pred);
         }
         const_iterator lower_bound(const T& key) const noexcept
         {
@@ -70,16 +70,16 @@ namespace icy
         {
             const auto it = find(key);
             if (it != cend())
-                return &it->value;
+                return &*it;
             return nullptr;
         }
         const_iterator erase(const const_iterator it) noexcept
         {
             if (it != end())
             {
-                auto offset = std::distance(base::begin(), it);
+                auto offset = size_t(it - begin());
                 for (auto k = offset + 1; k < size(); ++k)
-                    base::data()[k - 1] = std::move(base::data[k]);
+                    m_ptr[k - 1] = std::move(m_ptr[k]);
                 pop_back();
             }
             return it;
@@ -107,8 +107,8 @@ namespace icy
                 const auto length = size();
                 ICY_ERROR(base::emplace_back());
                 for (auto k = length; k != offset; --k)
-                    base::data()[k] = std::move(base::data()[k - 1]);
-                base::data()[offset] = std::move(key);
+                    m_ptr[k] = std::move(m_ptr[k - 1]);
+                m_ptr[offset] = std::move(key);
             }
             else
             {

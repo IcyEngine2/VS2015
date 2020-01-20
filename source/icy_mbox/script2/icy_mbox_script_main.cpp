@@ -18,9 +18,15 @@
 #include "icons/modify.h"
 #include "icons/move_up.h"
 #include "icons/move_dn.h"
+#if _DEBUG
 #pragma comment(lib, "icy_engine_cored")
 #pragma comment(lib, "icy_engine_imaged")
 #pragma comment(lib, "icy_qtguid")
+#else
+#pragma comment(lib, "icy_engine_core")
+#pragma comment(lib, "icy_engine_image")
+#pragma comment(lib, "icy_qtgui")
+#endif
 
 using namespace icy;
 
@@ -69,32 +75,30 @@ public:
         {
             const auto& event_data = event->data<gui_event>();
             if (event_data.widget == m_widget)
-                ICY_ERROR(m_model->context(event_data.data.as_node().udata()));
+            {
+                ICY_ERROR(m_model->context(event_data.data.as_node()));
+            }
             break;
         }
         }
         ICY_ERROR(m_model->exec(event));
         return {};
     }
+    error_type save(mbox::base& base) noexcept
+    {
+        return m_model->save(base);
+    }
     gui_widget widget() const noexcept
     {
         return m_widget;
     }
-    void lock() noexcept
+    bool is_changed() const noexcept
     {
-        if (m_type == mbox_model_type::edit_command)
-        {
-            m_type = mbox_model_type::view_command;
-            m_model->lock();
-        }
+        return m_model->is_changed();
     }
-    void unlock() noexcept
+    error_type name(string& str) const noexcept
     {
-        if (m_type == mbox_model_type::view_command)
-        {
-            m_type = mbox_model_type::edit_command;         
-            m_model->unlock();
-        }
+        return m_model->name(str);
     }
 private:
     mbox_model_type m_type = mbox_model_type::none;
@@ -116,6 +120,13 @@ public:
 private:
     error_type exec(const event event) noexcept;
     error_type rename(string& str) noexcept;
+    error_type on_action(gui_action action) noexcept;
+    error_type on_save(const mbox_event_data_base& index, error_type& error) noexcept;
+    error_type on_create(const mbox_event_data_create& create) noexcept;
+    error_type on_rename(const mbox_event_data_base& index) noexcept;
+    error_type on_remove(const mbox_event_data_base& index) noexcept;
+    error_type on_changed(const mbox_event_data_base& index) noexcept;
+    error_type on_view(const mbox_event_data_base& index, const bool view) noexcept;
 private:
     mbox_main_thread m_main = *this;
     shared_ptr<gui_queue> m_gui;
@@ -259,127 +270,34 @@ error_type mbox_application::exec(const event event) noexcept
         const auto& event_data = event->data<gui_event>();
         gui_action action;
         action.index = event_data.data.as_uinteger();
-        if (action == m_open)
-        {
-            string path;
-            ICY_ERROR(icy::dialog_open_file(path));
-            if (!path.empty())
-            {
-                if (const auto error = m_library.load_from(path))
-                    show_error(error, "Open library"_s);
-                else
-                {
-                    m_path = std::move(path);
-                    ICY_ERROR(event::post(nullptr, mbox_event_type_load_library, 
-                        mbox_event_data_load_library(&m_library)));
-                }
-            }
-        }
-        else if (action == m_save_as || action == m_save && m_path.empty())
-        {
-            string path;
-            ICY_ERROR(icy::dialog_save_file(path));
-            if (!path.empty())
-            {
-                if (const auto error = m_library.save_to(path))
-                    show_error(error, "Save library"_s);
-            }
-        }
-        else if (action == m_save)
-        {
-            if (const auto error = m_library.save_to(m_path))
-                show_error(error, "Save library"_s);
-        }
-        else if (action == m_macros)
-        {
-            ;
-        }
+        ICY_ERROR(on_action(action));
+    }
+    else if (event->type == mbox_event_type_save)
+    {
+        error_type error;
+        ICY_ERROR(on_save(event->data<mbox_event_data_base>(), error));
+        if (error)
+            show_error(error, "Save Command"_s);
     }
     else if (event->type == mbox_event_type_create)
     {
-        const auto& event_data = event->data<mbox_event_data_create>();
-        string str;
-        ICY_ERROR(rename(str));
-        if (!str.empty())
-        {
-            mbox::transaction txn;
-            ICY_ERROR(txn.initialize(m_library));
-            mbox::base new_base;
-            new_base.type = event_data.type;
-            new_base.parent = event_data.parent;
-            ICY_ERROR(to_string(str, new_base.name));
-            ICY_ERROR(create_guid(new_base.index));            
-            ICY_ERROR(txn.insert(new_base));
-
-            if (const auto error = txn.execute(m_library))
-            {
-                show_error(error, "Create"_s);
-            }
-            else
-            {
-                ICY_ERROR(event::post(nullptr, mbox_event_type_transaction, 
-                    mbox_event_data_transaction(std::move(txn))));
-            }
-        }
+        ICY_ERROR(on_create(event->data<mbox_event_data_create>()));
     }
-    else if (
-        event->type == mbox_event_type_lock ||
-        event->type == mbox_event_type_unlock)
+    else if (event->type == mbox_event_type_rename)
     {
-        const auto& event_data = event->data<mbox_event_data_base>();
-        const auto tab = m_vals.find(event_data);
-        const auto base = m_library.find(event_data);
-        if (tab != m_vals.end() && base)
-        {
-            string tab_name;
-            ICY_ERROR(to_string(base->name, tab_name));
-            if (event->type == mbox_event_type_lock)
-                ICY_ERROR(tab_name.append(" [READ]"_s));
-            ICY_ERROR(m_gui->text(m_tabs, tab->value.widget(), tab_name));
-            event->type == mbox_event_type_lock ? tab->value.lock() : tab->value.unlock();
-        }
+        ICY_ERROR(on_rename(event->data<mbox_event_data_base>()));
     }
-    else if (
-        event->type == mbox_event_type_view || 
-        event->type == mbox_event_type_edit)
+    else if (event->type == mbox_event_type_delete)
     {
-        const auto& event_data = event->data<mbox_event_data_base>();
-        const auto base = m_library.find(event_data);
-        if (!base)
-            return make_stdlib_error(std::errc::invalid_argument);
-
-        string tab_name;
-        ICY_ERROR(to_string(base->name, tab_name));
-        if (event->type == mbox_event_type_view)
-            ICY_ERROR(tab_name.append(" [READ]"_s));
-
-        auto ptr = m_vals.try_find(event_data);
-        if (!ptr)
-        {
-            auto mtype = mbox_model_type::none;
-            if (base->type == mbox::type::directory)
-            {
-                mtype = mbox_model_type::directory;
-            }
-            else if (
-                base->type == mbox::type::character ||
-                base->type == mbox::type::command)
-            {
-                mtype = event->type == mbox_event_type_view ? 
-                    mbox_model_type::view_command :
-                    mbox_model_type::edit_command;
-            }
-            else
-                ICY_ASSERT(false, "INVALID MODEL TYPE");
-
-            mbox_widget widget(mtype, event_data);
-            ICY_ERROR(widget.initialize(gui_widget_type::grid_view, m_tabs, m_library));
-            auto it = m_vals.end();
-            ICY_ERROR(m_vals.insert(event_data, std::move(widget), &it));
-            ptr = &it->value;
-        }
-        ICY_ERROR(m_gui->text(m_tabs, ptr->widget(), tab_name));
-        ICY_ERROR(m_tabs.scroll(ptr->widget()));
+        ICY_ERROR(on_remove(event->data<mbox_event_data_base>()));
+    }
+    else if (event->type == mbox_event_type_changed)
+    {
+        ICY_ERROR(on_changed(event->data<mbox_event_data_base>()));        
+    }
+    else if (event->type == mbox_event_type_view || event->type == mbox_event_type_edit)
+    {
+        ICY_ERROR(on_view(event->data<mbox_event_data_base>(), event->type == mbox_event_type_view));
     }
     else if (event->type == event_type::gui_update)
     {
@@ -425,6 +343,346 @@ error_type mbox_application::run_main() noexcept
             break;
         ICY_ERROR(exec(event));
     }
+    return {};
+}
+error_type mbox_application::on_action(const gui_action action) noexcept
+{
+    if (action == m_save_as || action == m_save)
+    {
+        for (auto&& tab : m_vals)
+        {
+            if (tab.value.is_changed())
+            {
+                error_type error;
+                ICY_ERROR(on_save(tab.key, error));
+                if (error)
+                {
+                    show_error(error, "Save Command"_s);
+                    return {};
+                }
+            }
+        }
+    }
+
+    if (action == m_open)
+    {
+        string path;
+        ICY_ERROR(icy::dialog_open_file(path));
+        if (!path.empty())
+        {
+            if (const auto error = m_library.load_from(path))
+                show_error(error, "Open library"_s);
+            else
+            {
+                m_path = std::move(path);
+                ICY_ERROR(event::post(nullptr, mbox_event_type_load_library,
+                    mbox_event_data_load_library(&m_library)));
+            }
+        }
+    }
+    else if (action == m_save_as || action == m_save && m_path.empty())
+    {
+        string path;
+        ICY_ERROR(icy::dialog_save_file(path));
+        if (!path.empty())
+        {
+            if (const auto error = m_library.save_to(path))
+                show_error(error, "Save library"_s);
+        }
+    }
+    else if (action == m_save)
+    {
+        if (const auto error = m_library.save_to(m_path))
+            show_error(error, "Save library"_s);
+    }
+    else if (action == m_macros)
+    {
+        ;
+    }
+    return {};
+}
+error_type mbox_application::on_save(const mbox_event_data_base& index, error_type& error) noexcept
+{
+    for (auto&& val : m_vals)
+    {
+        if (val.key != index)
+            continue;
+
+        auto& ref = *m_library.find(val.key);
+        mbox::transaction txn;
+        mbox::base copy;
+        ICY_ERROR(txn.initialize(m_library));
+        ICY_ERROR(mbox::base::copy(ref, copy));
+        ICY_ERROR(val.value.save(copy));
+        ICY_ERROR(txn.modify(std::move(copy)));
+        if (error = txn.execute(m_library))
+        {
+            ;
+        }
+        else
+        {
+            string tab_name;
+            ICY_ERROR(val.value.name(tab_name));
+            ICY_ERROR(m_gui->text(m_tabs, val->value.widget(), tab_name));
+            ICY_ERROR(event::post(nullptr, mbox_event_type_transaction,
+                mbox_event_data_transaction(std::move(txn))));
+        }
+    }
+    return {};
+}
+error_type mbox_application::on_create(const mbox_event_data_create& create) noexcept
+{
+    string str;
+    ICY_ERROR(rename(str));
+    if (!str.empty())
+    {
+        mbox::transaction txn;
+        ICY_ERROR(txn.initialize(m_library));
+        mbox::base new_base;
+        new_base.type = create.type;
+        new_base.parent = create.parent;
+        ICY_ERROR(to_string(str, new_base.name));
+        ICY_ERROR(create_guid(new_base.index));
+        ICY_ERROR(txn.insert(new_base));
+
+        if (const auto error = txn.execute(m_library))
+        {
+            show_error(error, "Create"_s);
+        }
+        else
+        {
+            ICY_ERROR(event::post(nullptr, mbox_event_type_transaction,
+                mbox_event_data_transaction(std::move(txn))));
+        }
+    }
+    return {};
+}
+error_type mbox_application::on_rename(const mbox_event_data_base& index) noexcept
+{
+    const auto& base = *m_library.find(index);
+    string str;
+    ICY_ERROR(to_string(base.name, str));
+    ICY_ERROR(rename(str));
+    if (!str.empty())
+    {
+        mbox::transaction txn;
+        mbox::base edit;
+        ICY_ERROR(txn.initialize(m_library));
+        ICY_ERROR(mbox::base::copy(base, edit));
+        edit.name = std::move(str);
+        ICY_ERROR(txn.modify(std::move(edit)));
+        if (const auto error = txn.execute(m_library))
+        {
+            show_error(error, "Rename"_s);
+        }
+        else
+        {
+            ICY_ERROR(event::post(nullptr, mbox_event_type_transaction,
+                mbox_event_data_transaction(std::move(txn))));
+        }
+    }
+    return {};
+}
+error_type mbox_application::on_remove(const mbox_event_data_base& index) noexcept
+{
+    mbox::transaction txn;
+    ICY_ERROR(txn.initialize(m_library));
+    ICY_ERROR(txn.remove(index));
+
+    xgui_model model;
+    ICY_ERROR(model.initialize());
+
+    enum
+    {
+        col_type,
+        col_oper,
+        col_name,
+        _col_count,
+    };
+
+    using pair_type = std::pair<icy::guid, mbox::transaction::operation_type>;
+    array<pair_type> vec;
+
+    for (auto&& oper : txn.oper())
+    {
+        auto found = false;
+        for (auto&& pair : vec)
+        {
+            if (pair.first == oper.value.index)
+            {
+                found = true;
+                if (pair.second == mbox::transaction::operation_type::none ||
+                    pair.second == mbox::transaction::operation_type::modify &&
+                    oper.type == mbox::transaction::operation_type::remove)
+                {
+                    pair.second = oper.type;
+                    break;
+                }
+            }
+        }
+        if (!found)
+            ICY_ERROR(vec.push_back(std::make_pair(oper.value.index, oper.type)));
+    }
+    ICY_ERROR(model.insert_rows(0, vec.size()));
+    ICY_ERROR(model.insert_cols(0, _col_count));
+    ICY_ERROR(model.hheader(col_name, "Path"_s));
+    ICY_ERROR(model.hheader(col_type, "Type"_s));
+    ICY_ERROR(model.hheader(col_oper, "Operation"_s));
+    auto row = 0_z;
+    for (auto&& pair : vec)
+    {
+        string path;
+        ICY_ERROR(m_library.reverse_path(pair.first, path));
+        const auto ptr = m_library.find(pair.first);
+        ICY_ASSERT(ptr, "INVALID PTR");
+
+        auto type = model.node(row, col_type);
+        ICY_ERROR(type.text(to_string(ptr->type)));
+        
+        switch (ptr->type)
+        {
+        case mbox::type::character:
+            ICY_ERROR(type.icon(find_image(mbox_image::type_character)));
+            break;
+        case mbox::type::command:
+            ICY_ERROR(type.icon(find_image(mbox_image::type_command)));
+            break;
+        case mbox::type::group:
+            ICY_ERROR(type.icon(find_image(mbox_image::type_group)));
+            break;
+        case mbox::type::directory:
+            ICY_ERROR(type.icon(find_image(mbox_image::type_directory)));
+            break;
+        case mbox::type::timer:
+            ICY_ERROR(type.icon(find_image(mbox_image::type_timer)));
+            break;
+        }
+
+        ICY_ERROR(model.node(row, col_name).text(path));
+        
+        switch (pair.second)
+        {
+        case mbox::transaction::operation_type::modify:
+            ICY_ERROR(model.node(row, col_oper).text("Edit"_s));
+            break;
+
+        case mbox::transaction::operation_type::remove:
+            ICY_ERROR(model.node(row, col_oper).text("Delete"_s));
+            break;
+
+        case mbox::transaction::operation_type::none:
+            ICY_ERROR(model.node(row, col_oper).text("Edit (Action)"_s));
+            break;
+
+        default:
+            ICY_ASSERT(false, "INVALID OPER TYPE");
+            break;
+        }
+        ++row;
+    }
+
+    xgui_widget window;
+    xgui_widget label;
+    xgui_widget grid;
+    xgui_widget buttons;
+    xgui_widget save;
+    xgui_widget exit;
+    ICY_ERROR(window.initialize(gui_widget_type::dialog, m_window, gui_widget_flag::layout_vbox));
+    ICY_ERROR(label.initialize(gui_widget_type::label, window));
+    ICY_ERROR(grid.initialize(gui_widget_type::grid_view, window));
+    ICY_ERROR(buttons.initialize(gui_widget_type::none, window, gui_widget_flag::layout_hbox | gui_widget_flag::auto_insert));
+    ICY_ERROR(save.initialize(gui_widget_type::text_button, buttons));
+    ICY_ERROR(exit.initialize(gui_widget_type::text_button, buttons));
+
+    string msg;
+    ICY_ERROR(to_string("Delete/Modify %1 elements?"_s, msg, vec.size()));
+    ICY_ERROR(label.text(msg));
+    ICY_ERROR(grid.bind(model));
+    ICY_ERROR(save.text("Confirm"_s));
+    ICY_ERROR(exit.text("Cancel"_s));
+
+    auto confirm = false;
+    shared_ptr<event_loop> loop;
+    ICY_ERROR(event_loop::create(loop, event_type::gui_update | event_type::window_close));
+    ICY_ERROR(window.show(true));
+    while (true)
+    {
+        icy::event event;
+        ICY_ERROR(loop->loop(event));
+        if (event->type == event_type::global_quit)
+            break;
+
+        auto& event_data = event->data<gui_event>();
+        if (event->type == event_type::window_close && event_data.widget == window)
+        {
+            break;
+        }
+        else if (event->type == event_type::gui_update)
+        {
+            if (event_data.widget == save)
+            {
+                confirm = true;
+                break;
+            }
+            else if (event_data.widget == exit)
+            {
+                break;
+            }
+        }
+    }
+    if (confirm)
+    {
+        ICY_ERROR(txn.execute(m_library));
+        mbox::transaction copy;
+        ICY_ERROR(mbox::transaction::copy(txn, copy));
+        ICY_ERROR(event::post(nullptr, mbox_event_type_transaction, std::move(copy)));
+    }
+    return {};
+
+}
+error_type mbox_application::on_changed(const mbox_event_data_base& index) noexcept
+{
+    const auto tab = m_vals.find(index);
+    const auto base = m_library.find(index);
+    if (tab != m_vals.end() && base)
+    {
+        string tab_name;
+        ICY_ERROR(tab->value.name(tab_name));
+        ICY_ERROR(m_gui->text(m_tabs, tab->value.widget(), tab_name));
+    }
+    return {};
+}
+error_type mbox_application::on_view(const mbox_event_data_base& index, const bool view) noexcept
+{
+    const auto base = m_library.find(index);
+    if (!base)
+        return make_stdlib_error(std::errc::invalid_argument);
+    
+    auto ptr = m_vals.try_find(index);
+    if (!ptr)
+    {
+        auto mtype = mbox_model_type::none;
+        if (base->type == mbox::type::directory)
+        {
+            mtype = mbox_model_type::directory;
+        }
+        else if (base->type == mbox::type::character || base->type == mbox::type::command)
+        {
+            mtype = view ? mbox_model_type::view_command : mbox_model_type::edit_command;
+        }
+        else
+            ICY_ASSERT(false, "INVALID MODEL TYPE");
+
+        mbox_widget widget(mtype, index);
+        ICY_ERROR(widget.initialize(gui_widget_type::grid_view, m_tabs, m_library));
+        auto it = m_vals.end();
+        ICY_ERROR(m_vals.insert(index, std::move(widget), &it));
+        ptr = &it->value;
+    }
+    string tab_name;
+    ICY_ERROR(ptr->name(tab_name));
+    ICY_ERROR(m_gui->text(m_tabs, ptr->widget(), tab_name));
+    ICY_ERROR(m_tabs.scroll(ptr->widget()));
     return {};
 }
 

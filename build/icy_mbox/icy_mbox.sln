@@ -46,6 +46,10 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_mbox_script", "icy_mbox
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_mbox_script2", "icy_mbox_script2\icy_mbox_script2.vcxproj", "{9DAC29E1-1E44-4983-A8CC-977E2D620210}"
+	ProjectSection(ProjectDependencies) = postProject
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC} = {B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}
+		{4D337F45-E466-4650-9782-63FAEA81F1B1} = {4D337F45-E466-4650-9782-63FAEA81F1B1}
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

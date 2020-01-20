@@ -15,6 +15,18 @@ private:
     gui_widget m_widget_group;
     icy::guid m_select_group;
 };
+class mbox_form_action_focus : public mbox_form_action
+{
+public:
+    error_type initialize(const mbox::library& library, const mbox::action& action, xgui_widget& parent) noexcept override;
+    error_type exec(const event event) noexcept override;
+    error_type save(mbox::action& action) const noexcept override;
+private:
+    const mbox::library* m_library = nullptr;
+    unique_ptr<mbox_model> m_explorer_focus;
+    gui_widget m_widget_focus;
+    icy::guid m_select_focus;
+};
 class mbox_form_action_timer : public mbox_form_action
 {
 public:
@@ -204,6 +216,9 @@ error_type mbox_form_action::exec(const mbox::library& library, const icy::guid&
     case mbox::action_type::group_join:
     case mbox::action_type::group_leave:
         form = make_unique<mbox_form_action_group>();
+        break;
+    case mbox::action_type::focus:
+        form = make_unique<mbox_form_action_focus>();
         break;
     case mbox::action_type::button_press:
     case mbox::action_type::button_release:
@@ -408,20 +423,60 @@ error_type mbox_form_action_group::exec(const event event) noexcept
 }
 error_type mbox_form_action_group::save(mbox::action& action) const noexcept
 {
-    const auto ptr = m_library->find(m_select_group);
-    if (!ptr || ptr->type != mbox::type::group)
-        return mbox::make_mbox_error(mbox::mbox_error_code::invalid_group);
+    const auto ptr_group = m_library->find(m_select_group);
+    mbox::action::group_type group;
+
+    if (ptr_group && ptr_group->type == mbox::type::group)
+        group = ptr_group->index;
+
     switch (action.type())
     {
     case mbox::action_type::group_join:
-        action = mbox::action::create_group_join(m_select_group);
+        action = mbox::action::create_group_join(group);
         break;
     case mbox::action_type::group_leave:
-        action = mbox::action::create_group_leave(m_select_group);
+        action = mbox::action::create_group_leave(group);
         break;
     default:
-        return mbox::make_mbox_error(mbox::mbox_error_code::invalid_type);
+        ICY_ASSERT(false, "INVALID TYPE");
     }
+    return {};
+}
+
+error_type mbox_form_action_focus::initialize(const mbox::library& library, const mbox::action& action, xgui_widget& parent) noexcept
+{
+    m_library = &library;
+    ICY_ERROR(mbox_model::create(mbox_model_type::explorer, m_explorer_focus));
+    ICY_ERROR(parent.initialize(gui_widget_type::tree_view, m_window));
+    ICY_ERROR(m_explorer_focus->reset(library, mbox::root, mbox::type::character));
+    ICY_ERROR(parent.bind(m_explorer_focus->root()));
+
+    if (auto node = m_explorer_focus->find(m_select_focus = action.focus()))
+        ICY_ERROR(parent.scroll(node));
+
+    m_widget_focus = parent;
+    return {};
+}
+error_type mbox_form_action_focus::exec(const event event) noexcept
+{
+    if (event->type == event_type::gui_select)
+    {
+        const auto& event_data = event->data<gui_event>();
+        if (event_data.widget == m_widget_focus)
+            m_select_focus = event_data.data.as_node().udata().as_guid();
+    }
+    ICY_ERROR(m_explorer_focus->exec(event));
+    return {};
+}
+error_type mbox_form_action_focus::save(mbox::action& action) const noexcept
+{
+    const auto ptr_focus = m_library->find(m_select_focus);
+    mbox::action::focus_type focus;
+
+    if (ptr_focus && ptr_focus->type == mbox::type::character)
+        focus = ptr_focus->index;
+
+    action = mbox::action::create_focus(focus);
     return {};
 }
 
@@ -476,24 +531,24 @@ error_type mbox_form_action_timer::exec(const event event) noexcept
 }
 error_type mbox_form_action_timer::save(mbox::action& action) const noexcept
 {
-    const auto ptr = m_library->find(m_select_timer);
-    if (!ptr || ptr->type != mbox::type::timer)
-        return mbox::make_mbox_error(mbox::mbox_error_code::invalid_timer);
+    const auto ptr_timer = m_library->find(m_select_timer);
+    guid timer;
+    if (ptr_timer && ptr_timer->type == mbox::type::timer)
+        timer = ptr_timer->index;
+
     switch (action.type())
     {
     case mbox::action_type::timer_start:
-        if (!m_value_count)
-            return mbox::make_mbox_error(mbox::mbox_error_code::invalid_timer_count);
-        action = mbox::action::create_timer_start(m_select_timer, m_value_count);
+        action = mbox::action::create_timer_start(timer, m_value_count);
         break;
     case mbox::action_type::timer_stop:
-        action = mbox::action::create_timer_stop(m_select_timer);
+        action = mbox::action::create_timer_stop(timer);
         break;
     case mbox::action_type::timer_pause:
-        action = mbox::action::create_timer_pause(m_select_timer);
+        action = mbox::action::create_timer_pause(timer);
         break;
     case mbox::action_type::timer_resume:
-        action = mbox::action::create_timer_resume(m_select_timer);
+        action = mbox::action::create_timer_resume(timer);
         break;
     default:
         ICY_ASSERT(false, "INVALID TYPE");
@@ -590,23 +645,25 @@ error_type mbox_form_action_event_button::exec(const event event) noexcept
 }
 error_type mbox_form_action_event_button::save(mbox::action& action) const noexcept
 {
-    const auto command = m_library->find(m_command_select);
-    if (!command || command->type != mbox::type::command)
-        return mbox::make_mbox_error(mbox::mbox_error_code::invalid_command);
+    const auto ptr_command = m_library->find(m_command_select);
 
+    guid command;
+    if (ptr_command && ptr_command->type == mbox::type::command)
+        command = ptr_command->index;
+    
     mbox::button_type button;
     button.key = m_key.select();
     button.mod = key_mod(m_ctrl.select() | m_alt.select() | m_shift.select());
     switch (action.type())
     {
     case mbox::action_type::on_button_press:
-        action = mbox::action::create_on_button_press(button, m_command_select);
+        action = mbox::action::create_on_button_press(button, command);
         break;
     case mbox::action_type::on_button_release:
-        action = mbox::action::create_on_button_release(button, m_command_select);
+        action = mbox::action::create_on_button_release(button, command);
         break;
     default:
-        return mbox::make_mbox_error(mbox::mbox_error_code::invalid_type);
+        ICY_ASSERT(false, "INVALID TYPE");
     }
     return {};
 }
@@ -648,14 +705,18 @@ error_type mbox_form_action_event_timer::exec(const event event) noexcept
 }
 error_type mbox_form_action_event_timer::save(mbox::action& action) const noexcept
 {
-    const auto timer = m_library->find(m_timer_select);
-    const auto command = m_library->find(m_command_select);    
-    if (!timer || timer->type != mbox::type::timer)
-        return mbox::make_mbox_error(mbox::mbox_error_code::invalid_timer);
-    if (!command || command->type != mbox::type::command)
-        return mbox::make_mbox_error(mbox::mbox_error_code::invalid_command);
-    
-    action = mbox::action::create_on_timer(m_timer_select, m_command_select);
+    const auto ptr_timer = m_library->find(m_timer_select);
+    const auto ptr_command = m_library->find(m_command_select);
+    guid timer;
+    guid command;
+
+    if (ptr_timer && ptr_timer->type == mbox::type::timer)
+        timer = ptr_timer->index;
+
+    if (ptr_command && ptr_command->type == mbox::type::command)
+        command = ptr_command->index;
+
+    action = mbox::action::create_on_timer(timer, command);
     return {};
 }
 
@@ -698,13 +759,18 @@ error_type mbox_form_action_command_replace::exec(const event event) noexcept
 }
 error_type mbox_form_action_command_replace::save(mbox::action& action) const noexcept
 {
-    const auto source = m_library->find(m_value.source);
-    const auto target = m_library->find(m_value.target);
-    if (!source || source == target 
-        || source->type != mbox::type::command 
-        || target->type != mbox::type::command)
+    const auto ptr_source = m_library->find(m_value.source);
+    const auto ptr_target = m_library->find(m_value.target);
+    if (ptr_source && ptr_source == ptr_target)
         return mbox::make_mbox_error(mbox::mbox_error_code::invalid_command);
-    action = mbox::action::create_command_replace(m_value);
+
+    mbox::action::replace_type replace;
+    if (ptr_source && ptr_source->type == mbox::type::command)
+        replace.source = ptr_source->index;
+    if (ptr_target && ptr_target->type == mbox::type::command)
+        replace.target = ptr_target->index;
+
+    action = mbox::action::create_command_replace(replace);
     return {};
 }
 
@@ -712,6 +778,8 @@ error_type mbox_form_action_command_execute::initialize(const mbox::library& lib
 {
     m_library = &library;
     ICY_ERROR(mbox_model::create(mbox_model_type::explorer, m_commands));
+    ICY_ERROR(m_commands->reset(*m_library, mbox::root, mbox::type::command));
+
     ICY_ERROR(parent.initialize(gui_widget_type::none, m_window, gui_widget_flag::layout_vbox));
     ICY_ERROR(m_type_model.initialize());
     ICY_ERROR(m_type_model.insert_cols(0, 1));
@@ -723,7 +791,7 @@ error_type mbox_form_action_command_execute::initialize(const mbox::library& lib
         ICY_ERROR(node.text(to_string(type)));
         ICY_ERROR(node.udata(k));
     }
-    ICY_ERROR(m_layout.initialize(gui_widget_type::none, parent));
+    ICY_ERROR(m_layout.initialize(gui_widget_type::none, parent, gui_widget_flag::layout_hbox | gui_widget_flag::auto_insert));
     ICY_ERROR(m_widget_commands.initialize(gui_widget_type::tree_view, parent));
     ICY_ERROR(m_type_label.initialize(gui_widget_type::label, m_layout));
     ICY_ERROR(m_type_value.initialize(gui_widget_type::combo_box, m_layout));
@@ -731,10 +799,12 @@ error_type mbox_form_action_command_execute::initialize(const mbox::library& lib
     ICY_ERROR(m_group_button.initialize(gui_widget_type::tool_button, m_layout));
     ICY_ERROR(m_type_value.bind(m_type_model));
     ICY_ERROR(m_type_value.scroll(m_type_model.node(size_t(m_value.etype = action.execute().etype), 0)));
-
+    ICY_ERROR(m_type_label.text("Execute Type"_s));
+    ICY_ERROR(m_widget_commands.bind(m_commands->root()));
     string str_group;
     ICY_ERROR(m_library->path(m_value.group = action.execute().group, str_group));
     ICY_ERROR(m_group_value.text(str_group));
+    ICY_ERROR(m_group_value.enable(false));
     
     if (const auto node = m_commands->find(m_value.command = action.execute().command))
         ICY_ERROR(m_widget_commands.scroll(node));
@@ -748,7 +818,77 @@ error_type mbox_form_action_command_execute::exec(const event event) noexcept
         const auto& event_data = event->data<gui_event>();
         if (event_data.widget == m_group_button)
         {
+            unique_ptr<mbox_model> group_model;
+            ICY_ERROR(mbox_model::create(mbox_model_type::explorer, group_model));
+            ICY_ERROR(group_model->reset(*m_library, mbox::root, mbox::type::group));
 
+            xgui_widget window;
+            xgui_widget tree;
+            xgui_widget buttons;
+            xgui_widget save;
+            xgui_widget exit;
+            guid select;
+            ICY_ERROR(window.initialize(gui_widget_type::dialog, m_window, gui_widget_flag::layout_vbox));
+            ICY_ERROR(tree.initialize(gui_widget_type::tree_view, window));
+            ICY_ERROR(buttons.initialize(gui_widget_type::none, window, gui_widget_flag::layout_hbox | gui_widget_flag::auto_insert));
+            ICY_ERROR(save.initialize(gui_widget_type::text_button, buttons));
+            ICY_ERROR(exit.initialize(gui_widget_type::text_button, buttons));
+            ICY_ERROR(save.text("Save"_s));
+            ICY_ERROR(exit.text("Exit"_s));
+            ICY_ERROR(tree.bind(group_model->root()));
+            ICY_ERROR(window.show(true));
+            ICY_ERROR(window.text("Select Execution Group"_s));
+
+            if (const auto node = group_model->find(select = m_value.group))
+                ICY_ERROR(tree.scroll(node));
+
+            shared_ptr<event_loop> loop;
+            ICY_ERROR(event_loop::create(loop, event_type::gui_select | event_type::gui_update | event_type::window_close));
+
+            while (true)
+            {
+                icy::event event;
+                ICY_ERROR(loop->loop(event));
+                if (event->type == event_type::global_quit)
+                    break;
+
+                auto& event_data = event->data<gui_event>();
+                if (event->type == event_type::window_close && event_data.widget == window)
+                {
+                    break;
+                }
+                else if (event->type == event_type::gui_select && event_data.widget == tree)
+                {
+                    select = event_data.data.as_node().udata().as_guid();
+                }
+                else if (event->type == event_type::gui_update)
+                {
+                    if (event_data.widget == save)
+                    {
+                        if (const auto base = m_library->find(select))
+                        {
+                            string str_group;
+                            if (base->type == mbox::type::group)
+                            {
+                                ICY_ERROR(m_library->path(m_value.group = select, str_group));
+                            }
+                            else
+                            {
+                                m_value.group = guid();
+                            }
+                            ICY_ERROR(m_group_value.text(str_group));
+                        }
+                        
+
+
+                        break;
+                    }
+                    else if (event_data.widget == exit)
+                    {
+                        break;
+                    }
+                }
+            }
         }
     }
     else if (event->type == event_type::gui_select)
@@ -768,16 +908,17 @@ error_type mbox_form_action_command_execute::exec(const event event) noexcept
 }
 error_type mbox_form_action_command_execute::save(mbox::action& action) const noexcept
 {
-    const auto command = m_library->find(m_value.command);
-    const auto group = m_library->find(m_value.group);
-    if (!command || command->type != mbox::type::command)
-        return mbox::make_mbox_error(mbox::mbox_error_code::invalid_command);
+    const auto ptr_command = m_library->find(m_value.command);
+    const auto ptr_group = m_library->find(m_value.group);
 
-    if (m_value.etype != mbox::execute_type::self)
-    {
-        if (!group || group->type != mbox::type::group)
-            return mbox::make_mbox_error(mbox::mbox_error_code::invalid_group);
-    }
+    mbox::action::execute_type execute;
+    
+    if (ptr_command && ptr_command->type == mbox::type::command)
+        execute.command = ptr_command->index;
+    if (ptr_group && ptr_group->type == mbox::type::group)
+        execute.group = ptr_group->index;
+    execute.etype = m_value.etype;
+
     action = mbox::action::create_command_execute(m_value);
     return {};
 }

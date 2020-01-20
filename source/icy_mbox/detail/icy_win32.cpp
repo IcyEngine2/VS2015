@@ -99,24 +99,39 @@ LRESULT __stdcall window_hook::proc(HWND__* hwnd, uint32_t msg, WPARAM wparam, L
                 }
                 else if (input.type == input_type::mouse)
                 {
-                    auto mouse = input.mouse;
-                    //if (mouse.event != mouse_event::btn_press)
-                    //    continue;
-                    
-                    auto move = mouse;
-                    auto press = mouse;
-                    auto release = mouse;
-                    move.delta = {};
+                    if (input.mouse.event == mouse_event::btn_press ||
+                        input.mouse.event == mouse_event::btn_release)
+                        ;
+                    else
+                        continue;
+
+                    RECT rect;
+                    if (!GetClientRect(hwnd, &rect))
+                        continue;
+
+                    if (input.mouse.point.x < 0 || input.mouse.point.y < 0 || 
+                        input.mouse.point.x >= 1 || input.mouse.point.y >= 1)
+                    {
+                        POINT point;
+                        if (!GetCursorPos(&point) || !ScreenToClient(hwnd, &point))
+                            continue;
+                        input.mouse.point.x = point.x;
+                        input.mouse.point.y = point.y;
+                    }
+                    else
+                    {
+                        input.mouse.point.x = (rect.right - rect.left) * input.mouse.point.x;
+                        input.mouse.point.y = (rect.bottom - rect.top) * input.mouse.point.y;
+                    }
+
+                    auto move = input.mouse;
                     move.event = mouse_event::move;
-                    press.event = mouse_event::btn_press;
-                    release.event = mouse_event::btn_release;
-                    //SetCursorPos(mouse.point.x, mouse.point.y);
+                    move.delta = {};
                     auto msg_move = detail::to_winapi(move);
-                    auto msg_press = detail::to_winapi(press);
-                    auto msg_release = detail::to_winapi(release);
                     SendMessageW(hwnd, msg_move.message, msg_move.wParam, msg_move.lParam);
-                    SendMessageW(hwnd, msg_press.message, msg_press.wParam, msg_press.lParam);
-                    SendMessageW(hwnd, msg_release.message, msg_release.wParam, msg_release.lParam);                    
+                    
+                    auto msg_mouse = detail::to_winapi(input.mouse);
+                    SendMessageW(hwnd, msg_mouse.message, msg_mouse.wParam, msg_mouse.lParam);
                 }
                 else if (input.type == input_type::active && input.active)
                 {
@@ -191,6 +206,11 @@ LRESULT __stdcall window_hook::proc(HWND__* hwnd, uint32_t msg, WPARAM wparam, L
     {
         mouse_message mouse_input;
         detail::from_winapi(mouse_input, 0, 0, msg, wparam, lparam, key_state());
+        RECT rect;
+        GetClientRect(hwnd, &rect);
+        mouse_input.point.x /= (rect.right - rect.left);
+        mouse_input.point.y /= (rect.bottom - rect.top);
+
         auto cancel = false;
         if (const auto error = g_instance->callback(mouse_input, cancel))
             g_instance->m_error = error;

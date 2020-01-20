@@ -2,6 +2,7 @@
 
 #include <icy_engine/core/icy_string.hpp>
 #include <icy_qtgui/icy_qtgui.hpp>
+#include "../icy_mbox_network.hpp"
 
 struct mbox_process
 {

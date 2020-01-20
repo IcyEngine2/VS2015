@@ -12,8 +12,8 @@ static constexpr auto mbox_event_type_rename = icy::event_type(icy::event_type::
 static constexpr auto mbox_event_type_delete = icy::event_type(icy::event_type::user << 0x05);
 static constexpr auto mbox_event_type_create = icy::event_type(icy::event_type::user << 0x06);
 static constexpr auto mbox_event_type_save = icy::event_type(icy::event_type::user << 0x07);
-static constexpr auto mbox_event_type_lock = icy::event_type(icy::event_type::user << 0x08);
-static constexpr auto mbox_event_type_unlock = icy::event_type(icy::event_type::user << 0x09);
+static constexpr auto mbox_event_type_changed = icy::event_type(icy::event_type::user << 0x08);
+static constexpr auto mbox_event_type_move = icy::event_type(icy::event_type::user << 0x09);
 
 
 using mbox_event_data_load_library = mbox::library*;
@@ -77,7 +77,7 @@ public:
     }
     virtual icy::error_type reset(const mbox::library& library, const icy::guid& root, const mbox::type filter = mbox::type::_total) noexcept = 0;
     virtual icy::error_type exec(const icy::event event) noexcept = 0;
-    virtual icy::error_type context(const icy::gui_variant& var) noexcept = 0;
+    virtual icy::error_type context(const icy::gui_node node) noexcept = 0;
     virtual icy::xgui_node find(const icy::gui_variant& var) noexcept = 0;
     virtual void lock() noexcept
     {
@@ -86,6 +86,18 @@ public:
     virtual void unlock() noexcept
     {
 
+    }
+    virtual icy::error_type save(mbox::base& base) noexcept
+    {
+        return {};
+    }
+    virtual bool is_changed() const noexcept
+    {
+        return false;
+    }
+    virtual icy::error_type name(icy::string& str) const noexcept
+    {
+        return {};
     }
 protected:
     mbox_model_type m_type;

@@ -18,7 +18,7 @@
     <ClCompile Include="..\..\..\source\icy_mbox\test\icy_mbox_test.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\source\icy_mbox\icy_mbox_script.cpp">
+    <ClCompile Include="..\..\..\source\icy_mbox\icy_mbox_script2.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

@@ -146,6 +146,7 @@ namespace icy
     class xgui_node : public icy::gui_node
     {
     public:
+        using gui_node::udata;
         explicit operator bool() const noexcept
         {
             return _ptr != nullptr;
@@ -165,6 +166,14 @@ namespace icy
         error_type remove_cols(const size_t offset, const size_t count) noexcept
         {
             return global_gui->remove_cols(*this, offset, count);
+        }
+        error_type move_rows(const size_t offset_src, const size_t count, const size_t offset_dst) noexcept
+        {
+            return global_gui->move_rows(*this, offset_src, count, *this, offset_dst);
+        }
+        error_type move_cols(const size_t offset_src, const size_t count, const size_t offset_dst) noexcept
+        {
+            return global_gui->move_cols(*this, offset_src, count, *this, offset_dst);
         }
         xgui_node node(const size_t row, const size_t col) const noexcept
         {

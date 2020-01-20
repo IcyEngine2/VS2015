@@ -26,7 +26,11 @@ public:
                 const string_view key = json_apps->keys()[k];
                 const string_view val = json_apps->vals()[k].get();
                 if (!val.empty() && !key.empty())
-                    ICY_ERROR(emplace(applications, key, val));
+                {
+                    string val_str;
+                    ICY_ERROR(to_string(val, val_str));
+                    ICY_ERROR(applications.insert(key, std::move(val_str)));
+                }
             }
         }
         input.get(key::inject, inject);
@@ -50,14 +54,18 @@ public:
     {
         dst.applications.clear();
         for (auto&& pair : src.applications)
-            ICY_ERROR(emplace(dst.applications, pair.key, pair.value));
+        {
+            icy::string str;
+            ICY_ERROR(icy::to_string(pair.value, str));
+            ICY_ERROR(dst.applications.insert(pair.key, std::move(str)));
+        }
         ICY_ERROR(to_string(src.inject, dst.inject));
         ICY_ERROR(to_string(src.ipaddr, dst.ipaddr));
         dst.maxconn = src.maxconn;
         return {};
     }
 public:
-    icy::map<icy::string, icy::string> applications;
+    icy::dictionary<icy::string> applications;
     icy::string ipaddr;
     icy::string inject;
     uint16_t maxconn;

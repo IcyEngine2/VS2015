@@ -14,6 +14,7 @@ namespace mbox
         invalid_name,
         invalid_parent,
         invalid_group,
+        invalid_focus,
         invalid_command,
         invalid_root,
         invalid_timer,
@@ -49,6 +50,7 @@ namespace mbox
         none,
         group_join,             //  group
         group_leave,            //  group
+        focus,                  //  character
         button_press,           //  input
         button_release,         //  input
         button_click,           //  input
@@ -88,6 +90,7 @@ namespace mbox
     public:
         using button_type = mbox::button_type;
         using group_type = icy::guid;
+        using focus_type = icy::guid;
         struct execute_type
         {
             icy::guid command;
@@ -156,6 +159,13 @@ namespace mbox
             action action;
             action.m_type = action_type::group_leave;
             new (&action.m_group) group_type(value);
+            return action;
+        }
+        static action create_focus(const focus_type value) noexcept
+        {
+            action action;
+            action.m_type = action_type::focus;
+            new (&action.m_focus) focus_type(value);
             return action;
         }
         static action create_button_press(const button_type value) noexcept
@@ -273,6 +283,11 @@ namespace mbox
                 "INVALID TYPE");
             return m_group;
         }
+        focus_type focus() const noexcept
+        {
+            ICY_ASSERT(type() == action_type::focus, "INVALID TYPE");
+            return m_focus;
+        }
         const execute_type& execute() const noexcept
         {
             ICY_ASSERT(type() == action_type::command_execute, "INVALID TYPE");
@@ -310,6 +325,7 @@ namespace mbox
         {
             button_type m_button;
             group_type m_group;
+            focus_type m_focus;
             execute_type m_execute;
             replace_type m_replace;
             connect_type m_connect;
@@ -401,22 +417,6 @@ namespace mbox
             }
             return {};
         }
-        icy::error_type references(const icy::guid& index, icy::array<icy::guid>& vec) noexcept 
-        {
-           /* for (auto&& pair : m_data)
-            {
-                if (pair.value.type == mbox::type::group)
-                {
-                    array<guid> vec_children;
-                    ICY_ERROR(children(pair.key, false, vec_children));
-                    for (auto&& child : vec_child)
-                    {
-                        references(index, )
-                    }
-                }
-            }*/
-            return icy::make_stdlib_error(std::errc::function_not_supported);
-        }
         icy::error_type path(const icy::guid& index, icy::string& str) const noexcept
         {
             using namespace icy;
@@ -426,7 +426,7 @@ namespace mbox
 
             auto ptr = find(index);
             if (!ptr)
-                return make_stdlib_error(std::errc::invalid_argument);
+                return make_mbox_error(mbox::mbox_error_code::invalid_index);
 
             ICY_ERROR(to_string(ptr->name, str));
             while (true)
@@ -441,7 +441,34 @@ namespace mbox
         }
         icy::error_type reverse_path(const icy::guid& index, icy::string& str) const noexcept 
         {
-            return icy::make_stdlib_error(std::errc::function_not_supported);
+            using namespace icy;
+
+            if (index == guid())
+                return {};
+
+            array<guid> parents;
+            auto ptr = find(index);
+            if (!ptr)
+                return make_mbox_error(mbox::mbox_error_code::invalid_index);
+
+            while (true)
+            {
+                ICY_ERROR(parents.push_back(ptr->index));
+                ptr = find(ptr->parent);
+                if (!ptr || ptr->index == mbox::root)
+                    break;
+            }
+
+            std::reverse(parents.begin(), parents.end());
+            auto it = parents.begin();
+            ICY_ERROR(to_string(find(*it)->name, str));
+            ++it;
+            for (; it != parents.end(); ++it)
+            {
+                ICY_ERROR(str.append(" / "_s));
+                ICY_ERROR(str.append(find(*it)->name));
+            }
+            return {};
         }
         static icy::error_type copy(const mbox::library& src, mbox::library& dst) noexcept
         {
@@ -456,46 +483,6 @@ namespace mbox
             return {};
         }
     private:
-      /*  icy::error_type is_valid(const base& base) const noexcept
-        {
-            if (base.type == type::command || base.type == type::character)
-            {
-                for (auto&& action : base.actions)
-                {
-                    switch (action.type)
-                    {
-                    case action_type::group_join:
-                    case action_type::group_leave:
-                    case action_type::begin_broadcast:
-                    case action_type::begin_multicast:
-                    case action_type::end_broadcast:
-                    case action_type::end_multicast:
-                    {
-                        if (action.reference != guid())
-                        {
-                            const auto group = try_find(action.reference);
-                            if (!group || group->type != mbox::type::group)
-                                return make_mbox_error()
-                        }
-                        break;
-                    }
-                    case action_type::command_execute:
-                    {
-
-                        break;
-                    }
-                    case action_type::command_replace:
-                    {
-                        const auto source = try_find(action.replace.source);
-
-                    }
-
-                    default:
-                        break;
-                    }
-                }
-            }
-        }*/
         icy::error_type validate(base& base, icy::map<icy::guid, mbox::mbox_error_code>& errors) noexcept;
         icy::error_type validate(icy::map<icy::guid, mbox::mbox_error_code>& errors) noexcept
         {

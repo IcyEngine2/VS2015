@@ -142,9 +142,8 @@ error_type mbox_application::initialize() noexcept
     ICY_ERROR(m_pause.push_back({ key_message(key::slash, key_event::press), pause_type::begin }));
     ICY_ERROR(m_pause.push_back({ key_message(key::esc, key_event::press), pause_type::end }));
     ICY_ERROR(m_pause.push_back({ key_message(key::enter, key_event::press), pause_type::toggle }));
-    ICY_ERROR(m_pause.push_back({ key_message(key::p, key_event::press, 3), pause_type::toggle }));
+    ICY_ERROR(m_pause.push_back({ key_message(key::p, key_event::press, key_mod(key_mod::lctrl | key_mod::rctrl)), pause_type::toggle }));
 
-    
     string libname;
     ICY_ERROR(icy::process_name(win32_instance(), libname));
     string dirname;
@@ -241,10 +240,7 @@ error_type mbox_application::window_callback(const input_message& input, bool& c
         {
             if (pause_input.first.key == input.key.key && pause_input.first.event == input.key.event)
             {
-                if (true
-                    && key_mod_and(pause_input.first.ctrl, input.key.ctrl)
-                    && key_mod_and(pause_input.first.alt, input.key.alt)
-                    && key_mod_and(pause_input.first.shift, input.key.shift))
+                if (key_mod_and(pause_input.first.mod, input.key.mod))
                 {
                     switch (pause_input.second)
                     {

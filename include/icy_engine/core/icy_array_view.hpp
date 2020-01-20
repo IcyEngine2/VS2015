@@ -533,4 +533,12 @@ namespace icy
 			return it;
 		return last;
 	}
+    template<typename iterator_type, typename T, typename pred_type>
+    iterator_type binary_search(const iterator_type first, const iterator_type last, const T& value, const pred_type& pred) noexcept
+    {
+        auto it = std::lower_bound(first, last, value, pred);
+        if (it != last && *it == value)
+            return it;
+        return last;
+    }
 }

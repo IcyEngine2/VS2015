@@ -10,7 +10,7 @@
 #include "icy_mbox_server_config.hpp"
 #include "icy_mbox_server_proc.hpp"
 #include "../icy_mbox_network.hpp"
-#include "../icy_mbox_script.hpp"
+#include "../icy_mbox_script2.hpp"
 
 static constexpr auto event_type_user_library = icy::event_type(icy::event_type::user << 0x00);
 static constexpr auto event_type_user_connect = icy::event_type(icy::event_type::user << 0x01);

@@ -597,6 +597,8 @@ namespace icy
         virtual uint32_t insert_cols(const gui_node parent, const size_t offset, const size_t count) noexcept = 0;
         virtual uint32_t remove_rows(const gui_node parent, const size_t offset, const size_t count) noexcept = 0;
         virtual uint32_t remove_cols(const gui_node parent, const size_t offset, const size_t count) noexcept = 0;
+        virtual uint32_t move_rows(const gui_node node_src, const size_t offset_src, const size_t count, const gui_node node_dst, const size_t offset_dst) noexcept = 0;
+        virtual uint32_t move_cols(const gui_node node_src, const size_t offset_src, const size_t count, const gui_node node_dst, const size_t offset_dst) noexcept = 0;
         virtual gui_node node(const gui_node parent, const size_t row, const size_t col) noexcept = 0;
         virtual uint32_t show(const gui_widget widget, const bool value) noexcept = 0;
         virtual uint32_t text(const gui_widget widget, const string_view text) noexcept = 0;
@@ -762,6 +764,14 @@ namespace icy
         error_type remove_cols(const gui_node parent, const size_t offset, const size_t count) noexcept
         {
             ICY_GUI_ERROR(m_system->remove_cols(parent, offset, count));
+        }
+        error_type move_rows(const gui_node node_src, const size_t offset_src, const size_t count, const gui_node node_dst, const size_t offset_dst) noexcept
+        {
+            ICY_GUI_ERROR(m_system->move_rows(node_src, offset_src, count, node_dst, offset_dst));
+        }
+        error_type move_cols(const gui_node node_src, const size_t offset_src, const size_t count, const gui_node node_dst, const size_t offset_dst) noexcept
+        {
+            ICY_GUI_ERROR(m_system->move_cols(node_src, offset_src, count, node_dst, offset_dst));
         }
         gui_node node(const gui_node parent, const size_t row, const size_t col) noexcept
         {
