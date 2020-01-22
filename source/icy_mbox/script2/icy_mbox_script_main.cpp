@@ -511,8 +511,7 @@ error_type mbox_application::on_remove(const mbox_event_data_base& index) noexce
             if (pair.first == oper.value.index)
             {
                 found = true;
-                if (pair.second == mbox::transaction::operation_type::none ||
-                    pair.second == mbox::transaction::operation_type::modify &&
+                if (pair.second == mbox::transaction::operation_type::modify &&
                     oper.type == mbox::transaction::operation_type::remove)
                 {
                     pair.second = oper.type;

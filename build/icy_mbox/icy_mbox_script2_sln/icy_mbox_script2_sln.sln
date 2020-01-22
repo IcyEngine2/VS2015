@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29411.108
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_mbox_script2", "..\icy_mbox_script2\icy_mbox_script2.vcxproj", "{9DAC29E1-1E44-4983-A8CC-977E2D620210}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9DAC29E1-1E44-4983-A8CC-977E2D620210}.Debug|x64.ActiveCfg = Debug|x64
+		{9DAC29E1-1E44-4983-A8CC-977E2D620210}.Debug|x64.Build.0 = Debug|x64
+		{9DAC29E1-1E44-4983-A8CC-977E2D620210}.Release|x64.ActiveCfg = Release|x64
+		{9DAC29E1-1E44-4983-A8CC-977E2D620210}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {614ED14E-E491-4119-B730-014700391C78}
+	EndGlobalSection
+EndGlobal

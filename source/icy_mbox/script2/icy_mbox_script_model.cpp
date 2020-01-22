@@ -895,6 +895,7 @@ error_type mbox_model_command::initialize(const size_t row) noexcept
     }
 
     case mbox::action_type::command_replace:
+        image_type = mbox_image::type_command;
         ICY_ERROR(m_library->path(action.replace().source, value));
         ICY_ERROR(m_library->path(action.replace().target, args));
         break;

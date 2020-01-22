@@ -220,30 +220,35 @@ error_type mbox_script_thread::process(mbox_character& character, const const_ar
         case mbox::action_type::command_execute:
         {
             const auto& execute = action.execute();
-            const auto virt = character.virt.try_find(execute.command);
-            auto command = m_library.find(virt  ? *virt : execute.command);
-            if (command && command->type == mbox::type::command)
+            const auto group = m_library.find(execute.group);
+            if (execute.group == guid() || group && group->type == mbox::type::group)
             {
-                const auto group = m_library.find(execute.group);
-                if (execute.group == guid() || group && group->type == mbox::type::group)
+                if (execute.etype == mbox::execute_type::self)
                 {
-                    if (execute.etype == mbox::execute_type::self)
+                    const auto virt = character.virt.try_find(execute.command);
+                    auto command = m_library.find(virt ? *virt : execute.command);
+                    if (command && command->type == mbox::type::command)
                     {
                         ICY_ERROR(process(character, command->actions, send));
                     }
-                    else
+                }
+                else
+                {
+                    for (auto&& other : m_characters)
                     {
-                        for (auto&& other : m_characters)
-                        {
-                            if (other.key == character.index && execute.etype == mbox::execute_type::multicast)
-                                continue;
+                        if (other.key == character.index && execute.etype == mbox::execute_type::multicast)
+                            continue;
 
-                            if (!group || other.value.groups.try_find(group->index))
-                                ICY_ERROR(process(other.value, command->actions, send));
+                        if (!group || other.value.groups.try_find(group->index))
+                        {
+                            const auto virt = other.value.virt.try_find(execute.command);
+                            auto command = m_library.find(virt ? *virt : execute.command);
+                            ICY_ERROR(process(other.value, command->actions, send));
                         }
                     }
                 }
             }
+           
             break;
         }
 

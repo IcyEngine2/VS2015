@@ -212,8 +212,9 @@ error_type mbox::transaction::remove(const icy::guid& index) noexcept
             if (modify)
             {
                 operation oper_modify;
-                oper_modify.type = operation_type::none;
+                oper_modify.type = operation_type::modify;
                 oper_modify.value.index = pair.value.index;
+                oper_modify.value.type = mbox::type::_total;
                 ICY_ERROR(m_oper.push_back(std::move(oper_modify)));
             }
         }
@@ -227,6 +228,9 @@ error_type mbox::transaction::remove(const icy::guid& index) noexcept
 }
 error_type mbox::transaction::execute(library& target, map<guid, mbox_error_code>* errors) noexcept
 {
+    if (m_oper.empty())
+        return {};
+
     const auto new_version = target.m_version + 1;
     if (target.m_version != m_library.m_version)
         return make_mbox_error(mbox::mbox_error_code::invalid_version);
@@ -245,6 +249,9 @@ error_type mbox::transaction::execute(library& target, map<guid, mbox_error_code
         }
         else if (oper.type == operation_type::modify)
         {
+            if (oper.value.type == mbox::type::_total)
+                continue;
+
             const auto it = m_library.m_data.find(oper.value.index);
             if (it == m_library.m_data.end())
                 continue;//  return make_mbox_error(mbox::mbox_error_code::invalid_index);
@@ -263,7 +270,9 @@ error_type mbox::transaction::execute(library& target, map<guid, mbox_error_code
 
     for (auto&& oper : m_oper)
     {
-        if (oper.type != operation_type::none)
+        if (oper.type != operation_type::modify)
+            continue;
+        if (oper.value.type != type::_total)
             continue;
 
         const auto it = m_library.m_data.find(oper.value.index);
