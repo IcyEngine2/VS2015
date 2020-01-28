@@ -42,7 +42,7 @@ namespace icy
         ICY_ERROR(bytes.resize(buffer));
         while (parser)
         {
-            auto size = 0_z;
+            auto size = bytes.size();
             ICY_ERROR(file.read(bytes.data(), size));
             ICY_ERROR(parser({ bytes.data(), size }));
         }

@@ -241,8 +241,15 @@ error_type mbox_script_thread::process(mbox_character& character, const const_ar
 
                         if (!group || other.value.groups.try_find(group->index))
                         {
-                            const auto virt = other.value.virt.try_find(execute.command);
-                            auto command = m_library.find(virt ? *virt : execute.command);
+                            auto virt = &execute.command;
+                            while (true)
+                            {          
+                                const auto next_virt = other.value.virt.try_find(*virt);
+                                if (!next_virt)
+                                    break;
+                                virt = next_virt;
+                            }
+                            auto command = m_library.find(*virt);
                             ICY_ERROR(process(other.value, command->actions, send));
                         }
                     }

@@ -3,12 +3,15 @@
 
 #include <icy_engine/utility/icy_curl.hpp>
 #include <icy_engine/core/icy_string.hpp>
-#include "../curl/curl/curl.h"
+#include "../../libs/curl/curl/curl.h"
 
+#pragma comment(lib, "ws2_32")
+#pragma comment(lib, "Advapi32")
+#pragma comment(lib, "Crypt32")
 #if _DEBUG
-#pragma comment(lib, "curld")
+#pragma comment(lib, "libcurld")
 #else
-#pragma comment(lib, "curl")
+#pragma comment(lib, "libcurl")
 #endif
 
 using namespace icy;

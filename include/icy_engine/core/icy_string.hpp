@@ -151,14 +151,14 @@ namespace icy
 		str.m_size = length - 1;
 		return {};
 	}
-	inline error_type to_string(const double value, const float_type type, size_t prec, string& str) noexcept;
+	error_type to_string(const double value, const float_type type, size_t prec, string& str) noexcept;
 	inline error_type to_string(const double value, const float_type type, string& str) noexcept
 	{
-		return to_string(value, type, FLT_DIG, str);
+		return icy::to_string(value, type, FLT_DIG, str);
 	}
 	inline error_type to_string(const double value, string& str) noexcept
 	{
-		return to_string(value, float_type::float_type_fixed, FLT_DIG, str);
+		return icy::to_string(value, float_type::float_type_fixed, FLT_DIG, str);
 	}
 	error_type to_string(const int64_t value, string& str) noexcept;
 	inline error_type to_string(const int8_t value, string& str) noexcept
@@ -333,12 +333,6 @@ namespace icy
         }
         return {};
     }
-    inline error_type to_lower(const string_view str, string& output) noexcept
-    {
-        return transform(str, output, [](char32_t& chr) { if (chr < WCHAR_MAX) chr = ::towlower(wchar_t(chr)); });
-    }
-    inline error_type to_upper(const string_view str, string& output) noexcept
-    {
-        return transform(str, output, [](char32_t& chr) { if (chr < WCHAR_MAX) chr = ::towupper(wchar_t(chr)); });
-    }
+    error_type to_lower(const string_view str, string& output) noexcept;
+    error_type to_upper(const string_view str, string& output) noexcept;
  }

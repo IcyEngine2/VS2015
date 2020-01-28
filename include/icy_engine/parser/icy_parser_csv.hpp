@@ -12,7 +12,7 @@ namespace icy
 
         }
         error_type operator()(const const_array_view<char> buffer) noexcept override;
-        virtual error_type callback(const array_view<string_view> tabs) noexcept = 0;
+        virtual error_type callback(const const_array_view<string_view> tabs) noexcept = 0;
     private:
         enum class state
         {

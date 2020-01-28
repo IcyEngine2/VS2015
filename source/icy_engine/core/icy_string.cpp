@@ -247,24 +247,32 @@ error_type icy::to_string(const_array_view<wchar_t> src, string& str) noexcept
 	constexpr auto type = NormalizationD;
 	if (!IsNormalizedString(type, src.data(), static_cast<int>(src.size())))
 	{
-		auto try_normalize = [&](int& size)
+		auto try_normalize = [&](int& size, bool& try_again)
 		{
 			size = NormalizeString(type,
 				src.data(), static_cast<int>(src.size()),
 				dst.data(), static_cast<int>(dst.size()));
-			if (size <= 0 && GetLastError() == ERROR_INSUFFICIENT_BUFFER)
-				size = -size;
-			return icy::last_system_error();
+            if (size <= 0)
+            {
+                if (GetLastError() == ERROR_INSUFFICIENT_BUFFER)
+                {
+                    size = -size;
+                    try_again = true;
+                }
+                else
+                    return last_system_error();
+            }
+            return error_type();
 		};
 		auto size = 0;
-		ICY_ERROR(try_normalize(size));
+        auto try_again = true;
+        ICY_ERROR(try_normalize(size, try_again));
 		ICY_ERROR(dst.resize(size_t(size)));
-		while (true)
+		while (try_again)
 		{
-			ICY_ERROR(try_normalize(size));
-			ICY_ERROR(dst.resize(size_t(size)));
-			if (last_system_error() == error_type{})
-				break;
+            try_again = false;
+            ICY_ERROR(try_normalize(size, try_again));
+            ICY_ERROR(dst.resize(size_t(size)));
 		}
 		src = dst;
 	}
@@ -661,6 +669,33 @@ size_t icy::copy(const string_view src, array_view<char> dst) noexcept
     const auto length = detail::distance(src.bytes().data(), static_cast<const char*>(it));
     memcpy(dst.data(), src.bytes().data(), length);
     return length;
+}
+
+error_type icy::to_lower(const string_view str, string& output) noexcept
+{
+    auto lib = "user32"_lib;
+    ICY_ERROR(lib.initialize());
+    if (const auto func = ICY_FIND_FUNC(lib, CharLowerBuffW))
+    {
+        array<wchar_t> wide;
+        ICY_ERROR(to_utf16(str, wide));
+        const auto length = func(wide.data(), uint32_t(wide.size()));
+        return to_string(const_array_view<wchar_t>(wide.data(), length), output);
+    }
+    return make_stdlib_error(std::errc::function_not_supported);
+}
+error_type icy::to_upper(const string_view str, string& output) noexcept
+{
+    auto lib = "user32"_lib;
+    ICY_ERROR(lib.initialize());
+    if (const auto func = ICY_FIND_FUNC(lib, CharUpperBuffW))
+    {
+        array<wchar_t> wide;
+        ICY_ERROR(to_utf16(str, wide));
+        const auto length = func(wide.data(), uint32_t(wide.size()));
+        return to_string(const_array_view<wchar_t>(wide.data(), length), output);
+    }
+    return make_stdlib_error(std::errc::function_not_supported);
 }
 
 /*error_type icy::jaro_winkler_distance(const string_view utf8lhs, const string_view utf8rhs, double& distance) noexcept
