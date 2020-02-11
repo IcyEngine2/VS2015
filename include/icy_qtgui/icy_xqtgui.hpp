@@ -33,6 +33,15 @@ namespace icy
             index = widget.index;
             return {};            
         }
+        error_type initialize(HWND__* const win32, const gui_widget parent, const gui_widget_flag flags = gui_widget_flag::auto_insert) noexcept
+        {
+            gui_widget widget;
+            ICY_ERROR(global_gui->create(widget, win32, parent, flags));
+            if (*this)
+                global_gui->destroy(*this);
+            index = widget.index;
+            return {};
+        }
         error_type insert(const gui_insert args) noexcept
         {
             return global_gui->insert(*this, args);
@@ -77,6 +86,10 @@ namespace icy
         error_type scroll(const gui_widget widget) noexcept
         {
             return global_gui->scroll(*this, widget);
+        }
+        error_type input(const input_message& msg) noexcept
+        {
+            return global_gui->input(*this, msg);
         }
     };
     class xgui_image : public icy::gui_image

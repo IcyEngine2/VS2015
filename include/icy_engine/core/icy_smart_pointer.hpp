@@ -188,7 +188,7 @@ namespace icy
     }
 
     template<typename T>
-    class weak_ptr
+    class weak_ptr : public detail::rel_ops<weak_ptr<T>>
     {
         template<typename U> friend class shared_ptr;
         template<typename U> friend class weak_ptr;

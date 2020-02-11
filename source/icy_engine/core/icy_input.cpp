@@ -11,8 +11,14 @@ struct key_pair
     string_view str;
     key key;
 };
-const key_pair key_array[104] =
+const key_pair key_array[109] =
 {
+    { "Left Mouse Button"_s, key::mouse_left },
+    { "Right Mouse Button"_s, key::mouse_right},
+    { "Middle Mouse Button"_s, key::mouse_mid },
+    { "X1 Mouse Button"_s, key::mouse_x1 },
+    { "X2 Mouse Button"_s, key::mouse_x2 },
+
     { "Backspace"_s, key::back },
     { "Tab"_s, key::tab },
     { "Enter"_s, key::enter },
@@ -42,10 +48,10 @@ const key_pair key_array[104] =
     { "Num Enter"_s, key::num_enter },
     { "Num Lock"_s, key::num_lock },
     { "Scr Lock"_s, key::scr_lock },
-    { "Left shift"_s, key::left_shift },
-    { "Right shift"_s, key::right_shift },
-    { "Left ctrl"_s, key::left_ctrl },
-    { "Right ctrl"_s, key::right_ctrl },
+    { "Left Shift"_s, key::left_shift },
+    { "Right Shift"_s, key::right_shift },
+    { "Left Ctrl"_s, key::left_ctrl },
+    { "Right Ctrl"_s, key::right_ctrl },
     { "Left Alt"_s, key::left_alt },
     { "Right Alt"_s, key::right_alt },
     { ":"_s, key::colon },
@@ -156,53 +162,56 @@ key icy::detail::scan_vk_to_key(uint16_t vkey, uint16_t scan, const bool isE0) n
 	}
 	return key;
 }
-uint16_t icy::detail::from_winapi(key_message& msg, const size_t wParam, const ptrdiff_t lParam, const std::bitset<256> & buffer) noexcept
+uint16_t icy::detail::from_winapi(input_message& msg, const size_t wParam, const ptrdiff_t lParam, const std::bitset<256> & buffer) noexcept
 {
     auto mod = key_mod::none;
     key_mod_set(mod, buffer);
 	const auto key = scan_vk_to_key(LOWORD(wParam), WORD((lParam >> 16) & 0x00FF), !!((lParam >> 24) & 0x01));
 	const auto event =
-		((lParam >> 31) & 0x01) ? key_event::release :
-		((lParam >> 30) & 0x01) ? key_event::hold :
-		key_event::press;
-	msg = key_message(key, event, mod);
+		((lParam >> 31) & 0x01) ? input_type::key_release :
+		((lParam >> 30) & 0x01) ? input_type::key_hold :
+		input_type::key_press;
+	msg = input_message(event, key, mod);
 	return LOWORD(lParam);
 }
-uint16_t icy::detail::from_winapi(key_message& key, const MSG& msg, const std::bitset<256> & buffer) noexcept
+uint16_t icy::detail::from_winapi(input_message& key, const MSG& msg, const std::bitset<256> & buffer) noexcept
 {
 	return from_winapi(key, msg.wParam, msg.lParam, buffer);
 }
-void icy::detail::from_winapi(mouse_message& mouse, const uint32_t offset_x, const uint32_t offset_y, const uint32_t msg, const size_t wParam, const ptrdiff_t lParam, const std::bitset<256> & buffer) noexcept
+void icy::detail::from_winapi(input_message& mouse, const uint32_t offset_x, const uint32_t offset_y, const uint32_t msg, const size_t wParam, const ptrdiff_t lParam, const std::bitset<256> & buffer) noexcept
 {
 	const auto word = LOWORD(wParam);
-	mouse.left = (word & MK_LBUTTON) ? 1 : 0;
-	mouse.right = (word & MK_RBUTTON) ? 1 : 0;
-	mouse.mid = (word & MK_MBUTTON) ? 1 : 0;
-	mouse.x1 = (word & MK_XBUTTON1) ? 1 : 0;
-	mouse.x2 = (word & MK_XBUTTON2) ? 1 : 0;
+	auto mods = key_mod::none;
+	key_mod_set(mods, buffer);
 
-	key_mod_set(mouse.mod, buffer);
-
+    if (word & MK_LBUTTON) mods = mods | key_mod::lmb;
+    if (word & MK_RBUTTON) mods = mods | key_mod::rmb;
+    if (word & MK_MBUTTON) mods = mods | key_mod::mmb;
+    if (word & MK_XBUTTON1) mods = mods | key_mod::x1mb;
+    if (word & MK_XBUTTON2) mods = mods | key_mod::x2mb;
+    
 	auto point = POINT{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
     if (msg == WM_MOUSEWHEEL)
     {
         point.x -= offset_x;
         point.y -= offset_y;
     }
-	mouse.point = { float(point.x), float(point.y) };
+    auto type = input_type::none;
+    auto wheel = 0u;
+    auto key = key::none;
 
 	if (msg == WM_MOUSEMOVE)
 	{
-		mouse.event = mouse_event::move;
+		type = input_type::mouse_move;
 	}
 	else if (msg == WM_MOUSEWHEEL)
 	{
-		mouse.wheel = GET_WHEEL_DELTA_WPARAM(wParam) / double(WHEEL_DELTA);
-		mouse.event = mouse_event::wheel;
+        wheel = GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA;
+		type = input_type::mouse_wheel;
 	}
 	else
 	{
-		mouse.event = mouse_event::btn_press;
+		type = input_type::mouse_press;
 
 		switch (msg)
 		{
@@ -210,186 +219,162 @@ void icy::detail::from_winapi(mouse_message& mouse, const uint32_t offset_x, con
 		case WM_RBUTTONUP:
 		case WM_MBUTTONUP:
 		case WM_XBUTTONUP:
-			mouse.event = mouse_event::btn_release;
+			type = input_type::mouse_release;
 			break;
 		case WM_LBUTTONDBLCLK:
 		case WM_RBUTTONDBLCLK:
 		case WM_MBUTTONDBLCLK:
 		case WM_XBUTTONDBLCLK:
-			mouse.event = mouse_event::btn_double;
+			type = input_type::mouse_double;
 			break;
 		}
 
-		mouse.button = mouse_button::left;
+        key = key::mouse_left;
 		switch (msg)
 		{
 		case WM_RBUTTONDOWN:
 		case WM_RBUTTONUP:
 		case WM_RBUTTONDBLCLK:
-			mouse.button = mouse_button::right;
+			key = key::mouse_right;
 			break;
 		case WM_MBUTTONDOWN:
 		case WM_MBUTTONUP:
 		case WM_MBUTTONDBLCLK:
-			mouse.button = mouse_button::mid;
+			key = key::mouse_mid;
 			break;
 		case WM_XBUTTONDOWN:
 		case WM_XBUTTONUP:
 		case WM_XBUTTONDBLCLK:
-			mouse.button = GET_XBUTTON_WPARAM(wParam) == XBUTTON1 ?
-				mouse_button::x1 : mouse_button::x2;
+			key = GET_XBUTTON_WPARAM(wParam) == XBUTTON1 ? key::mouse_x1 : key::mouse_x2;
+            break;
 		}
 	}
+    mouse = input_message(type, key, mods);
+    mouse.wheel = wheel;
+    mouse.point_x = point.x;
+    mouse.point_y = point.y;
 }
-void icy::detail::from_winapi(mouse_message& mouse, const uint32_t offset_x, const uint32_t offset_y, const MSG& msg, const std::bitset<256> & buffer) noexcept
+void icy::detail::from_winapi(input_message& mouse, const uint32_t offset_x, const uint32_t offset_y, const MSG& msg, const std::bitset<256> & buffer) noexcept
 {
 	return from_winapi(mouse, offset_x, offset_y, msg.message, msg.wParam, msg.lParam, buffer);
 }
-tagMSG icy::detail::to_winapi(const key_message& key) noexcept
+tagMSG icy::detail::to_winapi(const input_message& input) noexcept
 {
-	MSG msg = {};
-    library lib("user32.dll");
-    if (lib.initialize() == error_type{})
+    MSG msg = {};
+    switch (input.type)
     {
-        if (const auto func = ICY_FIND_FUNC(lib, MapVirtualKeyW))
-        {
-            msg.wParam = WPARAM(key.key);
-            const auto scan = BYTE(func(unsigned(msg.wParam), MAPVK_VK_TO_VSC));
-            msg.lParam = 0x0001 | // repeat
-                (scan << 16) | // scan
-                ((key.event == key_event::hold) << 30) |    // was down
-                ((key.event == key_event::release) << 31);  // is up
-            if (key.mod & (key_mod::lalt | key_mod::ralt))
-                msg.message = unsigned(key.event == key_event::release ? WM_SYSKEYUP : WM_SYSKEYDOWN);
-            else
-                msg.message = unsigned(key.event == key_event::release ? WM_KEYUP : WM_KEYDOWN);
+    case input_type::key_press:
+    case input_type::key_hold:
+    case input_type::key_release:
+    {
+        msg.wParam = WPARAM(input.key);
+        library lib("user32.dll");
+        if (lib.initialize() == error_type())
+        {           
+            if (const auto func = ICY_FIND_FUNC(lib, MapVirtualKeyW))
+            {
+                const auto scan = BYTE(func(unsigned(msg.wParam), MAPVK_VK_TO_VSC));
+                msg.lParam = 0x0001 | // repeat
+                    (scan << 16) | // scan
+                    ((input.type == input_type::key_hold) << 30) |    // was down
+                    ((input.type == input_type::key_release) << 31);  // is up
+            }
         }
+        if (key_mod(input.mods) & (key_mod::lalt | key_mod::ralt))
+            msg.message = unsigned(input.type == input_type::key_release ? WM_SYSKEYUP : WM_SYSKEYDOWN);
+        else
+            msg.message = unsigned(input.type == input_type::key_release ? WM_KEYUP : WM_KEYDOWN);
+        break;
+    }
+    case input_type::mouse_move:
+    case input_type::mouse_wheel:
+    case input_type::mouse_release:
+    case input_type::mouse_press:
+    case input_type::mouse_hold:
+    case input_type::mouse_double:
+    {
+        msg.lParam = MAKELONG(input.point_x, input.point_y);
+        const auto mods = key_mod(input.mods);
+
+        auto loword = 0u;
+        if (mods & key_mod::lmb) loword |= MK_LBUTTON;
+        if (mods & key_mod::rmb) loword |= MK_RBUTTON;
+        if (mods & key_mod::mmb) loword |= MK_MBUTTON;
+        if (mods & key_mod::x1mb) loword |= MK_XBUTTON1;
+        if (mods & key_mod::x2mb) loword |= MK_XBUTTON2;
+        if (mods & (key_mod::lshift | key_mod::rshift)) loword |= MK_SHIFT;
+        if (mods & (key_mod::lctrl | key_mod::rctrl)) loword |= MK_CONTROL;
+        
+        auto hiword = 0u;
+        switch (input.type)
+        {
+        case input_type::mouse_move:
+        {
+            msg.message = WM_MOUSEMOVE;
+            break;
+        }
+        case input_type::mouse_wheel:
+        {
+            msg.message = WM_MOUSEWHEEL;
+            hiword = input.wheel;
+            break;
+        }
+        case input_type::mouse_press:
+        case input_type::mouse_hold:
+        {
+            if (input.key == key::mouse_left)
+                msg.message = WM_LBUTTONDOWN;
+            else if (input.key == key::mouse_right)
+                msg.message = WM_RBUTTONDOWN;
+            else if (input.key == key::mouse_mid)
+                msg.message = WM_MBUTTONDOWN;
+            else if (input.key == key::mouse_x1 || input.key == key::mouse_x2)
+                msg.message = WM_XBUTTONDOWN;
+            break;
+        }
+        case input_type::mouse_release:
+        {
+            if (input.key == key::mouse_left)
+                msg.message = WM_LBUTTONUP;
+            else if (input.key == key::mouse_right)
+                msg.message = WM_RBUTTONUP;
+            else if (input.key == key::mouse_mid)
+                msg.message = WM_MBUTTONUP;
+            else if (input.key == key::mouse_x1 || input.key == key::mouse_x2)
+                msg.message = WM_XBUTTONUP;
+            break;
+        }
+        case input_type::mouse_double:
+        {
+            if (input.key == key::mouse_left)
+                msg.message = WM_LBUTTONDBLCLK;
+            else if (input.key == key::mouse_right)
+                msg.message = WM_RBUTTONDBLCLK;
+            else if (input.key == key::mouse_mid)
+                msg.message = WM_MBUTTONDBLCLK;
+            else if (input.key == key::mouse_x1 || input.key == key::mouse_x2)
+                msg.message = WM_XBUTTONDBLCLK;
+            break;
+        }
+        }
+
+        if (input.key == key::mouse_x1)
+            hiword |= 0x01;
+        else if (input.key == key::mouse_x2)
+            hiword |= 0x02;
+
+        msg.wParam = MAKELONG(loword, hiword);
+        break;
+    }
     }
 	return msg;
 }
-tagMSG icy::detail::to_winapi(const mouse_message& mouse) noexcept
+void icy::detail::to_winapi(const input_message& input, uint32_t& msg, size_t& wParam, ptrdiff_t& lParam) noexcept
 {
-	uint32_t map[mouse_button::_total][mouse_event::_total]{};
-	static const bool _init_once = [&map]
-	{
-
-		map[mouse_button::right][mouse_event::btn_press] = WM_RBUTTONDOWN;
-		map[mouse_button::right][mouse_event::btn_hold] = WM_RBUTTONDOWN;
-		map[mouse_button::right][mouse_event::btn_release] = WM_RBUTTONUP;
-		map[mouse_button::right][mouse_event::btn_double] = WM_RBUTTONDBLCLK;
-
-		map[mouse_button::mid][mouse_event::btn_press] = WM_MBUTTONDOWN;
-		map[mouse_button::mid][mouse_event::btn_hold] = WM_MBUTTONDOWN;
-		map[mouse_button::mid][mouse_event::btn_release] = WM_MBUTTONUP;
-		map[mouse_button::mid][mouse_event::btn_double] = WM_MBUTTONDBLCLK;
-
-		map[mouse_button::x1][mouse_event::btn_press] = WM_XBUTTONDOWN;
-		map[mouse_button::x1][mouse_event::btn_hold] = WM_XBUTTONDOWN;
-		map[mouse_button::x1][mouse_event::btn_release] = WM_XBUTTONUP;
-		map[mouse_button::x1][mouse_event::btn_double] = WM_XBUTTONDBLCLK;
-
-		map[mouse_button::x2][mouse_event::btn_press] = WM_XBUTTONDOWN;
-		map[mouse_button::x2][mouse_event::btn_hold] = WM_XBUTTONDOWN;
-		map[mouse_button::x2][mouse_event::btn_release] = WM_XBUTTONUP;
-		map[mouse_button::x2][mouse_event::btn_double] = WM_XBUTTONDBLCLK;
-
-		return true;
-	}();
-
-	auto msg = MSG{};
-	msg.lParam = MAKELONG(mouse.point.x, mouse.point.y);
-
-	const auto shift = (mouse.mod & (key_mod::lshift | key_mod::rshift)) != 0;
-	const auto ctrl = (mouse.mod & (key_mod::lctrl | key_mod::rctrl)) != 0;
-
-	msg.wParam = 0
-		| (mouse.left << 0)
-		| (mouse.right << 1)
-		| (mouse.mid << 4)
-		| (mouse.x1 << 5)
-		| (mouse.x2 << 6)
-		| (shift << 2)
-		| (ctrl << 3);
-
-	switch (mouse.event)
-	{
-	case mouse_event::move:
-	{
-		msg.message = WM_MOUSEMOVE;
-		break;
-	}
-	case mouse_event::wheel:
-	{
-		msg.message = WM_MOUSEWHEEL;
-		const auto wheel = int16_t(mouse.wheel * WHEEL_DELTA);
-
-		msg.wParam |= uint64_t(wheel << 16);
-		break;
-	}
-	default:
-	{
-        switch (mouse.button)
-        {
-        case mouse_button::left:
-            switch (mouse.event)
-            {
-            case mouse_event::btn_press: msg.message = WM_LBUTTONDOWN; break;
-            case mouse_event::btn_hold: msg.message = WM_LBUTTONDOWN; break;
-            case mouse_event::btn_release: msg.message = WM_LBUTTONUP; break;
-            case mouse_event::btn_double: msg.message = WM_LBUTTONDBLCLK; break;
-            }
-            break;
-
-        case mouse_button::right:
-            switch (mouse.event)
-            {
-            case mouse_event::btn_press: msg.message = WM_RBUTTONDOWN; break;
-            case mouse_event::btn_hold: msg.message = WM_RBUTTONDOWN; break;
-            case mouse_event::btn_release: msg.message = WM_RBUTTONUP; break;
-            case mouse_event::btn_double: msg.message = WM_RBUTTONDBLCLK; break;
-            }
-            break;
-
-        case mouse_button::mid:
-            switch (mouse.event)
-            {
-            case mouse_event::btn_press: msg.message = WM_MBUTTONDOWN; break;
-            case mouse_event::btn_hold: msg.message = WM_MBUTTONDOWN; break;
-            case mouse_event::btn_release: msg.message = WM_MBUTTONUP; break;
-            case mouse_event::btn_double: msg.message = WM_MBUTTONDBLCLK; break;
-            }
-            break;
-
-        case mouse_button::x1:
-        case mouse_button::x2:
-            switch (mouse.event)
-            {
-            case mouse_event::btn_press: msg.message = WM_XBUTTONDOWN; break;
-            case mouse_event::btn_hold: msg.message = WM_XBUTTONDOWN; break;
-            case mouse_event::btn_release: msg.message = WM_XBUTTONUP; break;
-            case mouse_event::btn_double: msg.message = WM_XBUTTONDBLCLK; break;
-            }
-            break;
-        }
-
-		msg.wParam |=
-			(mouse.button == mouse_button::x1) << 16 |
-			(mouse.button == mouse_button::x2) << 17;
-		break;
-	}
-	}
-	return msg;
-}
-tagMSG icy::detail::to_winapi(const input_message& input) noexcept
-{
-	switch (input.type)
-	{
-	case input_type::key:
-		return to_winapi(input.key);
-	case input_type::mouse:
-		return to_winapi(input.mouse);
-	}
-	return{};
+    auto output = detail::to_winapi(input);
+    msg = output.message;
+    wParam = output.wParam;
+    lParam = output.lParam;
 }
 error_type icy::to_string(const icy::key_mod mod, string& str) noexcept
 {
@@ -415,18 +400,47 @@ error_type icy::to_string(const icy::key_mod mod, string& str) noexcept
     ICY_ERROR(func(key_mod::lshift, key_mod::rshift, "Shift"_s));
     return {};
 }
-error_type icy::to_string(const key_message& key, string& str) noexcept
+error_type icy::to_string(const input_message& input, string& str) noexcept
 {
-	if (key.key == key::none) 
+	if (input.type == input_type::active || input.type == input_type::text || input.key == key::none)
 		return {};
 
-    ICY_ERROR(to_string(key.mod, str));
+    ICY_ERROR(to_string(key_mod(input.mods), str));
 	for (auto&& pair : key_array)
 	{
-		if (pair.key == key.key)
+		if (pair.key == input.key)
 			return str.append(pair.str);
 	}
 	return make_stdlib_error(std::errc::invalid_argument);
+}
+string_view icy::to_string(const input_type type) noexcept
+{
+    switch (type)
+    {
+    case input_type::key_release:
+        return "Key Release"_s;
+    case input_type::key_hold:
+        return "Key Hold"_s;
+    case input_type::key_press:
+        return "Key Press"_s;
+    case input_type::mouse_move:
+        return "Mouse Move"_s;
+    case input_type::mouse_wheel:
+        return "Mouse Wheel"_s;
+    case input_type::mouse_release:
+        return "Mouse Release"_s;
+    case input_type::mouse_press:
+        return "Mouse Press"_s;
+    case input_type::mouse_hold:
+        return "Mouse Hold"_s;
+    case input_type::mouse_double:
+        return "Mouse Double"_s;
+    case input_type::text:
+        return "Text"_s;
+    case input_type::active:
+        return "Activate"_s;
+    }
+    return ""_s;
 }
 string_view icy::to_string(const key key) noexcept
 {
@@ -437,3 +451,5 @@ string_view icy::to_string(const key key) noexcept
     }
     return ""_s;
 }
+
+const uint32_t icy::wheel_delta = WHEEL_DELTA;

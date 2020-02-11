@@ -8,6 +8,7 @@
 #include <icy_engine/core/icy_map.hpp>
 #include <icy_engine/core/icy_color.hpp>
 #include <icy_engine/core/icy_matrix.hpp>
+#include <icy_engine/core/icy_input.hpp>
 
 #define ICY_GUI_ERROR(X) if (const auto error = (X)) return make_stdlib_error(static_cast<std::errc>(error)); return {};
 
@@ -26,6 +27,8 @@
 #pragma warning(push)
 #pragma warning(disable:4201)
 
+struct HWND__;
+
 namespace icy
 {
     enum class gui_variant_type : uint8_t
@@ -36,11 +39,12 @@ namespace icy
         uinteger    =   0x03,
         floating    =   0x04,
         guid        =   0x05,
-        sstring     =   0x06,
-        lstring     =   0x07,
-        array       =   0x08,
-        node        =   0x09,
-        user        =   0x0A,
+        node        =   0x06,
+        input       =   0x07,
+        sstring     =   0x08,
+        lstring     =   0x09,
+        array       =   0x0A,
+        user        =   0x0B,
     };
     enum class gui_check_state : uint32_t
     {
@@ -174,7 +178,7 @@ namespace icy
     public:
         data_type* _ptr = nullptr;
     };
-
+    
     class gui_variant
     {
     public:
@@ -184,6 +188,7 @@ namespace icy
         using floating_type = double;
         using guid_type = guid;
         using node_type = gui_node;
+        using input_type = input_message;
         struct buffer_type
         {
             buffer_type(icy::realloc_func alloc, void* user, size_t size) noexcept : alloc(alloc), user(user), size(size), ref(1)
@@ -222,6 +227,10 @@ namespace icy
             new (m_data) decltype(value)(value);
         }
         gui_variant(const gui_node value) noexcept : m_type(uint8_t(gui_variant_type::node)), m_size(0)
+        {
+            new (m_data) decltype(value)(value);
+        }
+        gui_variant(const input_message value) noexcept : m_type(uint8_t(gui_variant_type::input)), m_size(0)
         {
             new (m_data) decltype(value)(value);
         }
@@ -391,6 +400,13 @@ namespace icy
             else
                 return {};            
         }
+        input_message as_input() const noexcept
+        {
+            if (type() == gui_variant_type::input)
+                return m_input;
+            else
+                return {};
+        }
         template<typename T> const T* as_user() const noexcept
         {
             if (type() == gui_variant_type::user && m_buffer)
@@ -476,6 +492,7 @@ namespace icy
             floating_type m_floating;
             guid_type m_guid;
             node_type m_node;
+            input_message m_input;
             buffer_type* m_buffer;
         };
     };
@@ -571,13 +588,13 @@ namespace icy
         uint32_t dx = 1;
         uint32_t dy = 1;
     };
-    struct gui_widget_args_keys
+    /*struct gui_widget_args_keys
     {
         static constexpr string_view layout = "Layout"_s;
         static constexpr string_view stretch = "Stretch"_s;
         static constexpr string_view row = "Row"_s;
         static constexpr string_view col = "Col"_s;
-    };
+    };*/
 
     class gui_system
     {
@@ -588,6 +605,7 @@ namespace icy
         virtual uint32_t wake() noexcept = 0;
         virtual uint32_t loop(event_type& type, gui_event& args) noexcept = 0;
         virtual uint32_t create(gui_widget& widget, const gui_widget_type type, const gui_widget parent, const gui_widget_flag flags = gui_widget_flag::none) noexcept = 0;
+        virtual uint32_t create(gui_widget& widget, HWND__* const win32, const gui_widget parent, const gui_widget_flag flags = gui_widget_flag::none) noexcept = 0;
         virtual uint32_t create(gui_action& action, const string_view text) noexcept = 0;
         virtual uint32_t create(gui_node& model_root) noexcept = 0;
         virtual uint32_t create(gui_image& icon, const const_matrix_view<color> colors) noexcept = 0;
@@ -621,6 +639,7 @@ namespace icy
         virtual uint32_t clear(const gui_node root) noexcept = 0;
         virtual uint32_t scroll(const gui_widget widget, const gui_node node) noexcept = 0;
         virtual uint32_t scroll(const gui_widget tabs, const gui_widget widget) noexcept = 0;
+        virtual uint32_t input(const gui_widget widget, const input_message& msg) noexcept = 0;
     protected:
         ~gui_system() noexcept = default;
     };
@@ -631,7 +650,7 @@ namespace icy
 #ifndef ICY_QTGUI_BUILD
 namespace icy
 {
-    struct gui_widget_args
+    /*struct gui_widget_args
     {
         error_type insert(const string_view key, gui_widget_args*& val) noexcept
         {
@@ -674,7 +693,7 @@ namespace icy
             ICY_ERROR(str.append("}"_s));
         }
         return {};
-    }
+    }*/
 
     class gui_queue;
     //inline error_type create_gui(shared_ptr<gui_queue>& queue) noexcept;
@@ -719,7 +738,10 @@ namespace icy
                 if (const auto error = m_system->loop(type, args))
                     return make_stdlib_error(static_cast<std::errc>(error));
 
-                if (type == event_type::window_close || (type & event_type::gui_any))
+                if (type == event_type::window_close || 
+                    type == event_type::window_input ||
+                    type == event_type::window_active ||
+                    (type & event_type::gui_any))
                 {
                     ICY_ERROR(event::post(this, type, args));
                 }
@@ -728,6 +750,10 @@ namespace icy
         error_type create(gui_widget& widget, const gui_widget_type type, const gui_widget parent, const gui_widget_flag flags = gui_widget_flag::none) noexcept
         {
             ICY_GUI_ERROR(m_system->create(widget, type, parent, flags));
+        }
+        error_type create(gui_widget& widget, HWND__* const win32, const gui_widget parent, const gui_widget_flag flags = gui_widget_flag::none) noexcept
+        {
+            ICY_GUI_ERROR(m_system->create(widget, win32, parent, flags));
         }
         error_type create(gui_action& action, const string_view text) noexcept
         {
@@ -898,6 +924,10 @@ namespace icy
         {
             ICY_GUI_ERROR(m_system->scroll(tabs, widget));
         }
+        error_type input(const gui_widget widget, const input_message& msg) noexcept
+        {
+            ICY_GUI_ERROR(m_system->input(widget, msg));
+        }
     private:
 #if ICY_QTGUI_STATIC
 
@@ -920,73 +950,6 @@ namespace icy
         }
         return {};
     }
-
-    struct gui_widget_scoped : gui_widget
-    {
-        gui_widget_scoped() noexcept = default;
-        gui_widget_scoped(gui_queue& gui) noexcept : gui(&gui)
-        {
-
-        }
-        gui_widget_scoped(const gui_widget_scoped&) = delete;
-        ~gui_widget_scoped() noexcept
-        {
-            if (index && gui)
-                gui->destroy(*this);
-        }
-        error_type initialize(
-            const gui_widget parent = {}, 
-            const gui_widget_type type = gui_widget_type::menu,
-            const gui_widget_flag flags =gui_widget_flag::auto_insert) noexcept
-        {
-            return gui ? gui->create(*this, type, parent, flags) : make_stdlib_error(std::errc::invalid_argument);
-        }
-        gui_queue* gui = nullptr;
-    };
-    struct gui_action_scoped : gui_action
-    {
-        gui_action_scoped() noexcept = default;
-        gui_action_scoped(gui_queue& gui) noexcept : gui(&gui)
-        {
-
-        }
-        gui_action_scoped(const gui_action_scoped&) = delete;
-        gui_action_scoped(gui_action_scoped&& rhs) noexcept
-        {
-            std::swap(index, rhs.index);
-            std::swap(gui, rhs.gui);
-        }
-        ICY_DEFAULT_MOVE_ASSIGN(gui_action_scoped);
-        ~gui_action_scoped() noexcept
-        {
-            if (index && gui)
-                gui->destroy(*this);
-        }
-        error_type initialize(const string_view text) noexcept
-        {
-            return gui ? gui->create(*this, text) : make_stdlib_error(std::errc::invalid_argument);
-        }
-        gui_queue* gui = nullptr;
-    };
-    struct gui_model_scoped : gui_node
-    {
-        gui_model_scoped() noexcept = default;
-        gui_model_scoped(gui_queue& gui) noexcept : gui(&gui)
-        {
-
-        }
-        gui_model_scoped(const gui_model_scoped&) = delete;
-        ~gui_model_scoped() noexcept
-        {
-            if (*this && gui)
-                gui->destroy(*this);
-        }
-        error_type initialize() noexcept
-        {
-            return gui ? gui->create(*this) : make_stdlib_error(std::errc::invalid_argument);
-        }
-        gui_queue* gui = nullptr;
-    };
 }
 #endif
 

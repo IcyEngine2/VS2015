@@ -307,7 +307,7 @@ error_type mbox_form_action_key::initialize(xgui_widget& parent, const uint32_t 
     dictionary<key> keys;
     for (auto k = 0u; k < 256u; ++k)
     {
-        const auto str = mbox::to_string(key(k));
+        const auto str = to_string(key(k));
         if (str.empty())
             continue;
         ICY_ERROR(keys.insert(str, key(k)));
@@ -368,7 +368,7 @@ error_type mbox_form_action_keymod::initialize(xgui_widget& parent, const uint32
         if (!node) return make_stdlib_error(std::errc::not_enough_memory);
         ICY_ERROR(node.text(text));
         ICY_ERROR(node.udata(uint64_t(value)));
-        if ((select & value) == value)
+        if ((select & value) == uint32_t(value))
         {
             m_select = value;
             ICY_ERROR(m_value.scroll(node));

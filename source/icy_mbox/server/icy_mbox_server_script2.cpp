@@ -79,7 +79,11 @@ error_type mbox_script_thread::run() noexcept
                 }
                 ICY_ERROR(process(*character, event_data.data, send));
                 for (auto&& pair : send)
+                {
+                    if (pair.value.input.empty())
+                        continue;
                     ICY_ERROR(m_network.send(pair.key, pair.value.input));
+                }
             }            
         }
     }

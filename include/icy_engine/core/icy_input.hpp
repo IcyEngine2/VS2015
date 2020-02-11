@@ -15,158 +15,50 @@ namespace icy
 {
 	class window;
 
-    enum class key_event : uint32_t
+    enum class input_type : uint32_t
     {
         none,
-        release,
-        hold,
-        press,
+        key_release,
+        key_hold,
+        key_press,
+        mouse_move,
+        mouse_wheel,
+        mouse_release,
+        mouse_press,
+        mouse_hold,
+        mouse_double,
+        text,
+        active,
         _total,
     };
-	struct mouse_event_enum
-	{
-		enum : uint32_t
-		{
-			none,
-			move,
-			wheel,
-			btn_release,
-			btn_press,
-			btn_hold,
-			btn_double,
-			_total,
-		};
-	};
-	struct mouse_button_enum
-	{
-		enum : uint32_t
-		{
-            none,
-			left,
-			right,
-			mid,
-			x1,
-			x2,
-			_total,
-		};
-	};
-	enum class input_type : uint32_t
-	{
-		none,
-		key,
-		mouse,
-		text,
-        active,
-	};
-    struct key_mod_enum
+    enum class key_mod : uint32_t
     {
-        enum : uint32_t
-        {
-            none    =   0x00,
-            lctrl   =   0x01,
-            lalt    =   0x02,
-            lshift  =   0x04,
-            rctrl   =   0x08,
-            ralt    =   0x10,
-            rshift  =   0x20,
-            _max    =   lctrl | lalt | lshift | rctrl | ralt | rshift,
-        };
+        none    =   0x00,
+        lctrl   =   0x01,
+        lalt    =   0x02,
+        lshift  =   0x04,
+        rctrl   =   0x08,
+        ralt    =   0x10,
+        rshift  =   0x20,
+            
+        lmb     =   0x40,
+        rmb     =   0x80,
+        mmb     =   0x100,
+        x1mb    =   0x200,
+        x2mb    =   0x400,
+            
+        _max    =   lctrl | lalt | lshift | rctrl | ralt | rshift | lmb | rmb | mmb | x1mb | x2mb,
     };
-    using key_mod = decltype(key_mod_enum::none);
-	using mouse_event = decltype(mouse_event_enum::_total);
-	using mouse_button = decltype(mouse_button_enum::_total);
-		
-    struct key_message
-    {
-        key_message(const key key = key::none, const key_event event = key_event::none, 
-            const key_mod mod = key_mod::none) noexcept : key(key), event(event), mod(mod)
-        {
 
-        }
-        ICY_DEFAULT_COPY_ASSIGN(key_message);
-        explicit operator bool() const noexcept
-        {
-            return event != key_event::none && key != key::none;
-        }
-        const key key;
-        const key_event event;
-        const key_mod mod;
-    };
-    /*class key_mod
+    inline constexpr key_mod operator|(const key_mod lhs, const key_mod rhs) noexcept
     {
-    public:
-        //  pass in key_message .control or .alt or .shift
-        key_mod(const uint32_t mod) noexcept : m_value(mod)
-        {
-
-        }
-		key_mod(const key_mod& rhs) noexcept : m_value(rhs.m_value)
-		{
-
-		}
-		ICY_DEFAULT_COPY_ASSIGN(key_mod);
-        explicit operator bool() const noexcept
-        {
-            return !!m_value;
-        }
-        auto left() const noexcept
-        {
-            return !!(m_value & 0x01);
-        }
-        auto right() const noexcept
-        {
-            return !!(m_value & 0x02);
-        }
-        explicit operator uint32_t() const noexcept
-        {
-            return m_value;
-        }
-    private:
-        const uint32_t m_value;
-    };*/
-    struct mouse_message
+        return key_mod(uint32_t(lhs) | uint32_t(rhs));
+    }
+    inline constexpr uint32_t operator&(const key_mod lhs, const key_mod rhs) noexcept
     {
-        mouse_message() noexcept
-        {
-            std::memset(this, 0, sizeof(*this));
-        }
-        explicit operator bool() const noexcept
-        {
-            return event != mouse_event::none;
-        }
-        mouse_event event;
-		struct
-		{
-			double x;
-			double y;
-		} point;
-        union
-        {
-			struct
-			{
-				double x;
-				double y;
-			} delta;
-            double wheel;
-            mouse_button button;
-        };
-        key_mod mod;
-        struct
-        {
-            union
-            {
-                struct
-                {
-                    uint32_t left : 1;
-                    uint32_t right : 1;
-                    uint32_t mid : 1;
-                    uint32_t x1 : 1;
-                    uint32_t x2 : 1;
-                };
-                uint32_t buttons : 5;
-            };
-        };
-    };
+        return uint32_t(lhs) & uint32_t(rhs);
+    }
+
 	struct input_message
 	{
 		enum
@@ -181,11 +73,8 @@ namespace icy
 		{
             memset(this, 0, sizeof(*this));
 		}
-		input_message(const key_message& key) noexcept : type(input_type::key), key(key)
-		{
-
-		}
-		input_message(const mouse_message& mouse) noexcept : type(input_type::mouse), mouse(mouse)
+		input_message(const input_type type, const key key, const key_mod mods) noexcept : 
+            type(type), key(key), mods(uint64_t(mods)), point_x(0), point_y(0), wheel(0)
 		{
 
 		}
@@ -200,59 +89,67 @@ namespace icy
 		}
 		ICY_DEFAULT_COPY_ASSIGN(input_message);
         const input_type type;
-		const union
-		{
-			key_message key;
-			mouse_message mouse;
-			wchar_t text[u16_max + 1];
+        union
+        {
+            wchar_t text[u16_max];
             const bool active;
-		};
+            key key;
+        };
+        struct
+        {
+            int64_t mods    : 0x10;
+            int64_t point_x : 0x10;
+            int64_t point_y : 0x10;
+            int64_t wheel   : 0x10;
+        };
 	};
     inline void key_mod_set(key_mod& mod, const std::bitset<256>& buffer) noexcept
     {
-        mod = key_mod(mod | (buffer[size_t(key::left_ctrl)] ? key_mod::lctrl : 0));
-        mod = key_mod(mod | (buffer[size_t(key::left_alt)] ? key_mod::lalt : 0));
-        mod = key_mod(mod | (buffer[size_t(key::left_shift)] ? key_mod::lshift : 0));
-        mod = key_mod(mod | (buffer[size_t(key::right_ctrl)] ? key_mod::rctrl : 0));
-        mod = key_mod(mod | (buffer[size_t(key::right_alt)] ? key_mod::ralt : 0));
-        mod = key_mod(mod | (buffer[size_t(key::right_shift)] ? key_mod::rshift : 0));
+        if (buffer[size_t(key::left_ctrl)]) mod = mod | key_mod::lctrl;
+        if (buffer[size_t(key::left_alt)]) mod = mod | key_mod::lalt;
+        if (buffer[size_t(key::left_shift)]) mod = mod | key_mod::lshift;
+        if (buffer[size_t(key::right_ctrl)]) mod = mod | key_mod::rctrl;
+        if (buffer[size_t(key::right_alt)]) mod = mod | key_mod::ralt;
+        if (buffer[size_t(key::right_shift)]) mod = mod | key_mod::rshift;
     }
     namespace detail
     {       
 		key scan_vk_to_key(uint16_t vkey, uint16_t scan, const bool isE0) noexcept;
-		uint16_t from_winapi(key_message& msg, const size_t wParam, const ptrdiff_t lParam, const std::bitset<256>& buffer) noexcept;
-		uint16_t from_winapi(key_message& key, const tagMSG& msg, const std::bitset<256> & buffer) noexcept;
-		void from_winapi(mouse_message& mouse, const uint32_t offset_x, const uint32_t offset_y, const uint32_t msg, const size_t wParam, const ptrdiff_t lParam, const std::bitset<256> & buffer) noexcept;
-		void from_winapi(mouse_message& mouse, const uint32_t offset_x, const uint32_t offset_y, const tagMSG& msg, const std::bitset<256>& buffer) noexcept;
-		tagMSG to_winapi(const key_message& key) noexcept;
-		tagMSG to_winapi(const mouse_message& mouse) noexcept;
+		uint16_t from_winapi(input_message& msg, const size_t wParam, const ptrdiff_t lParam, const std::bitset<256>& buffer) noexcept;
+		uint16_t from_winapi(input_message& key, const tagMSG& msg, const std::bitset<256> & buffer) noexcept;
+		void from_winapi(input_message& mouse, const uint32_t offset_x, const uint32_t offset_y, const uint32_t msg, const size_t wParam, const ptrdiff_t lParam, const std::bitset<256> & buffer) noexcept;
+		void from_winapi(input_message& mouse, const uint32_t offset_x, const uint32_t offset_y, const tagMSG& msg, const std::bitset<256>& buffer) noexcept;
 		tagMSG to_winapi(const input_message& input) noexcept;
+        void to_winapi(const input_message& input, uint32_t& msg, size_t& wParam, ptrdiff_t& lParam) noexcept;
     }
-	inline auto key_mod_and(const uint32_t lhs, const uint32_t rhs) noexcept
+	inline auto key_mod_and(const key_mod lhs, const key_mod rhs) noexcept
 	{
         auto need_any_ctrl = lhs & (key_mod::lctrl | key_mod::rctrl);
         auto need_any_alt = lhs & (key_mod::lalt| key_mod::ralt);
         auto need_any_shift = lhs & (key_mod::lshift | key_mod::rshift);
         if (need_any_ctrl)
         {
-            if ((need_any_ctrl & rhs) == 0)
+            if ((key_mod(need_any_ctrl) & rhs) == 0)
                 return false;
         }
         if (need_any_alt)
         {
-            if ((need_any_alt & rhs) == 0)
+            if ((key_mod(need_any_alt) & rhs) == 0)
                 return false;
         }
         if (need_any_shift)
         {
-            if ((need_any_shift & rhs) == 0)
+            if ((key_mod(need_any_shift) & rhs) == 0)
                 return false;
         }
         return true;
 	}
-	error_type to_string(const key_message& key, string& str) noexcept;
+    string_view to_string(const input_type type) noexcept;
+	error_type to_string(const input_message& key, string& str) noexcept;
     error_type to_string(const key_mod mod, string& str) noexcept;
     string_view to_string(const key key) noexcept;
+    
+    extern const uint32_t wheel_delta;
 }
 
 #pragma warning(pop)

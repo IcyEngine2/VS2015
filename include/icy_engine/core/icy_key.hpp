@@ -8,6 +8,12 @@ namespace icy
 	{
 		none = 0,
 
+        mouse_left = 0x01,
+        mouse_right = 0x02,
+        mouse_mid = 0x03,
+        mouse_x1 = 0x04,
+        mouse_x2 = 0x05,
+
 		back = 0x08,
 		tab = 0x09,
 		enter = 0x0D,

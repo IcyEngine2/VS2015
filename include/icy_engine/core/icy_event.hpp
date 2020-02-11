@@ -76,9 +76,7 @@ namespace icy
             window_close            =   1ui64   <<  (offset_win + 0x00),
             window_resize           =   1ui64   <<  (offset_win + 0x02),
             window_input            =   1ui64   <<  (offset_win + 0x03),
-#if ICY_WINDOW_INTERNAL
-            window_rename           =   1ui64   <<  (offset_win + 0x04),
-#endif
+            window_internal         =   1ui64   <<  (offset_win + 0x04),
             window_active           =   1ui64   <<  (offset_win + 0x05),
             window_minimized        =   1ui64   <<  (offset_win + 0x06),
             window_any              =   mask_win,

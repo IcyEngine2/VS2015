@@ -32,3 +32,16 @@ private:
     adapter_flag m_flags = adapter_flag::none;
     string m_name;
 };
+
+namespace icy
+{
+    class display
+    {
+    public:
+        virtual ~display() noexcept = default;
+        virtual error_type draw(const size_t frame) noexcept = 0;
+        virtual void* event() noexcept = 0;
+    };
+    error_type make_d3d11_display(unique_ptr<display>& display, const adapter& adapter, const window_flags flags, HWND__* const window) noexcept;
+    error_type make_d3d12_display(unique_ptr<display>& display, const adapter& adapter, const window_flags flags, HWND__* const window) noexcept;
+}

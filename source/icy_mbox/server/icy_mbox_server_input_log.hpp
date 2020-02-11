@@ -2,7 +2,7 @@
 
 #include "../icy_mbox_network.hpp"
 #include "../icy_mbox_script2.hpp"
-#include <icy_qtgui/icy_qtgui.hpp>
+#include <icy_qtgui/icy_xqtgui.hpp>
 #include <icy_engine/core/icy_input.hpp>
 
 class mbox_input_log
@@ -45,7 +45,7 @@ public:
         string_view type;
         string arg;
         auto mod = key_mod::none;
-        
+        /*
         if (msg.type == input_type::key)
         {
             if (msg.key.event == key_event::press)
@@ -142,7 +142,7 @@ public:
         ICY_ERROR(m_gui->text(m_gui->node(m_root, m_size, col_arg), arg));
         ICY_ERROR(m_gui->text(m_gui->node(m_root, m_size, col_mods), mods));
         ICY_ERROR(m_gui->scroll(m_widget, m_gui->node(m_root, m_size, 0)));
-        m_size += 1;
+        m_size += 1;*/
         return {};
     }
     icy::gui_widget window() const noexcept
@@ -152,8 +152,8 @@ public:
 private:
     icy::gui_queue* m_gui = nullptr;
     mbox::library* m_library = nullptr;
-    icy::gui_widget_scoped m_window;
-    icy::gui_widget_scoped m_widget;
-    icy::gui_model_scoped m_root;
+    icy::xgui_widget m_window;
+    icy::xgui_widget m_widget;
+    icy::xgui_model m_root;
     uint32_t m_size = 0;
 };

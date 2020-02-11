@@ -50,14 +50,14 @@ class mbox_main_thread : public icy::thread
 public:
     error_type run() noexcept override;
 };
-class mbox_hook : public window_hook
+class mbox_window_callback : public window_callback
 {
 public:
     error_type callback(const icy::input_message& msg, bool& cancel) noexcept override;
 };
 class mbox_application
 {
-    friend mbox_hook;
+    friend mbox_window_callback;
     friend mbox_main_thread;
     friend network_udp_thread;
     friend network_tcp_thread;
@@ -79,9 +79,9 @@ private:
     heap m_heap;
     string m_log;
     IDXGISwapChain* m_chain = nullptr;   
-    mbox_hook m_window_hook;
     HWND__* m_hwnd;
     hook<dxgi_present> m_dxgi_hook;
+    mbox_window_callback m_window;
     mbox::info m_info;
     mbox_main_thread m_main;
     network_system_udp m_udp_network;
@@ -151,9 +151,10 @@ error_type mbox_application::initialize() noexcept
     make_directory(dirname);
     ICY_ERROR(to_string("%1%2%3%4"_s, m_log, string_view(dirname), "mbox_log_"_s, uint32_t(GetCurrentProcessId()), ".txt"_s));
     ICY_ERROR(log("Startup"_s, error_type()));
-
+    /*
     const auto module = GetModuleHandleA("dxgi");
     const auto offset = 17152u;
+    
     const auto dxgi_callback = [](IDXGISwapChain* chain, unsigned sync, unsigned flags)
     {
         instance().launch(*chain);
@@ -162,7 +163,13 @@ error_type mbox_application::initialize() noexcept
     };
     if (const auto error = m_dxgi_hook.initialize(dxgi_present(reinterpret_cast<uint8_t*>(module) + offset), dxgi_callback))
         return log("Minhook initialize (DXGI SwapChain)", error);
+    */
+    /*const auto win_callback = []{ instance().m_main.launch(); };
+    if (const auto error = m_window_hook.initialize(m_hwnd = window_hook::find(), win_callback))
+        ICY_ERROR(log("Hook"_s, error));*/
+
     
+        
     return {};
 }
 
@@ -173,7 +180,7 @@ error_type mbox_application::exec() noexcept
     {
         m_udp_network.stop(network_code_exit);
         m_dxgi_hook.shutdown();
-        m_window_hook.shutdown();
+        m_window.shutdown();
         g_init.store(false);
     };
     window_size wsize;
@@ -184,8 +191,9 @@ error_type mbox_application::exec() noexcept
     ICY_ERROR(computer_name(cname));
     ICY_ERROR(process_name(nullptr, pname_long));
     ICY_ERROR(to_string(file_name(pname_long).name, pname_short));
-    ICY_ERROR(dxgi_window(*m_chain, wname, wsize, m_hwnd));
-    ICY_ERROR(m_window_hook.initialize(m_hwnd));
+    if (m_chain)
+        ICY_ERROR(dxgi_window(*m_chain, wname, wsize, m_hwnd));
+    //ICY_ERROR(m_window_hook.initialize(m_hwnd));
     m_info.key.pid = GetCurrentProcessId();
     m_info.key.hash = hash(cname);
 
@@ -303,7 +311,7 @@ error_type mbox_application::window_callback(const input_message& input, bool& c
             ICY_ERROR(str.append("[PAUSED] "_s));
 
         ICY_ERROR(str.append(defname));
-        ICY_ERROR(m_window_hook.rename(str));
+        ICY_ERROR(m_window.rename(str));
     }
     return {};
 }
@@ -384,7 +392,7 @@ error_type network_udp_thread::run() noexcept
     }
     return {};
 }
-error_type mbox_hook::callback(const input_message& input, bool& cancel) noexcept
+error_type mbox_window_callback::callback(const input_message& input, bool& cancel) noexcept
 {
     if (const auto error = instance().window_callback(input, cancel))
         instance().log("Window Callback"_s, error);
@@ -525,7 +533,7 @@ error_type network_tcp_thread::run() noexcept
                         const auto ptr = reinterpret_cast<const input_message*>(reply.bytes.data());
                         const auto len = reply.bytes.size() / sizeof(*ptr);
                         const auto vec = const_array_view<input_message>(ptr, len);                      
-                        if (const auto error = instance().m_window_hook.send(vec))
+                        if (const auto error = instance().m_window.send(vec))
                             return log("Append recv input buffer"_s, error);
                      
                     }
@@ -545,7 +553,7 @@ error_type network_tcp_thread::run() noexcept
                             instance().m_info.profile = ptr->profile;
                             auto name = string_view(ptr->window_name, strnlen(ptr->window_name, _countof(ptr->window_name)));
                             memcpy(instance().m_info.window_name, name.bytes().data(), name.bytes().size());
-                            if (const auto error = instance().m_window_hook.rename(name))
+                            if (const auto error = instance().m_window.rename(name))
                                 return log("Set profile"_s, error);
                         }
                     }

@@ -693,7 +693,8 @@ error_type network_system_tcp::connect(network_tcp_connection& conn, const netwo
 	}
 	auto bytes = 0ul;
     memcpy(ref->buffer, buffer.data(), buffer.size());
-	if (!network_func_connect(conn.m_socket, address.data(), address.size(), ref->buffer, uint32_t(ref->capacity), &bytes, &ref->overlapped))
+	if (!network_func_connect(conn.m_socket, address.data(), address.size(), 
+        ref->capacity ? ref->buffer : nullptr, uint32_t(ref->capacity), &bytes, &ref->overlapped))
 	{
 		const auto error = GetLastError();
 		if (error != WSA_IO_PENDING)

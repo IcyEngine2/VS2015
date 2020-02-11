@@ -1,4 +1,5 @@
 #include <icy_qtgui/icy_qtgui.hpp>
+#include <icy_engine/core/icy_input.hpp>
 #include <QtCore/qtimer.h>
 #include <QtCore/qmutex.h>
 #include <QtCore/qthread.h>
@@ -9,6 +10,7 @@
 #include <QtCore/qjsondocument.h>
 #include <QtGui/qevent.h>
 #include <QtGui/qpainter.h>
+#include <QtGui/qwindow.h>
 #include <QtWidgets/qapplication.h>
 #include <QtWidgets/qstylefactory.h>
 #include <QtWidgets/qaction.h>
@@ -102,6 +104,8 @@ ICY_STATIC_NAMESPACE_BEG
 static auto qtapp_argc = 0;
 static char** qtapp_argv = nullptr;
 static const auto qtgui_property_name = "user";
+static const auto qtgui_property_hwnd_window = "hwnd_window";
+static const auto qtgui_property_hwnd_xstyle = "hwnd_xstyle";
 struct qtgui_event_node
 {
     void* unused = nullptr;
@@ -132,6 +136,7 @@ enum class qtgui_event_type : uint32_t
 {
     none,
     create_widget,
+    create_win32,
     create_action,
     create_model,
     create_image,
@@ -163,6 +168,7 @@ enum class qtgui_event_type : uint32_t
     clear_model,
     scroll,
     scroll_tabs,
+    input,
 };
 
 class qtgui_event_create_widget : public QEvent
@@ -176,6 +182,21 @@ public:
     }
 public:
     const gui_widget_type wtype;
+    const gui_widget_flag flags;
+    const gui_widget parent;
+    const gui_widget widget;
+};
+class qtgui_event_create_win32 : public QEvent
+{
+public:
+    qtgui_event_create_win32(const gui_widget widget, HWND__* const win32, const gui_widget parent, const gui_widget_flag flags) :
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::create_win32))),
+        win32(win32), flags(flags), parent(parent), widget(widget)
+    {
+
+    }
+public:
+    HWND__* const win32;
     const gui_widget_flag flags;
     const gui_widget parent;
     const gui_widget widget;
@@ -589,6 +610,19 @@ public:
     const gui_widget tabs;
     const gui_widget widget;
 };
+class qtgui_event_input : public QEvent
+{
+public:
+    qtgui_event_input(const gui_widget widget, const input_message& msg) :
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::input))),
+        widget(widget), msg(msg)
+    {
+
+    }
+public:
+    const gui_widget widget;
+    const input_message msg;
+};
 
 class qtgui_splitter : public QSplitter
 {
@@ -712,6 +746,7 @@ private:
     uint32_t wake() noexcept override;
     uint32_t loop(event_type& type, gui_event& args) noexcept override;
     uint32_t create(gui_widget& widget, const gui_widget_type type, const gui_widget parent, const gui_widget_flag flags) noexcept override;
+    uint32_t create(gui_widget& widget, HWND__* const hwnd, const gui_widget parent, const gui_widget_flag flags) noexcept override;
     uint32_t create(gui_action& action, const string_view text) noexcept override;
     uint32_t create(gui_node& root) noexcept override;
     uint32_t create(gui_image& image, const const_matrix_view<color> colors) noexcept override;
@@ -745,8 +780,10 @@ private:
     uint32_t clear(const gui_node root) noexcept override;
     uint32_t scroll(const gui_widget widget, const gui_node node) noexcept override;
     uint32_t scroll(const gui_widget tabs, const gui_widget widget) noexcept override;
+    uint32_t input(const gui_widget widget, const input_message& msg) noexcept override;
 private:
     std::errc process(const qtgui_event_create_widget& event);
+    std::errc process(const qtgui_event_create_win32& event);
     std::errc process(const qtgui_event_create_action& event);
     std::errc process(const qtgui_event_create_model& event);
     std::errc process(const qtgui_event_create_image& event);
@@ -778,6 +815,7 @@ private:
     std::errc process(const qtgui_event_clear_model& event);
     std::errc process(const qtgui_event_scroll& event);
     std::errc process(const qtgui_event_scroll_tabs& event);
+    std::errc process(const qtgui_event_input& event);
 private:
     detail::intrusive_mpsc_queue m_queue;
     QWidget m_root;
@@ -790,6 +828,12 @@ private:
     QQueue<uint64_t> m_free_actions;
     QQueue<uint64_t> m_free_models;
     QQueue<uint64_t> m_free_images;
+    //SendNotifyMessageW
+    using func_send_type = int (__stdcall*)(HWND__*, uint32_t msg, size_t wParam, ptrdiff_t lParam);
+    using func_style_type = ptrdiff_t(__stdcall*)(HWND__*, int, ptrdiff_t);
+    library m_win32_library = "user32"_lib;
+    func_send_type m_win32_send = nullptr;
+    func_style_type m_win32_style = nullptr;
 };
 ICY_STATIC_NAMESPACE_END
 
@@ -825,12 +869,27 @@ bool qtgui_system::notify(QObject* object, QEvent* event) noexcept
     {
         try
         {
-            if (event->type() == QEvent::Type::Close && qobject_cast<QMainWindow*>(object))
+            const auto calcMods = [](const Qt::KeyboardModifiers keyMods)
+            {
+                auto mods = key_mod::none;
+                if (keyMods.testFlag(Qt::KeyboardModifier::ShiftModifier))
+                    mods = mods | (key_mod::lshift | key_mod::rshift);
+                if (keyMods.testFlag(Qt::KeyboardModifier::ControlModifier))
+                    mods = mods | (key_mod::lctrl | key_mod::rctrl);
+                if (keyMods.testFlag(Qt::KeyboardModifier::AltModifier))
+                    mods = mods | (key_mod::lalt | key_mod::ralt);
+                return mods;
+            };
+
+            const auto isWindow = qobject_cast<QMainWindow*>(object);
+            const auto isDialog = qobject_cast<QDialog*>(object);
+            const auto event_type = event->type();
+            
+            if (event_type == QEvent::Type::Close && (isWindow || isDialog))
             {
                 event->ignore();
-
                 const auto index = object->property(qtgui_property_name).toULongLong();
-                
+
                 auto node_0 = new qtgui_event_node;
                 node_0->type = event_type::window_close;
                 node_0->args.widget.index = index;
@@ -840,14 +899,119 @@ bool qtgui_system::notify(QObject* object, QEvent* event) noexcept
                 node_1->type = event_type::gui_action;
                 node_1->args.widget.index = index;
                 m_queue.push(node_1);
-
                 qtgui_exit();
+                return 0;
+            }
+            else if (event->type() == QEvent::Type::FocusIn || event->type() == QEvent::Type::FocusOut)
+            {
+                const auto widget = qobject_cast<QWidget*>(object);
+                uint64_t index = widget ? widget->property(qtgui_property_name).toULongLong() : 0;
+                
+                auto node = new qtgui_event_node;
+                node->type = event_type::window_active;
+                node->args.widget.index = index;
+                node->args.data = event->type() == QEvent::Type::FocusIn;
+                m_queue.push(node);
+                qtgui_exit();
+
+                output = QApplication::notify(object, event);
                 return 0;
             }
             else if (event->type() == QEvent::Type::Quit)
             {
                 qtgui_exit();
-                return {};
+                return 0;
+            }
+            else if (m_win32_send && event->isAccepted() && (false
+                || event_type == QEvent::Type::MouseMove 
+                || event_type == QEvent::Type::MouseButtonRelease
+                || event_type == QEvent::Type::MouseButtonPress
+                || event_type == QEvent::Type::MouseButtonDblClick
+                || event_type == QEvent::Type::Wheel
+                || event_type == QEvent::Type::KeyPress 
+                || event_type == QEvent::Type::KeyRelease))
+            {
+                const auto widget = qobject_cast<QWidget*>(object);
+                uint64_t index = widget ? widget->property(qtgui_property_name).toULongLong() : 0;
+
+                auto count = 1;
+                input_message msg;
+                if (event_type == QEvent::Type::Wheel)
+                {
+                    const auto wheelEvent = static_cast<QWheelEvent*>(event);
+                    msg = input_message(input_type::mouse_wheel, key::none, calcMods(wheelEvent->modifiers()));
+                    msg.wheel = wheelEvent->angleDelta().y();
+                }
+                else if (
+                    event_type == QEvent::Type::KeyPress || 
+                    event_type == QEvent::Type::KeyRelease)
+                {
+                    const auto keyEvent = static_cast<QKeyEvent*>(event);
+                    count = keyEvent->count();
+                    const auto type = event_type == QEvent::Type::KeyRelease ? 
+                        input_type::key_release : keyEvent->isAutoRepeat() ? input_type::key_hold : input_type::key_press;
+                    
+                    auto key = key::none;
+                    switch (auto qKey = keyEvent->key())
+                    {
+                    case Qt::Key::Key_Shift: key = key::left_shift; break;
+                    case Qt::Key::Key_Control: key = key::left_ctrl; break;
+                    case Qt::Key::Key_Alt: key = key::left_alt; break;
+                    default: key = icy::key(keyEvent->nativeVirtualKey()); break;
+                    }
+                    if (to_string(key).empty())
+                        count = 0;
+
+                    msg = input_message(type, key, calcMods(keyEvent->modifiers()));
+                }
+                else
+                {
+                    const auto mouseEvent = static_cast<QMouseEvent*>(event);
+                    auto type = input_type::none;
+                    switch (event_type)
+                    {
+                    case QEvent::Type::MouseButtonPress: type = input_type::mouse_press; break;
+                    case QEvent::Type::MouseButtonRelease: type = input_type::mouse_release; break;
+                    case QEvent::Type::MouseButtonDblClick: type = input_type::mouse_double; break;
+                    case QEvent::Type::MouseMove: type = input_type::mouse_move; break;
+                    }
+                    auto key = key::none;
+                    switch (mouseEvent->button())
+                    {
+                    case Qt::MouseButton::LeftButton: key = key::mouse_left; break;
+                    case Qt::MouseButton::RightButton: key = key::mouse_right; break;
+                    case Qt::MouseButton::MiddleButton: key = key::mouse_mid; break;
+                    case Qt::MouseButton::XButton1: key = key::mouse_x1; break;
+                    case Qt::MouseButton::XButton2: key = key::mouse_x2; break;
+                    }
+                    auto mods = calcMods(mouseEvent->modifiers());
+                    if (mouseEvent->buttons().testFlag(Qt::MouseButton::LeftButton)) mods = mods | key_mod::lmb;
+                    if (mouseEvent->buttons().testFlag(Qt::MouseButton::RightButton)) mods = mods | key_mod::rmb;
+                    if (mouseEvent->buttons().testFlag(Qt::MouseButton::MiddleButton)) mods = mods | key_mod::mmb;
+                    if (mouseEvent->buttons().testFlag(Qt::MouseButton::XButton1)) mods = mods | key_mod::x1mb;
+                    if (mouseEvent->buttons().testFlag(Qt::MouseButton::XButton2)) mods = mods | key_mod::x2mb;
+                    msg = input_message(type, key, mods);
+                    msg.point_x = mouseEvent->localPos().toPoint().x();
+                    msg.point_y = mouseEvent->localPos().toPoint().y();
+                }
+                if (index)
+                {
+                    for (auto k = 0; k < count; ++k)
+                    {
+                        auto node = new qtgui_event_node;
+                        node->type = event_type::window_input;
+                        node->args.widget.index = index;
+                        node->args.data = msg;
+                        m_queue.push(node);
+                    }
+                    if (count)
+                    {
+                        qtgui_exit();
+                        //event->ignore();
+                    }
+                }
+                output = QApplication::notify(object, event);
+                return 0;
             }
             else if (object == this && event->type() >= QEvent::Type::User && event->type() < QEvent::Type::MaxUser)
             {
@@ -858,6 +1022,9 @@ bool qtgui_system::notify(QObject* object, QEvent* event) noexcept
                 {
                 case qtgui_event_type::create_widget:
                     error = process(*static_cast<qtgui_event_create_widget*>(event));
+                    break;
+                case qtgui_event_type::create_win32:
+                    error = process(*static_cast<qtgui_event_create_win32*>(event));
                     break;
                 case qtgui_event_type::create_action:
                     error = process(*static_cast<qtgui_event_create_action*>(event));
@@ -952,6 +1119,9 @@ bool qtgui_system::notify(QObject* object, QEvent* event) noexcept
                 case qtgui_event_type::scroll_tabs:
                     error = process(*static_cast<qtgui_event_scroll_tabs*>(event));
                     break;
+                case qtgui_event_type::input:
+                    error = process(*static_cast<qtgui_event_input*>(event));
+                    break;
                 default:
                     error = std::errc::function_not_supported;
                     break;
@@ -1027,6 +1197,30 @@ uint32_t qtgui_system::create(gui_widget& widget, const gui_widget_type type, co
     ICY_CATCH;
     return {};
 }
+uint32_t qtgui_system::create(gui_widget& widget, HWND__* const win32, const gui_widget parent, const gui_widget_flag flags) noexcept
+{
+    try
+    {
+        {
+            QMutexLocker lk(&m_lock);
+            auto index = m_widgets.size();
+            if (m_free_widgets.empty())
+            {
+                m_widgets.push_back(nullptr);
+            }
+            else
+            {
+                index = m_free_widgets.takeFirst();
+            }
+            widget.index = uint64_t(index);
+        }
+        const auto event = new qtgui_event_create_win32(widget, win32, parent, flags);
+        qApp->postEvent(this, event);
+    }
+    ICY_CATCH;
+    return {};
+}
+
 uint32_t qtgui_system::create(gui_action& action, const string_view text) noexcept
 {
     try
@@ -1430,6 +1624,16 @@ uint32_t qtgui_system::scroll(const gui_widget tabs, const gui_widget widget) no
     ICY_CATCH;
     return {};
 }
+uint32_t qtgui_system::input(const gui_widget widget, const input_message& msg) noexcept
+{
+    try
+    {
+        const auto event = new qtgui_event_input(widget, msg);
+        qApp->postEvent(this, event);
+    }
+    ICY_CATCH;
+    return {};
+}
 
 std::errc qtgui_system::process(const qtgui_event_create_widget& event)
 {
@@ -1477,7 +1681,7 @@ std::errc qtgui_system::process(const qtgui_event_create_widget& event)
         }
         break;
     }    
-    
+        
     case gui_widget_type::vsplitter:
         widget = new qtgui_splitter(Qt::Vertical, parent);
         break;
@@ -1583,8 +1787,13 @@ std::errc qtgui_system::process(const qtgui_event_create_widget& event)
     }
 
     case gui_widget_type::message:
-        widget = new QMessageBox(parent);
+    {
+        const auto message = new QMessageBox(parent);
+        widget = message;
+        QObject::connect(message, &QMessageBox::buttonClicked,
+            [func, message](QAbstractButton*) { func(QVariant(), event_type::window_close); });
         break;
+    }
 
     case gui_widget_type::progress:
         widget = new QProgressBar(parent);
@@ -1667,6 +1876,8 @@ std::errc qtgui_system::process(const qtgui_event_create_widget& event)
         return std::errc::function_not_supported;
     }
 
+    widget->setProperty(qtgui_property_name, index);
+
     if (const auto dialog = qobject_cast<QDialog*>(widget))
     {
         dialog->setModal(true);
@@ -1695,7 +1906,76 @@ std::errc qtgui_system::process(const qtgui_event_create_widget& event)
             box->addWidget(widget);
     }
 
-    widget->setProperty(qtgui_property_name, index);
+    m_widgets[event.widget.index] = widget;
+    return {};
+}
+std::errc qtgui_system::process(const qtgui_event_create_win32& event)
+{
+    if (event.widget.index >= m_widgets.size())
+        return std::errc::invalid_argument;
+
+    if (event.parent.index >= m_widgets.size())
+        return std::errc::invalid_argument;
+
+    auto parent = event.parent.index ? m_widgets[event.parent.index] : &m_root;
+    const auto parent_window = qobject_cast<QMainWindow*>(parent);
+    if (parent_window)
+        parent = parent_window->centralWidget();
+
+    const auto window = QWindow::fromWinId(WId(event.win32));
+
+    //using func_enable_type = int(__stdcall*)(HWND__*, int);
+    //using func_get_window_long_ptr_type = ptrdiff_t(__stdcall*)(HWND__*, int);
+    //using func_set_window_long_ptr_type = ptrdiff_t(__stdcall*)(HWND__*, int, ptrdiff_t);
+    if (!m_win32_send)
+    {
+        m_win32_library.initialize();
+        m_win32_send = m_win32_library.find<func_send_type>("SendNotifyMessageW");
+        m_win32_style = m_win32_library.find<func_style_type>("SetWindowLongPtrW");
+    }
+    //const auto func_enable = m_win32.find<func_enable_type>("EnableWindow");
+    //const auto func_get = m_win32.find<func_get_window_long_ptr_type>("GetWindowLongPtrW");
+    //const auto func_set = m_win32.find<func_set_window_long_ptr_type>("SetWindowLongPtrW");
+
+    if (!m_win32_send || !m_win32_style)
+        return std::errc::function_not_supported;
+
+    //func_enable(event.win32, 0);
+    //const auto old_ptr = func_get(event.win32, id_exstyle);
+    const auto old_ptr = m_win32_style(event.win32, -20, 0x08000000);
+    QWidget* widget = nullptr;
+    if (event.parent.index)
+    {
+        widget = QWidget::createWindowContainer(window, parent);
+    }
+    else
+    {
+        auto mainWindow = new QMainWindow;
+        widget = mainWindow;
+        mainWindow->setCentralWidget(QWidget::createWindowContainer(window, widget));
+        make_layout(event.flags, *mainWindow->centralWidget());
+    }
+
+    if (!widget)
+        return {};
+
+    if (event.flags & gui_widget_flag::auto_insert)
+    {
+        if (const auto box = qobject_cast<QBoxLayout*>(parent->layout()))
+            box->addWidget(widget);
+    }
+    if (const auto tabs = qobject_cast<QTabWidget*>(parent))
+    {
+        tabs->addTab(widget, QString::number(tabs->count()));
+    }
+    
+    widget->setProperty(qtgui_property_name, event.widget.index);
+    widget->setProperty(qtgui_property_hwnd_window, QVariant::fromValue(window));
+    widget->setProperty(qtgui_property_hwnd_xstyle, old_ptr);
+    //widget->setAttribute(Qt::WA_TransparentForMouseEvents);
+    //widget->setEnabled(false);
+    //widget->setFocusPolicy(Qt::FocusPolicy::NoFocus);
+
     m_widgets[event.widget.index] = widget;
     return {};
 }
@@ -2187,7 +2467,7 @@ std::errc qtgui_system::process(const qtgui_event_modify_widget& event)
             return QVariantMap();
     };
     
-    const auto argsLayout = func(event.args, gui_widget_args_keys::layout);
+   /* const auto argsLayout = func(event.args, gui_widget_args_keys::layout);
     if (!argsLayout.isEmpty())
     {
         const auto argsStretch = func(argsLayout, gui_widget_args_keys::stretch);
@@ -2233,7 +2513,7 @@ std::errc qtgui_system::process(const qtgui_event_modify_widget& event)
                     grid->setColumnStretch(key, val);
             }
         }        
-    }
+    }*/
 
 /*    const auto readonly = event.args.find(make_string(gui_widget_args_keys::readonly));
     if (readonly != event.args.end())
@@ -2271,7 +2551,22 @@ std::errc qtgui_system::process(const qtgui_event_destroy_widget& event)
     if (!widget)
         return std::errc::invalid_argument;
 
-    widget->deleteLater();
+    if (const auto window = widget->property(qtgui_property_hwnd_window).value<QWindow*>())
+    {
+        window->setParent(nullptr);
+        window->setFlag(Qt::WindowType::Window);        
+        widget->setParent(nullptr);
+        widget->setAttribute(Qt::WidgetAttribute::WA_DeleteOnClose);
+
+        const auto hwnd = reinterpret_cast<HWND__*>(window->winId());
+        m_win32_style(hwnd, -20, widget->property(qtgui_property_hwnd_xstyle).toLongLong());        
+    }
+    else
+    {
+        widget->hide();
+        widget->setParent(nullptr);
+        widget->deleteLater();
+    }
     m_widgets[event.widget.index] = nullptr;
     m_free_widgets.push_back(event.widget.index);
 
@@ -2379,6 +2674,107 @@ std::errc qtgui_system::process(const qtgui_event_scroll_tabs& event)
         return std::errc::invalid_argument;
 
     tabs->setCurrentWidget(widget);
+    return {};
+}
+std::errc qtgui_system::process(const qtgui_event_input& event)
+{
+    if (event.widget.index >= m_widgets.size())
+        return std::errc::invalid_argument;
+
+    const auto widget = m_widgets[event.widget.index];
+    if (!widget || !m_win32_send)
+        return std::errc::invalid_argument;
+    
+    const auto window = widget->property(qtgui_property_hwnd_window).value<QWindow*>();
+    if (!window)
+        return std::errc::invalid_argument;
+
+    auto input = event.msg;
+    if (false
+        //|| event.msg.type == input_type::mouse_move
+        || event.msg.type == input_type::mouse_wheel
+        || event.msg.type == input_type::mouse_release
+        || event.msg.type == input_type::mouse_press
+        || event.msg.type == input_type::mouse_hold
+        || event.msg.type == input_type::mouse_double)
+    {
+        auto point = widget->mapFromGlobal(QPoint(event.msg.point_x, event.msg.point_y));
+        input.point_x = point.x();
+        input.point_y = point.y();
+    }
+    uint32_t msg = 0;
+    size_t wParam = 0;
+    ptrdiff_t lParam = 0;
+    detail::to_winapi(input, msg, wParam, lParam);
+
+    auto ok = m_win32_send(reinterpret_cast<HWND__*>(window->winId()), msg, wParam, lParam);
+    if (!ok)
+    {
+        auto err = last_system_error();
+        err = {};
+    }
+
+  /*  const auto input = m_input;
+    m_input = false;
+    ICY_SCOPE_EXIT{ m_input = input; };
+
+    const auto keyMods = key_mod(event.msg.mods);
+    auto kMods = Qt::KeyboardModifiers();
+    auto mMods = Qt::MouseButtons();
+    if (keyMods & (key_mod::lctrl | key_mod::rctrl)) kMods.setFlag(Qt::KeyboardModifier::ControlModifier);
+    if (keyMods & (key_mod::lshift | key_mod::rshift)) kMods.setFlag(Qt::KeyboardModifier::ShiftModifier);
+    if (keyMods & (key_mod::lalt | key_mod::ralt)) kMods.setFlag(Qt::KeyboardModifier::AltModifier);
+    if (keyMods & (key_mod::lmb)) mMods.setFlag(Qt::MouseButton::LeftButton);
+    if (keyMods & (key_mod::rmb)) mMods.setFlag(Qt::MouseButton::RightButton);
+    if (keyMods & (key_mod::mmb)) mMods.setFlag(Qt::MouseButton::MidButton);
+    if (keyMods & (key_mod::x1mb)) mMods.setFlag(Qt::MouseButton::XButton1);
+    if (keyMods & (key_mod::x2mb)) mMods.setFlag(Qt::MouseButton::XButton2);
+
+    QPointF point;
+    point.setX(event.msg.point_x);
+    point.setY(event.msg.point_y);
+
+    auto button = Qt::MouseButton::NoButton;
+    auto key = Qt::Key::Key_unknown;
+
+    switch (event.msg.key)
+    {
+    case key::mouse_left: button = Qt::MouseButton::LeftButton; break;
+    case key::mouse_right: button = Qt::MouseButton::RightButton; break;
+    case key::mouse_mid: button = Qt::MouseButton::MidButton; break;
+    case key::mouse_x1: button = Qt::MouseButton::XButton1; break;
+    case key::mouse_x2: button = Qt::MouseButton::XButton2; break;
+    }
+
+    switch (event.msg.type)
+    {
+    case input_type::key_press:
+    {
+        QKeyEvent keyEvent(QEvent::Type::KeyPress, 0, kMods, 0, event.msg.key, QString(), );
+        QApplication::sendEvent(widget, &keyEvent);
+        break;
+    }
+    case input_type::key_release:
+    {
+        QKeyEvent keyEvent(QEvent::Type::KeyRelease, int(event.msg.key), kMods);
+        QApplication::sendEvent(widget, &keyEvent);
+        break;
+    }
+    case input_type::key_hold:
+    {
+        QKeyEvent keyEvent(QEvent::Type::KeyPress, int(event.msg.key), kMods, QString(), true);
+        QApplication::sendEvent(widget, &keyEvent);
+        break;
+    }
+    case input_type::mouse_move:
+    {
+        QMouseEvent mouseEvent(QEvent::Type::MouseMove, point, button, mMods, kMods);
+    }
+    default:
+        break;
+    }*/
+
+    //QApplication::sendEvent(widget, event);
     return {};
 }
 

@@ -1,14 +1,20 @@
 #include "icy_win32.hpp"
 #include <icy_engine/core/icy_string.hpp>
+#include <icy_engine/utility/icy_minhook.hpp>
 #define WIN32_LEAN_AND_MEAN 1
 #include <Windows.h>
 #pragma comment(lib, "user32.lib")
 using namespace icy;
 
-static window_hook* g_instance = nullptr;
-static WNDPROC g_wndproc = nullptr;
+using get_message = int(__stdcall*)(tagMSG*, HWND__*, uint32_t, uint32_t);
 
-void window_hook::shutdown() noexcept
+static icy::mutex g_lock;
+static window_callback* g_instance = nullptr;
+static WNDPROC g_wndproc = nullptr;
+static void(*g_callback)() = nullptr;
+static hook<get_message> g_hook;
+
+void window_callback::shutdown() noexcept
 {
     g_instance = nullptr;
     if (m_handle)
@@ -33,21 +39,40 @@ static std::bitset<256> key_state() noexcept
     return keys;
 }
 
-error_type window_hook::initialize(HWND__* hwnd) noexcept
+HWND__* window_callback::find() noexcept
+{
+    const auto proc = [](HWND hwnd, LPARAM param)
+    {
+        auto process = 0ul;
+        GetWindowThreadProcessId(hwnd, &process);
+        RECT rect;
+        if (process == GetCurrentProcessId() && IsWindowVisible(hwnd) && GetWindow(hwnd, GW_OWNER) == 0)
+        {
+            *reinterpret_cast<HWND__**>(param) = hwnd;
+            return FALSE;
+        }
+        return TRUE;
+    };
+    HWND handle = nullptr;
+    EnumWindows(proc, reinterpret_cast<LPARAM>(&handle));
+    return handle;
+}
+error_type window_callback::initialize(HWND__* hwnd) noexcept
 {
     shutdown();
 
     if (!AllowSetForegroundWindow(GetCurrentProcessId()))
         return last_system_error();
 
+    ICY_ERROR(g_lock.initialize());
     g_wndproc = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&proc)));
     m_handle = hwnd;
     g_instance = this;
     return {};
 }
-error_type window_hook::send(const const_array_view<input_message> vec) noexcept
+error_type window_callback::send(const const_array_view<input_message> vec) noexcept
 {
-    ICY_LOCK_GUARD_WRITE(m_lock);
+    ICY_LOCK_GUARD(g_lock);
     for (auto&& msg : vec)
     {
         ICY_ERROR(m_queue.push_back(msg));
@@ -56,25 +81,111 @@ error_type window_hook::send(const const_array_view<input_message> vec) noexcept
         return last_system_error();
     return {};
 }
-error_type window_hook::rename(const icy::string_view name) noexcept
+error_type window_callback::rename(const icy::string_view name) noexcept
 {
+    ICY_LOCK_GUARD(g_lock);
     ICY_ERROR(to_utf16(name, m_name));
     PostMessageW(m_handle, WM_NULL, 0, 0);
     return {};
 }
+error_type window_callback::hook(void(*callback)()) noexcept
+{
+    const auto func = [](tagMSG* msg, HWND__* hwnd, unsigned lower, unsigned upper)
+    {
+        auto value = g_hook(msg, hwnd, lower, upper);
+        if (msg && msg->hwnd == hwnd && g_instance)
+        {
+            if (!g_instance->m_queue.empty())
+            {
+                auto has_mouse = false;
+                for (auto&& input : g_instance->m_queue)
+                    has_mouse |= input.type == input_type::mouse;
+                
+                for (auto&& input : g_instance->m_queue)
+                {
+                    if (input.type == input_type::key)
+                    {
+                        auto next = detail::to_winapi(input);
+                        SendMessageW(hwnd, next.message, next.wParam, next.lParam);
+                    }
+                    else if (input.type == input_type::mouse)
+                    {
+                        if (input.mouse.event == mouse_event::btn_press ||
+                            input.mouse.event == mouse_event::btn_release)
+                            ;
+                        else
+                            continue;
 
-LRESULT __stdcall window_hook::proc(HWND__* hwnd, uint32_t msg, WPARAM wparam, LPARAM lparam) noexcept
+                        RECT rect;
+                        if (!GetClientRect(hwnd, &rect))
+                            continue;
+
+                        if (input.mouse.point.x < 0 || input.mouse.point.y < 0 ||
+                            input.mouse.point.x >= 1 || input.mouse.point.y >= 1)
+                        {
+                            POINT point;
+                            if (!GetCursorPos(&point) || !ScreenToClient(hwnd, &point))
+                                continue;
+                            input.mouse.point.x = point.x;
+                            input.mouse.point.y = point.y;
+                        }
+                        else
+                        {
+                            input.mouse.point.x = (rect.right - rect.left) * input.mouse.point.x;
+                            input.mouse.point.y = (rect.bottom - rect.top) * input.mouse.point.y;
+                        }
+
+                        auto move = input.mouse;
+                        move.event = mouse_event::move;
+                        move.delta = {};
+                        auto msg_move = detail::to_winapi(move);
+                        SendMessageW(hwnd, msg_move.message, msg_move.wParam, msg_move.lParam);
+
+                        auto msg_mouse = detail::to_winapi(input.mouse);
+                        SendMessageW(hwnd, msg_mouse.message, msg_mouse.wParam, msg_mouse.lParam);
+                    }
+                    else if (input.type == input_type::active && input.active)
+                    {
+                        SetForegroundWindow(hwnd);
+                        SetFocus(hwnd);
+                        SetActiveWindow(hwnd);
+                    }
+                }
+
+                //if (has_mouse)
+                 //   SetFocus(focus);
+
+                g_instance->m_queue.clear();
+            }
+            if (!g_instance->m_name.empty())
+            {
+                SetWindowTextW(hwnd, g_instance->m_name.data());
+                g_instance->m_name.clear();
+            }
+        }
+        return value;
+    };
+    return g_hook.initialize(&GetMessageW, func);
+}
+
+LRESULT __stdcall window_callback::proc(HWND__* hwnd, uint32_t msg, WPARAM wparam, LPARAM lparam) noexcept
 {
     if (!g_wndproc)
         return DefWindowProcW(hwnd, msg, wparam, lparam);
-    else if (!g_instance)
+    
+    if (!g_instance)
         return g_wndproc(hwnd, msg, wparam, lparam);
+
+    if (g_callback)
+    {
+        g_callback();
+        g_callback = nullptr;
+    }
 
     switch (msg)
     {
     case WM_NULL:
     {
-        ICY_LOCK_GUARD_WRITE(g_instance->m_lock);
         auto instance = g_instance;
         g_instance = nullptr;
         if (!instance->m_queue.empty())

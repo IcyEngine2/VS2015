@@ -1,6 +1,5 @@
 #include <icy_engine/core/icy_array.hpp>
-#include <icy_engine/utility/icy_com.hpp>
-#include "icy_adapter.hpp"
+#include "icy_graphics.hpp"
 #include "icy_system.hpp"
 #include <dxgi1_6.h>
 #include <dxgidebug.h>
@@ -132,19 +131,19 @@ void* adapter::handle() const noexcept
 {
     return data ? &data->adapter() : nullptr;
 }
-error_type adapter_msaa(adapter& adapter, display_flag& quality) noexcept
+error_type adapter::msaa(window_flags& quality) const noexcept
 {
-    if (!adapter.data)
+    if (!data)
         return make_stdlib_error(std::errc::invalid_argument);
 
     array<uint32_t> levels;
-    if (adapter.data->flags() & adapter_flag::d3d12)
+    if (data->flags() & adapter_flag::d3d12)
     {
-        ICY_ERROR(adapter.data->msaa_d3d12(levels));
+        ICY_ERROR(data->msaa_d3d12(levels));
     }
-    else if (adapter.data->flags() & adapter_flag::d3d11)
+    else if (data->flags() & adapter_flag::d3d11)
     {
-        ICY_ERROR(adapter.data->msaa_d3d11(levels));
+        ICY_ERROR(data->msaa_d3d11(levels));
     }
     else
     {
@@ -155,20 +154,19 @@ error_type adapter_msaa(adapter& adapter, display_flag& quality) noexcept
         switch (level)
         {
         case 0x02:
-            quality = quality | display_flag::msaa_x2;
+            quality = quality | window_flags::msaa_x2;
             break;
         case 0x04:
-            quality = quality | display_flag::msaa_x4;
+            quality = quality | window_flags::msaa_x4;
             break;
         case 0x08:
-            quality = quality | display_flag::msaa_x8;
+            quality = quality | window_flags::msaa_x8;
             break;
         case 0x10:
-            quality = quality | display_flag::msaa_x16;
+            quality = quality | window_flags::msaa_x16;
             break;
         }
     }
-
     return {};
 }
 adapter::adapter(const adapter& rhs) noexcept
@@ -246,24 +244,4 @@ error_type adapter::data_type::msaa_d3d11(array<uint32_t>& quality) noexcept
         return make_stdlib_error(std::errc::function_not_supported);
     }
     return {};
-}
-
-
-namespace icy
-{
-    error_type display_create_d3d12(const adapter&, const display_flag, shared_ptr<display>&) noexcept;
-    error_type display_create_d3d11(const adapter&, const display_flag, shared_ptr<display>&) noexcept;
-}
-
-error_type display::create(shared_ptr<display>& output, const adapter& adapter, const display_flag flags) noexcept
-{
-    if (!adapter.data)
-        return make_stdlib_error(std::errc::invalid_argument);
-
-    if (adapter.data->flags() & adapter_flag::d3d12)
-        return display_create_d3d12(adapter, flags, output);
-    else if (adapter.data->flags() & adapter_flag::d3d11)
-        return display_create_d3d11(adapter, flags, output);
-    else
-        return make_stdlib_error(std::errc::invalid_argument);
 }

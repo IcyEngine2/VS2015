@@ -1,7 +1,6 @@
 #include "icy_d3d11.hpp"
-#include <icy_engine/graphics/icy_window.hpp>
-#include <d3d11.h>
 #include "icy_window.hpp"
+#include <d3d11.h>
 
 using namespace icy;
 
@@ -24,7 +23,7 @@ error_type d3d11_swap_chain::size(window_size& output) const noexcept
     output = { desc.BufferDesc.Width, desc.BufferDesc.Height };
     return {};
 }
-error_type d3d11_swap_chain::initialize(IDXGIFactory& factory, ID3D11Device& device, HWND__* const hwnd, const display_flag flags) noexcept
+error_type d3d11_swap_chain::initialize(IDXGIFactory& factory, ID3D11Device& device, HWND__* const hwnd, const window_flags flags) noexcept
 {
     DXGI_SWAP_CHAIN_DESC desc = {};
     desc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -76,7 +75,7 @@ d3d11_display::~d3d11_display() noexcept
 {
     
 }
-error_type d3d11_display::initialize(const adapter& adapter, const display_flag flags) noexcept
+error_type d3d11_display::initialize(const adapter& adapter, const window_flags flags) noexcept
 {
     m_adapter = adapter;
     m_flags = flags;
@@ -86,7 +85,7 @@ error_type d3d11_display::initialize(const adapter& adapter, const display_flag 
     {
         auto level = D3D_FEATURE_LEVEL_11_0;
         ICY_COM_ERROR(func(static_cast<IDXGIAdapter*>(adapter.handle()),
-            D3D_DRIVER_TYPE_UNKNOWN, nullptr, (flags & display_flag::debug_layer) ? 
+            D3D_DRIVER_TYPE_UNKNOWN, nullptr, (flags & window_flags::debug_layer) ?
             D3D11_CREATE_DEVICE_FLAG::D3D11_CREATE_DEVICE_DEBUG : 0,
             &level, 1, D3D11_SDK_VERSION, &m_device, nullptr, nullptr));
     }
@@ -95,7 +94,7 @@ error_type d3d11_display::initialize(const adapter& adapter, const display_flag 
         return make_stdlib_error(std::errc::function_not_supported);
     }
 
-    if (flags & display_flag::debug_layer)
+    if (flags & window_flags::debug_layer)
     {
         if (auto debug = com_ptr<ID3D11Debug>(m_device))
         {
@@ -116,21 +115,11 @@ error_type d3d11_display::bind(HWND__* const window) noexcept
     ICY_COM_ERROR(static_cast<IDXGIAdapter*>(m_adapter.handle())->GetParent(IID_PPV_ARGS(&factory)));
     ICY_COM_ERROR(factory->MakeWindowAssociation(window, DXGI_MWA_NO_ALT_ENTER | DXGI_MWA_NO_WINDOW_CHANGES | DXGI_MWA_NO_PRINT_SCREEN));
     ICY_ERROR(m_chain.initialize(*factory, *m_device, window, m_flags));
-
-    //m_proc = reinterpret_cast<decltype(&proc)>(SetWindowLongPtrW(window, GWLP_WNDPROC, LONG_PTR(&proc)));
-    //m_user = reinterpret_cast<void*>(SetWindowLongPtrW(window, GWLP_USERDATA, 0));
-
     window_size size = {};
     ICY_ERROR(m_chain.size(size));
     return {};
 }
-error_type d3d11_display::bind(window& window) noexcept
-{
-    ICY_ERROR(bind(window.handle()));
-    static_cast<window_data&>(window).display = this;
-    return {};
-}
-error_type d3d11_display::draw() noexcept
+error_type d3d11_display::draw(const size_t frame) noexcept
 {
     //while (true)
     {
@@ -154,10 +143,8 @@ error_type d3d11_display::draw() noexcept
         m_device->GetImmediateContext(&context);
         //ID3D11RenderTargetView* rtv[] = { &m_chain.view() };
         //context->OMSetRenderTargets(_countof(rtv), rtv, nullptr);
-        auto fr = frame();
-
-
-        float colors[] = { 0.5F * (fr % 2000) / 2000, 0.3F * (fr % 1000) / 1000, 0.9F * (fr % 3000) / 3000, 1.0F };
+       
+        float colors[] = { 0.5F * (frame % 2000) / 2000, 0.3F * (frame % 1000) / 1000, 0.9F * (frame % 3000) / 3000, 1.0F };
         context->ClearRenderTargetView(&m_chain.view(), colors);
 
         //auto& buffer = m_buffers[m_frame.load(std::memory_order_acquire) % m_buffers.size()];
@@ -173,19 +160,18 @@ error_type d3d11_display::draw() noexcept
             else
                 return error;
         }
-        m_frame.fetch_add(1, std::memory_order_release);
+        //m_frame.fetch_add(1, std::memory_order_release);
     }
     return {};
 }
 
-namespace icy
+error_type icy::make_d3d11_display(unique_ptr<display>& display, const adapter& adapter, const window_flags flags, HWND__* const window) noexcept
 {
-    error_type display_create_d3d11(const adapter& adapter, const display_flag flags, shared_ptr<display>& display) noexcept
-    {
-        shared_ptr<d3d11_display> d3d11;
-        ICY_ERROR(make_shared(d3d11));
-        ICY_ERROR(d3d11->initialize(adapter, flags));
-        display = d3d11;
-        return {};
-    }
+    auto new_display = make_unique<d3d11_display>();
+    if (!new_display)
+        return make_stdlib_error(std::errc::not_enough_memory);
+    ICY_ERROR(new_display->initialize(adapter, flags));
+    ICY_ERROR(new_display->bind(window));
+    display = std::move(new_display);
+    return {};
 }

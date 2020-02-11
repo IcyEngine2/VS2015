@@ -1,8 +1,7 @@
 #pragma once
 
 #include <icy_engine/core/icy_array.hpp>
-#include <icy_engine/graphics/icy_graphics.hpp>
-#include <icy_engine/utility/icy_com.hpp>
+#include "icy_graphics.hpp"
 #include <array>
 
 struct ID3D12Device;
@@ -28,12 +27,7 @@ namespace icy
     class d3d12_texture;
     class d3d12_swap_chain;
     class d3d12_display;
-
-    inline constexpr uint32_t d3d12_buffer_count(const display_flag flag) noexcept
-    {
-        return flag & display_flag::triple_buffer ? 3 : 2;
-    }
-    
+  
     class d3d12_event
     {
     public:
@@ -130,7 +124,7 @@ namespace icy
     class d3d12_swap_chain
     {
     public:
-        error_type initialize(IDXGIFactory2& factory, ID3D12CommandQueue& queue, HWND__* const hwnd, d3d12_view_heap& heap, const display_flag flags) noexcept;
+        error_type initialize(IDXGIFactory2& factory, ID3D12CommandQueue& queue, HWND__* const hwnd, d3d12_view_heap& heap, const window_flags flags) noexcept;
         error_type resize() noexcept;
         uint32_t buffer() const noexcept
         {
@@ -162,35 +156,24 @@ namespace icy
     {
     public:
         ~d3d12_display() noexcept;
-        error_type initialize(const adapter& adapter, const display_flag flags) noexcept;
-        error_type bind(HWND__* const window) noexcept override;
-        error_type bind(window& window) noexcept override;
+        error_type initialize(const adapter& adapter, const window_flags flags) noexcept;
+        error_type bind(HWND__* const window) noexcept;
         error_type draw() noexcept override;
-        uint64_t frame() const noexcept
-        {
-            return m_frame.load(std::memory_order_acquire);
-        }
         ID3D12Device& device() const noexcept
         {
             return *m_device;
         }
-        display_flag flags() const noexcept override
-        {
-            return m_flags;
-        }
     private:
         adapter m_adapter;
-        display_flag m_flags = display_flag::none;
+        window_flags m_flags = window_flags::none;
         d3d12_event m_event_wait;
         library m_d3d12_lib = "d3d12"_lib;
         com_ptr<ID3D12Device> m_device;
         com_ptr<ID3D12CommandQueue> m_queue;
         d3d12_fence m_fence;
-        std::atomic<uint64_t> m_frame = 0;
         d3d12_view_heap m_heap;
         d3d12_swap_chain m_chain;
         array<d3d12_command_list> m_commands;
-        array<uint64_t> m_state;
         bool m_ready = false; //  can call swap chain 'Present'
     };
 }

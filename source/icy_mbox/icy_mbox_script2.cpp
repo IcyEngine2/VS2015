@@ -37,22 +37,10 @@ string_view mbox::to_string(const mbox::action_type type) noexcept
     }
     return {};
 }
-string_view mbox::to_string(const key key) noexcept
-{
-    switch (key)
-    {
-    case button_lmb: return "Mouse Left"_s;
-    case button_rmb: return "Mouse Right"_s;
-    case button_mid: return "Mouse Mid"_s;
-    case button_x1: return "Mouse X1"_s;
-    case button_x2: return "Mouse X2"_s;
-    }
-    return icy::to_string(key);
-}
 error_type mbox::to_string(const mbox::button_type button, string& str) noexcept
 {
     ICY_ERROR(to_string(button.mod, str));
-    ICY_ERROR(str.append(mbox::to_string(button.key)));
+    ICY_ERROR(str.append(to_string(button.key)));
     return {};
 }
 string_view mbox::to_string(const mbox::execute_type type) noexcept
@@ -76,16 +64,18 @@ static error_type mbox_error_to_string(const uint32_t code, const string_view, s
         return to_string("Invalid version"_s, str);
     case mbox::mbox_error_code::invalid_index:
         return to_string("Invalid index"_s, str);
-    case mbox::mbox_error_code::invalid_parent:
-        return to_string("Invalid parent"_s, str);
     case mbox::mbox_error_code::invalid_name:
         return to_string("Invalid name"_s, str);
+    case mbox::mbox_error_code::invalid_parent:
+        return to_string("Invalid parent"_s, str);
     case mbox::mbox_error_code::invalid_group:
         return to_string("Invalid group"_s, str);
     case mbox::mbox_error_code::invalid_focus:
         return to_string("Invalid focus"_s, str);
     case mbox::mbox_error_code::invalid_command:
         return to_string("Invalid command"_s, str);
+    case mbox::mbox_error_code::invalid_root:
+        return to_string("Invalid root"_s, str);
     case mbox::mbox_error_code::invalid_timer:
         return to_string("Invalid timer"_s, str);
     case mbox::mbox_error_code::invalid_timer_count:
@@ -98,6 +88,10 @@ static error_type mbox_error_to_string(const uint32_t code, const string_view, s
         return to_string("Invalid type"_s, str);
     case mbox::mbox_error_code::invalid_action_type:
         return to_string("Invalid action type"_s, str);
+    case mbox::mbox_error_code::invalid_button_key:
+        return to_string("Invalid button key"_s, str);
+    case mbox::mbox_error_code::invalid_button_mod:
+        return to_string("Invalid button mod"_s, str);
 
     case mbox::mbox_error_code::invalid_json_parse:
         return to_string("Parse JSON"_s, str);
@@ -655,7 +649,7 @@ error_type mbox::library::load_from(const icy::string_view filename) noexcept
                         button.key = key(1);
                         for (; button.key < key(256); button.key = key(uint32_t(button.key) + 1))
                         {
-                            if (str_key == mbox::to_string(button.key))
+                            if (str_key == to_string(button.key))
                                 break;
                         }
                         if (button.key == key(256))
@@ -663,7 +657,7 @@ error_type mbox::library::load_from(const icy::string_view filename) noexcept
                         
                         auto mod = 0u;
                         json_action.get(str_key_button_mod, mod);
-                        if (mod && mod >= key_mod::_max)
+                        if (mod && mod >= uint32_t(key_mod::_max))
                             return make_mbox_error(mbox_error_code::invalid_button_mod);
                         button.mod = key_mod(mod);
                         
@@ -860,7 +854,7 @@ error_type mbox::library::save_to(const icy::string_view filename) const noexcep
                 case action_type::button_press:
                 case action_type::button_release:
                 {
-                    ICY_ERROR(json_action.insert(str_key_button_key, mbox::to_string(action.button().key)));
+                    ICY_ERROR(json_action.insert(str_key_button_key, to_string(action.button().key)));
                     ICY_ERROR(json_action.insert(str_key_button_mod, uint32_t(action.button().mod)));
                     break;
                 }
@@ -925,7 +919,7 @@ error_type mbox::library::save_to(const icy::string_view filename) const noexcep
                     string str_button;
                     ICY_ERROR(to_string(action.event_command(), str_command));
                     ICY_ERROR(json_action.insert(str_key_command, str_command));
-                    ICY_ERROR(json_action.insert(str_key_button_key, mbox::to_string(action.event_button().key)));
+                    ICY_ERROR(json_action.insert(str_key_button_key, to_string(action.event_button().key)));
                     ICY_ERROR(json_action.insert(str_key_button_mod, uint32_t(action.event_button().mod)));
                     break;
                 }

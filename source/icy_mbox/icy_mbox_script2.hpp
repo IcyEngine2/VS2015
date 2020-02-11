@@ -72,13 +72,7 @@ namespace mbox
         broadcast,
         _total,
     };
-
-    static constexpr auto button_lmb = icy::key(0x01);
-    static constexpr auto button_rmb = icy::key(0x02);
-    static constexpr auto button_mid = icy::key(0x03);
-    static constexpr auto button_x1 = icy::key(0x04);
-    static constexpr auto button_x2 = icy::key(0x05);
-
+    
     struct button_type
     {
         icy::key key = icy::key::none;
@@ -568,6 +562,5 @@ namespace mbox
     icy::string_view to_string(const type type) noexcept;
     icy::string_view to_string(const action_type type) noexcept;
     icy::string_view to_string(const execute_type type) noexcept;
-    icy::string_view to_string(const icy::key key) noexcept;
     icy::error_type to_string(const button_type button, icy::string& str) noexcept;
 }
