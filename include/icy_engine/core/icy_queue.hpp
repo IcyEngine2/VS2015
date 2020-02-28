@@ -38,7 +38,9 @@ namespace icy
     public:
         error_type push(const T& value) noexcept
         {
-            return emplace(value);
+            T tmp;
+            ICY_ERROR(copy(value, tmp));
+            return emplace(std::move(tmp));
         }
         error_type push(T&& value) noexcept
         {
@@ -52,6 +54,7 @@ namespace icy
                 return make_stdlib_error(std::errc::not_enough_memory);
             allocator_type::construct(&new_pair->value, std::forward<arg_types>(args)...);
             m_queue.push(new_pair);
+            m_size.fetch_add(1, std::memory_order_release);
             return {};
         }
         bool pop(T& value) noexcept

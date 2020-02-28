@@ -147,7 +147,10 @@ namespace icy
 	};
 	struct render_d2d_triangle
 	{
-		render_d2d_triangle() noexcept = default;
+        render_d2d_triangle() noexcept
+        {
+
+        }
 		render_d2d_triangle(const render_d2d_vector v0, const render_d2d_vector v1, const render_d2d_vector v2) noexcept : v0(v0), v1(v1), v2(v2)
 		{
 

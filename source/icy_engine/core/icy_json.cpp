@@ -114,11 +114,11 @@ error_type json::create(const string_view str, json& parent, const const_array_v
 	switch (parent.m_type)
 	{
 	case json_type::boolean:
-		return val.to_value(parent.m_boolean);
+		return to_value(str, parent.m_boolean);
 	case json_type::integer:
-		return val.to_value(parent.m_integer);
+		return to_value(str, parent.m_integer);
 	case json_type::floating:
-		return val.to_value(parent.m_floating);
+		return to_value(str, parent.m_floating);
 	
 	case json_type::string:
 		new (&parent.m_string) json_type_string;
@@ -162,86 +162,6 @@ error_type json::create(const string_view str, json& parent, const const_array_v
 	}
 	}
 	return {};
-}
-error_type json::create(const string_view str, json& root) noexcept
-{
-    root = json_type::none;
-	array<jsmntok_t> tokens;
-	while (true)
-	{
-		jsmn_parser parser = {};
-		jsmn_init(&parser);
-
-		const auto count = jsmn_parse(&parser, str.bytes().data(), str.bytes().size(), tokens.data(), uint32_t(tokens.size()));
-		if (count == JSMN_ERROR_NOMEM)
-			return make_stdlib_error(std::errc::not_enough_memory);
-		else if (count < 0)
-			return make_stdlib_error(std::errc::illegal_byte_sequence);
-		else if (count == 0)
-			return {};
-		else if (tokens.size() == size_t(count))
-			break;
-		ICY_ERROR(tokens.resize(size_t(count)));
-	}
-	return create(str, root, tokens, 0);
-}
-error_type json::copy(json& dst) const noexcept
-{
-    switch (m_type)
-    {
-    case icy::json_type::none:
-        dst = {};
-        break;
-
-    case icy::json_type::boolean:
-        dst = json{ m_boolean };
-        break;
-
-    case icy::json_type::integer:
-        dst = json{ m_integer };
-        break;
-
-    case icy::json_type::floating:
-        dst = json{ m_floating };
-        break;
-
-    case icy::json_type::string:
-    {
-        json_type_string str;
-        ICY_ERROR(to_string(m_string, str));
-        dst = json{ std::move(str) };
-        break;
-    }
-    case icy::json_type::array:
-    {
-        dst = json_type::array;
-        ICY_ERROR(dst.m_array.reserve(size()));
-        for (auto k = 0u; k < size(); ++k)
-        {
-            json tmp;
-            ICY_ERROR(m_array[k].copy(tmp));
-            ICY_ERROR(dst.m_array.push_back(std::move(tmp)));
-        }
-        break;
-    }
-    case icy::json_type::object:
-    {
-        dst = json_type::object;
-        ICY_ERROR(dst.m_object.reserve(size()));
-
-        for (auto k = 0u; k < size(); ++k)
-        {
-            json_type_string key;
-            ICY_ERROR(to_string(m_object.keys()[k], key));
-
-            json val;
-            ICY_ERROR(m_object.vals()[k].copy(val));
-            ICY_ERROR(dst.m_object.insert(std::move(key), std::move(val)));
-        }
-        break;
-    }
-    }
-    return {};
 }
 error_type json::get(json_type_boolean& value) const noexcept
 {
@@ -461,7 +381,6 @@ const_array_view<json> json::vals() const noexcept
     return {};
 }
 
-
 static error_type to_string(const json& json, string& str, const string_view tab, const string_view prefix) noexcept
 {
     switch (json.type())
@@ -558,4 +477,83 @@ static error_type to_string(const json& json, string& str, const string_view tab
 error_type icy::to_string(const json& json, string& str, const string_view tab) noexcept
 {
     return ::to_string(json, str, tab, tab.empty() ? ""_s : "\r\n"_s);
+}
+error_type icy::to_value(const string_view str, json& root) noexcept
+{
+    root = json_type::none;
+    array<jsmntok_t> tokens;
+    while (true)
+    {
+        jsmn_parser parser = {};
+        jsmn_init(&parser);
+
+        const auto count = jsmn_parse(&parser, str.bytes().data(), str.bytes().size(), tokens.data(), uint32_t(tokens.size()));
+        if (count == JSMN_ERROR_NOMEM)
+            return make_stdlib_error(std::errc::not_enough_memory);
+        else if (count < 0)
+            return make_stdlib_error(std::errc::illegal_byte_sequence);
+        else if (count == 0)
+            return {};
+        else if (tokens.size() == size_t(count))
+            break;
+        ICY_ERROR(tokens.resize(size_t(count)));
+    }
+    return json::create(str, root, tokens, 0);
+}
+error_type icy::copy(const json& src, json& dst) noexcept
+{
+    switch (src.m_type)
+    {
+    case icy::json_type::none:
+        dst = {};
+        break;
+
+    case icy::json_type::boolean:
+        dst = json{ src.m_boolean };
+        break;
+
+    case icy::json_type::integer:
+        dst = json{ src.m_integer };
+        break;
+
+    case icy::json_type::floating:
+        dst = json{ src.m_floating };
+        break;
+
+    case icy::json_type::string:
+    {
+        json_type_string str;
+        ICY_ERROR(to_string(src.m_string, str));
+        dst = json{ std::move(str) };
+        break;
+    }
+    case icy::json_type::array:
+    {
+        dst = json_type::array;
+        ICY_ERROR(dst.m_array.reserve(src.size()));
+        for (auto k = 0u; k < src.size(); ++k)
+        {
+            json tmp;
+            ICY_ERROR(copy(src.m_array[k], tmp));
+            ICY_ERROR(dst.m_array.push_back(std::move(tmp)));
+        }
+        break;
+    }
+    case icy::json_type::object:
+    {
+        dst = json_type::object;
+        ICY_ERROR(dst.m_object.reserve(src.size()));
+
+        for (auto k = 0u; k < src.size(); ++k)
+        {
+            json_type_string key;
+            ICY_ERROR(copy(src.m_object.keys()[k], key));
+            json val;
+            ICY_ERROR(copy(src.m_object.vals()[k], val));
+            ICY_ERROR(dst.m_object.insert(std::move(key), std::move(val)));
+        }
+        break;
+    }
+    }
+    return {};
 }

@@ -325,7 +325,22 @@ LRESULT WINAPI window_data::proc(const HWND hwnd, const UINT msg, const WPARAM w
     }
 	return win32_def_window_proc(hwnd, msg, wparam, lparam);
 };
-error_type window_data::loop(event& event, const duration_type timeout) noexcept
+error_type window_data::exec() noexcept
+{
+    while (true)
+    {
+        event event;
+        ICY_ERROR(exec(event, max_timeout));
+        if (event->type == event_type::global_quit)
+            break;
+        
+        if (event->type == event_type::window_close &&
+            shared_ptr<event_system>(event->source).get() == this)
+            break;
+    }
+    return {};
+}
+error_type window_data::exec(event& event, const duration_type timeout) noexcept
 {
 	if (timeout.count() < 0)
 		return make_stdlib_error(std::errc::invalid_argument);
@@ -350,7 +365,7 @@ error_type window_data::loop(event& event, const duration_type timeout) noexcept
                 break;
 
             const auto& event_data = event->data<window_message>();
-            if (shared_ptr<event_queue>(event->source).get() == this)
+            if (shared_ptr<event_system>(event->source).get() == this)
             {
                 if (event_data.type == window_message_type::rename)
                 {
@@ -447,12 +462,12 @@ error_type window_data::rename(const string_view name) noexcept
     ICY_ERROR(name.to_utf16(msg.name, &size));
     return event::post(this, event_type::window_internal, std::move(msg));
 }
-error_type icy::make_window(shared_ptr<window>& window, const adapter& adapter, const window_flags flags) noexcept
+error_type icy::create_window_system(shared_ptr<window>& window, const adapter& adapter, const window_flags flags) noexcept
 {
     auto event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!event)
         return last_system_error();
-    ICY_SCOPE_EXIT{ CloseHandle(event); };
+    ICY_SCOPE_EXIT{ if (event) CloseHandle(event); };
 
     shared_ptr<window_data> new_ptr;
     ICY_ERROR(make_shared(new_ptr, adapter, flags, event));
@@ -460,7 +475,6 @@ error_type icy::make_window(shared_ptr<window>& window, const adapter& adapter, 
     window = new_ptr;
     return {};
 }
-
 error_type icy::enum_windows(array<window_info>& vec) noexcept
 {
     auto m_library = "user32"_lib;

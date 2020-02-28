@@ -143,36 +143,36 @@ error_type string_view::to_utf16(wchar_t* const data, size_t* const size) const 
     *size = size_t(length);
     return {};
 }
-error_type string_view::to_value(float& value) const noexcept
+error_type icy::to_value(const string_view str, float& value) noexcept
 {
-    return m_size && snscanf(m_ptr, m_size, "%f", &value) == 1 ? error_type{} : make_stdlib_error(std::errc::illegal_byte_sequence);
+    return str.bytes().size() && snscanf(str.bytes().data(), str.bytes().size(), "%f", &value) == 1 ? error_type{} : make_stdlib_error(std::errc::illegal_byte_sequence);
 }
-error_type string_view::to_value(double& value) const noexcept
+error_type icy::to_value(const string_view str, double& value) noexcept
 {
-    return m_size && snscanf(m_ptr, m_size, "%lf", &value) == 1 ? error_type{} : make_stdlib_error(std::errc::illegal_byte_sequence);
+    return str.bytes().size() && snscanf(str.bytes().data(), str.bytes().size(), "%lf", &value) == 1 ? error_type{} : make_stdlib_error(std::errc::illegal_byte_sequence);
 }
-error_type string_view::to_value(bool& value) const noexcept
+error_type icy::to_value(const string_view str, bool& value)  noexcept
 {
-    if (*this == "true"_s || *this == "1"_s)
+    if (str == "true"_s || str == "1"_s)
         value = true;
-    else if (*this == "false"_s || *this == "0"_s)
+    else if (str == "false"_s || str == "0"_s)
         value = false;
     else
         return make_stdlib_error(std::errc::illegal_byte_sequence);
     return {};
 }
-error_type string_view::to_value(int64_t& value) const noexcept
+error_type icy::to_value(const string_view str, int64_t& value) noexcept
 {
-    return m_size && snscanf(m_ptr, m_size, "%lli", &value) == 1 ? error_type{} : make_stdlib_error(std::errc::illegal_byte_sequence);
+    return str.bytes().size() && snscanf(str.bytes().data(), str.bytes().size(), "%lli", &value) == 1 ? error_type{} : make_stdlib_error(std::errc::illegal_byte_sequence);
 }
-error_type string_view::to_value(uint64_t& value) const noexcept
+error_type icy::to_value(const string_view str, uint64_t& value) noexcept
 {
-    return m_size && snscanf(m_ptr, m_size, "%llu", &value) == 1 ? error_type{} : make_stdlib_error(std::errc::illegal_byte_sequence);
+    return str.bytes().size() && snscanf(str.bytes().data(), str.bytes().size(), "%llu", &value) == 1 ? error_type{} : make_stdlib_error(std::errc::illegal_byte_sequence);
 }
-error_type string_view::to_value(std::chrono::system_clock::time_point& time, const bool local) const noexcept
+error_type icy::to_value(const string_view str, std::chrono::system_clock::time_point& time, const bool local) noexcept
 {
     ::tm std_time = {};
-    const auto count = m_size ? snscanf(m_ptr, m_size, time_string_format,
+    const auto count = str.bytes().size() ? snscanf(str.bytes().data(), str.bytes().size(), time_string_format,
         &std_time.tm_year, &std_time.tm_mon, &std_time.tm_mday,
         &std_time.tm_hour, &std_time.tm_min, &std_time.tm_sec) : 0;
     if (count != 6)
@@ -187,10 +187,10 @@ error_type string_view::to_value(std::chrono::system_clock::time_point& time, co
     time = std::chrono::system_clock::from_time_t(t);
     return {};
 }
-error_type string_view::to_value(clock_type::time_point& time, const bool local) const noexcept
+error_type icy::to_value(const string_view str, clock_type::time_point& time, const bool local)  noexcept
 {
     std::chrono::system_clock::time_point sys_time = {};
-    ICY_ERROR(to_value(sys_time, local));
+    ICY_ERROR(to_value(str, sys_time, local));
 
     const auto now_system = std::chrono::system_clock::now();
     const auto now_steady = std::chrono::steady_clock::now();
@@ -198,13 +198,13 @@ error_type string_view::to_value(clock_type::time_point& time, const bool local)
     time = now_steady - delta;
     return {};
 }
-error_type string_view::to_value(guid& guid) const noexcept
+error_type icy::to_value(const string_view str, guid& guid) noexcept
 {
     auto& rguid = reinterpret_cast<GUID&>(guid);
-    if (m_size + sizeof("") < guid_string_length)
+    if (str.bytes().size() + sizeof("") < guid_string_length)
         return make_stdlib_error(std::errc::illegal_byte_sequence);
 
-    const auto count = m_size ? snscanf(m_ptr, m_size, guid_string_format,
+    const auto count = str.bytes().size() ? snscanf(str.bytes().data(), str.bytes().size(), guid_string_format,
         &rguid.Data1, &rguid.Data2, &rguid.Data3,
         &rguid.Data4[0], &rguid.Data4[1], &rguid.Data4[2], &rguid.Data4[3],
         &rguid.Data4[4], &rguid.Data4[5], &rguid.Data4[6], &rguid.Data4[7]) : 0;
@@ -657,7 +657,7 @@ error_type icy::base64_decode(const string_view input, array_view<uint8_t> outpu
 {
     return base64_decode(input.bytes(), output);
 }
-size_t icy::copy(const string_view src, array_view<char> dst) noexcept
+size_t icy::strcopy(const string_view src, array_view<char> dst) noexcept
 {
     auto it = src.begin();
     while (it != src.end())
@@ -697,7 +697,17 @@ error_type icy::to_upper(const string_view str, string& output) noexcept
     }
     return make_stdlib_error(std::errc::function_not_supported);
 }
-
+error_type icy::copy(const string_view src, string& dst) noexcept
+{
+    string tmp;
+    ICY_ERROR(tmp.insert(tmp.begin(), src));
+    dst = std::move(tmp);
+    return {};
+}
+error_type icy::copy(const string& src, string& dst) noexcept
+{
+    return copy(string_view(src), dst);
+}
 /*error_type icy::jaro_winkler_distance(const string_view utf8lhs, const string_view utf8rhs, double& distance) noexcept
 {
     // Exit early if either are empty

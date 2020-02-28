@@ -13,16 +13,42 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Header Files\Source">
+      <UniqueIdentifier>{ec0f0006-0b9e-4efa-902b-d5e48be3f3b8}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\..\source\icy_engine\network\icy_network.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\source\icy_engine\network\icy_network_http.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\..\source\icy_engine\network\icy_http.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_engine\network\icy_network_system.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_engine\network\icy_network_socket.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_engine\network\icy_network_address.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\..\include\icy_engine\network\icy_http.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\icy_engine\network\icy_network.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\icy_engine\network\icy_network_system.hpp">
+      <Filter>Header Files\Source</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\icy_engine\network\icy_network_socket.hpp">
+      <Filter>Header Files\Source</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\icy_engine\network\icy_network_address.hpp">
+      <Filter>Header Files\Source</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

@@ -12,77 +12,70 @@ namespace icy
     {
         enum : uint64_t
         {            
-            bitcnt_glo  =   0x04,
-            bitcnt_fio  =   0x02,
-            bitcnt_net  =   0x00,// 0x07
-            bitcnt_con  =   0x03,
-            bitcnt_win  =   0x06,
-            bitcnt_dsp  =   0x02,
-            bitcnt_gui  =   0x04,
+            bitcnt_global   =   0x04,
+            bitcnt_fileio   =   0x02,
+            bitcnt_network  =   0x05,
+            bitcnt_console  =   0x03,
+            bitcnt_window   =   0x06,
+            bitcnt_gui      =   0x04,
 
-            bitcnt_usr  =   0x20,
+            bitcnt_user     =   0x20,
         };
         enum : uint64_t
         {
-            offset_glo  =   0x00,
-            offset_fio  =   offset_glo + bitcnt_glo,
-            offset_net  =   offset_fio + bitcnt_fio,
-            offset_con  =   offset_net + bitcnt_net,
-            offset_win  =   offset_con + bitcnt_con,
-            offset_dsp  =   offset_win + bitcnt_win,
-            offset_gui  =   offset_dsp + bitcnt_dsp,
+            offset_global   =   0x00,
+            offset_fileio   =   offset_global + bitcnt_global,
+            offset_network  =   offset_fileio + bitcnt_fileio,
+            offset_console  =   offset_network + bitcnt_network,
+            offset_window   =   offset_console + bitcnt_console,
+            offset_gui      =   offset_window + bitcnt_window,
 
-            offset_usr  =   0x20,
+            offset_user     =   0x20,
         };
         enum : uint64_t
         {
-            mask_glo    =   ((1ui64 << bitcnt_glo) - 1) <<  offset_glo,
-            mask_fio    =   ((1ui64 << bitcnt_fio) - 1) <<  offset_fio,
-            mask_net    =   ((1ui64 << bitcnt_net) - 1) <<  offset_net,
-            mask_con    =   ((1ui64 << bitcnt_con) - 1) <<  offset_con,
-            mask_win    =   ((1ui64 << bitcnt_win) - 1) <<  offset_win,
-            mask_dsp    =   ((1ui64 << bitcnt_dsp) - 1) <<  offset_dsp,
-            mask_gui    =   ((1ui64 << bitcnt_gui) - 1) <<  offset_gui,
-            mask_usr    =   ((1ui64 << bitcnt_usr) - 1) <<  offset_usr,
+            mask_global     =   ((1ui64 << bitcnt_global)   - 1)    <<  offset_global,
+            mask_fileio     =   ((1ui64 << bitcnt_fileio)   - 1)    <<  offset_fileio,
+            mask_network    =   ((1ui64 << bitcnt_network)  - 1)    <<  offset_network,
+            mask_console    =   ((1ui64 << bitcnt_console)  - 1)    <<  offset_console,
+            mask_window     =   ((1ui64 << bitcnt_window)   - 1)    <<  offset_window,
+            mask_gui        =   ((1ui64 << bitcnt_gui)      - 1)    <<  offset_gui,
+            mask_user       =   ((1ui64 << bitcnt_user)     - 1)    <<  offset_user,
         };
         enum : uint64_t
         {
             none                    =   0,
 
-            global_quit             =   1ui64   <<  (offset_glo + 0x00),
-            global_timer            =   1ui64   <<  (offset_glo + 0x01),
-            global_task             =   1ui64   <<  (offset_glo + 0x02),
-            global_timeout          =   1ui64   <<  (offset_glo + 0x03),
-            global_any              =   mask_glo,
+            global_quit             =   1ui64   <<  (offset_global + 0x00),
+            global_timer            =   1ui64   <<  (offset_global + 0x01),
+            global_task             =   1ui64   <<  (offset_global + 0x02),
+            global_timeout          =   1ui64   <<  (offset_global + 0x03),
+            global_any              =   mask_global,
 
-            file_read               =   1ui64   <<  (offset_fio + 0x00),
-            file_write              =   1ui64   <<  (offset_fio + 0x01),
-            file_any                =   mask_fio,
+            file_read               =   1ui64   <<  (offset_fileio + 0x00),
+            file_write              =   1ui64   <<  (offset_fileio + 0x01),
+            file_any                =   mask_fileio,
 
-            /*network_connect         =   1ui64   <<  (offset_net + 0x00),
-            network_disconnect      =   1ui64   <<  (offset_net + 0x01),
-            network_shutdown        =   1ui64   <<  (offset_net + 0x02),
-            network_accept          =   1ui64   <<  (offset_net + 0x03),
-            network_send            =   1ui64   <<  (offset_net + 0x04),
-            network_recv            =   1ui64   <<  (offset_net + 0x05),
-            network_timeout         =   1ui64   <<  (offset_net + 0x06),
-            network_any             =   mask_net,*/
+            network_connect         =   1ui64   <<  (offset_network + 0x00),
+            network_disconnect      =   1ui64   <<  (offset_network + 0x01),
+            //network_shutdown        =   1ui64   <<  (offset_network + 0x02),
+            network_send            =   1ui64   <<  (offset_network + 0x03),
+            network_recv            =   1ui64   <<  (offset_network + 0x04),
+            //network_timeout         =   1ui64   <<  (offset_network + 0x04),
+            network_any             =   mask_network,
             
-            console_write           =   1ui64   <<  (offset_con + 0x00),
-            console_read_key        =   1ui64   <<  (offset_con + 0x01),
-            console_read_line       =   1ui64   <<  (offset_con + 0x02),
-            console_any             =   mask_con,
+            console_write           =   1ui64   <<  (offset_console + 0x00),
+            console_read_key        =   1ui64   <<  (offset_console + 0x01),
+            console_read_line       =   1ui64   <<  (offset_console + 0x02),
+            console_any             =   mask_console,
             
-            window_close            =   1ui64   <<  (offset_win + 0x00),
-            window_resize           =   1ui64   <<  (offset_win + 0x02),
-            window_input            =   1ui64   <<  (offset_win + 0x03),
-            window_internal         =   1ui64   <<  (offset_win + 0x04),
-            window_active           =   1ui64   <<  (offset_win + 0x05),
-            window_minimized        =   1ui64   <<  (offset_win + 0x06),
-            window_any              =   mask_win,
-
-            display_refresh         =   1ui64   <<  (offset_dsp + 0x00),
-            display_any             =   mask_dsp,
+            window_close            =   1ui64   <<  (offset_window + 0x00),
+            window_resize           =   1ui64   <<  (offset_window + 0x02),
+            window_input            =   1ui64   <<  (offset_window + 0x03),
+            window_internal         =   1ui64   <<  (offset_window + 0x04),
+            window_active           =   1ui64   <<  (offset_window + 0x05),
+            window_minimized        =   1ui64   <<  (offset_window + 0x06),
+            window_any              =   mask_window,
 
             gui_action              =   1ui64   <<  (offset_gui + 0x00),    //  action index
             gui_update              =   1ui64   <<  (offset_gui + 0x01),    //  widget index + variant
@@ -90,17 +83,20 @@ namespace icy
             gui_select              =   1ui64   <<  (offset_gui + 0x03),    //  widget(view) + node
             gui_any                 =   mask_gui,
 
-            user                    =   1ui64   <<  (offset_usr + 0x00),
-            user_any                =   mask_usr,
+            user                    =   1ui64   <<  (offset_user + 0x00),
+            user_any                =   mask_user,
         };
-        static_assert(offset_usr >= offset_gui + bitcnt_gui, "INVALID USER MESSAGE OFFSET");
+        static_assert(offset_user >= offset_gui + bitcnt_gui, "INVALID USER MESSAGE OFFSET");
     }
+    
     using event_type = decltype(event_type_enum::none);
+    
     class event;
     class event_data;
 
-    class event_queue
+    class event_system
     {
+        friend event_system;
         friend event_data;
         struct event_ptr
         {
@@ -108,15 +104,13 @@ namespace icy
             event_data* value;
         };
     public:
-        virtual ~event_queue() noexcept = 0
+        virtual ~event_system() noexcept = 0
         {
 
         }
-    protected:
-        void filter(const uint64_t mask) noexcept;
-        event pop() noexcept;
-        error_type post(event_queue* const source, const event_type type) noexcept;
-        template<typename T> error_type post(event_queue* const source, const event_type type, T&& arg) noexcept
+        virtual error_type exec() noexcept = 0;
+        error_type post(event_system* const source, const event_type type) noexcept;
+        template<typename T> error_type post(event_system* const source, const event_type type, T&& arg) noexcept
         {
             event_data* new_event = nullptr;
             ICY_ERROR(event_data::create(type, source, sizeof(T), new_event));
@@ -125,26 +119,52 @@ namespace icy
             new_event->release();
             return error;
         }
+    protected:
+        void filter(const uint64_t mask) noexcept;
+        event pop() noexcept;        
     private:
         virtual error_type signal(const event_data& event) noexcept = 0;
         error_type post(event_data& new_event) noexcept;
     private:
         detail::intrusive_mpsc_queue m_queue;
-        event_queue* m_prev = nullptr;
+        event_system* m_prev = nullptr;
         uint64_t m_mask = 0;
         static detail::rw_spin_lock g_lock;
-        static event_queue* g_list;
+        static event_system* g_list;
     };
-    class event_loop : public event_queue
+    class event_queue final : public event_system
     {
+        struct tag {};
     public:
-        static error_type create(shared_ptr<event_loop>& loop, const uint64_t mask) noexcept;
-        virtual error_type loop(event& event, const duration_type timeout = max_timeout) noexcept = 0;
+        friend error_type create_event_queue(shared_ptr<event_queue>& queue, const uint64_t mask) noexcept;
+    public:
+        event_queue(tag) noexcept { }
+        ~event_queue() noexcept
+        {
+            filter(0);
+        }
+        error_type pop(event& event, const duration_type timeout = max_timeout) noexcept;
+        error_type exec() noexcept override
+        {
+            return make_stdlib_error(std::errc::function_not_supported);
+        }
+        error_type signal(const event_data& event) noexcept override
+        {
+            m_cvar.wake();
+            return {};
+        }
+    private:
+        mutex m_mutex;
+        cvar m_cvar;
     };
+    class thread;
+
+    error_type create_event_thread(shared_ptr<thread>& thread, const shared_ptr<event_system> system) noexcept;
+
     class event_data
     {      
         friend event;
-        friend event_queue;
+        friend event_system;
         using destructor_type = void(*)(void*);
     public:
         template<typename T> const T& data() const noexcept
@@ -164,7 +184,7 @@ namespace icy
     public:
         const clock_type::time_point time;
         const event_type type;
-        const weak_ptr<event_queue> source;
+        const weak_ptr<event_system> source;
     private:
 #if ICY_EVENT_CHECK_TYPE
         static uint32_t next_type() noexcept
@@ -179,12 +199,12 @@ namespace icy
             return index;
         }
 #endif
-        event_data(const event_type type, weak_ptr<event_queue>&& source) noexcept : time(clock_type::now()), type(type), source(std::move(source))
+        event_data(const event_type type, weak_ptr<event_system>&& source) noexcept : time(clock_type::now()), type(type), source(std::move(source))
         {
 
         }
         static error_type post(event_data& new_event) noexcept;
-        static error_type create(const event_type type, event_queue* const source, const size_t type_size, event_data*& new_event) noexcept;
+        static error_type create(const event_type type, event_system* const source, const size_t type_size, event_data*& new_event) noexcept;
         template<typename T> static void initialize(event_data& new_event, std::false_type, T&& arg) noexcept
         {
             static_assert(std::is_rvalue_reference<decltype(arg)>::value, "ONLY RVALUE REFERENCE AS ARG");
@@ -227,7 +247,7 @@ namespace icy
     };
     class event
     {
-        friend event_queue;
+        friend event_system;
     public:
         event() noexcept = default;
         event(const event& rhs) noexcept : m_ptr(rhs.m_ptr)
@@ -254,8 +274,8 @@ namespace icy
         {
             return !!m_ptr;
         }
-        static error_type post(event_queue* const source, const event_type type) noexcept;
-        template<typename T> static error_type post(event_queue* const source, const event_type type, T&& arg) noexcept
+        static error_type post(event_system* const source, const event_type type) noexcept;
+        template<typename T> static error_type post(event_system* const source, const event_type type, T&& arg) noexcept
         {
             event_data* new_event = nullptr;
             ICY_ERROR(event_data::create(type, source, sizeof(T), new_event));
@@ -293,4 +313,5 @@ namespace icy
     {
         return event_type(uint64_t(event_type::user) << index); 
     }
+    event_type next_event_user() noexcept;
 }

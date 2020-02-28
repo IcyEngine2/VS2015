@@ -34,9 +34,10 @@ namespace icy
 		
 	class json
 	{
+        friend error_type to_value(const string_view str, json& root) noexcept;
+        friend error_type copy(const json& src, json& dst) noexcept;
 		static error_type create(const string_view str, json& parent, const const_array_view<jsmntok_t> tokens, const int token) noexcept;
 	public:
-		static error_type create(const string_view str, json& root) noexcept;
 		json(const json_type type = json_type::none) noexcept : m_type(type)
 		{
 			memset(&m_string, 0, sizeof(m_string));
@@ -53,7 +54,6 @@ namespace icy
         json(json&& rhs) noexcept;
 		ICY_DEFAULT_MOVE_ASSIGN(json);
         ~json() noexcept;
-        error_type copy(json& dst) const noexcept;
         error_type get(bool& value) const noexcept;
         error_type get(uint8_t& value) const noexcept;
         error_type get(uint16_t& value) const noexcept;

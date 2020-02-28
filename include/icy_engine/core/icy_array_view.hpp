@@ -4,72 +4,11 @@
 
 namespace icy
 {
-	namespace detail
-	{
-		ICY_DECLARE_CLASS_MEMBER_EXISTS(clear);
-		ICY_DECLARE_CLASS_MEMBER_EXISTS(resize);
-
-		template<typename iter_type> auto try_make_move_iterator_helper(const iter_type iter, std::true_type) noexcept
-		{
-			static_assert(std::_Is_iterator<iter_type>::value, "");
-			return std::make_move_iterator(iter);
-		}
-		template<typename iter_type> auto try_make_move_iterator_helper(const iter_type iter, std::false_type) noexcept
-		{
-			return iter;
-		}
-		template<typename rhs_type> auto try_clear_helper(rhs_type&& rhs, std::true_type) noexcept
-		{
-			rhs.clear();
-		}
-		template<typename rhs_type> auto try_clear_helper(rhs_type&&, std::false_type) noexcept
-		{
-
-		}
-		template<typename rhs_type> void try_resize_helper(rhs_type& rhs, const size_t size, std::true_type)
-		{
-			rhs.resize(size);
-		}
-		template<typename rhs_type> void try_resize_helper(rhs_type&, const size_t, std::false_type) noexcept
-		{
-
-		}
-		template<typename rhs_type> auto try_make_move_begin(rhs_type&& rhs) noexcept
-		{
-			return try_make_move_iterator_helper(std::begin(rhs),
-				std::bool_constant<std::is_rvalue_reference<decltype(rhs)>::value &&
-				std::_Is_iterator<decltype(std::begin(rhs))>::value>{});
-		}
-		template<typename rhs_type> auto try_make_move_end(rhs_type&& rhs) noexcept
-		{
-			return try_make_move_iterator_helper(std::end(rhs),
-				std::bool_constant<std::is_rvalue_reference<decltype(rhs)>::value &&
-				std::_Is_iterator<decltype(std::end(rhs))>::value>{});
-		}
-		template<typename rhs_type> auto try_clear(rhs_type&& rhs) noexcept
-		{
-			return try_clear_helper(rhs, std::bool_constant<
-				std::is_rvalue_reference<decltype(rhs)>::value &&
-				has_member_clear<decltype(rhs)>::value>{});
-		}
-		template<typename rhs_type> auto try_resize(rhs_type& rhs, const size_t size)
-		{
-			return try_resize_helper(rhs, size, has_member_resize<rhs_type, size_t>{});
-		}
-		template<typename iter_type> const void* iterator_address(const iter_type iter) noexcept
-		{
-			return &*iter;
-		}
-		template<typename iter_type> const void* iterator_address(const std::move_iterator<iter_type> iter) noexcept
-		{
-			return iterator_address(iter.base());
-		}
-	}
 #if _DEBUG
 	template<typename T> class const_array_iterator;
-	template<typename T> class const_array_iterator : public detail::rel_ops<const_array_iterator<T>>
+    template<typename T> class const_array_iterator
 	{
-		static_assert(!std::is_const<T>::value, "REMOVE CONST/VOLATILE QUALIFIERS FROM TYPE");
+    	static_assert(!std::is_const<T>::value, "REMOVE CONST/VOLATILE QUALIFIERS FROM TYPE");
 	public:
 		using type = const_array_iterator;
 		using iterator_category = std::random_access_iterator_tag;
@@ -79,6 +18,7 @@ namespace icy
 		using size_type = size_t;
 		using difference_type = ptrdiff_t;
 	public:
+        rel_ops(const_array_iterator);
 		const_array_iterator() noexcept : m_ptr{ nullptr }, m_begin{ nullptr }, m_end{ nullptr }
 		{
 
@@ -150,15 +90,16 @@ namespace icy
 		{
 			return &(**this);
 		}
-		int compare(const type & rhs) const noexcept
-		{
-			return icy::compare(m_ptr, rhs.m_ptr);
-		}
 	protected:
 		pointer m_ptr;
 		pointer m_begin;
 		pointer m_end;
 	};
+
+    template<typename T> inline int compare(const const_array_iterator<T>& lhs, const const_array_iterator<T>& rhs) noexcept
+    {
+        return static_cast<int>(lhs - rhs);
+    }
 	template<typename T> class array_iterator : public const_array_iterator<T>
 	{
 	public:
@@ -302,7 +243,7 @@ namespace icy
 	}
 #endif
 
-	template<typename T> class const_array_view : public detail::rel_ops<const_array_view<T>>
+	template<typename T> class const_array_view
 	{
 	public:
 		using type = const_array_view;
@@ -318,6 +259,7 @@ namespace icy
 		using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 		using reverse_iterator = std::reverse_iterator<iterator>;
 	public:
+        rel_ops(const_array_view);
 		constexpr const_array_view() noexcept : m_ptr{ }, m_size{ }
 		{
 
@@ -497,21 +439,24 @@ namespace icy
 		{
 			const auto dst = size_type(std::distance(first, last));
 			ICY_ASSERT(dst == size(), "TRYING TO ASSIGN INVALID ITERATOR RANGE (SIZE MISMATCH)");
-			for (auto k = 0_z; k < size(); ++k, ++first)
-				data()[k] = T{ *first };
-			return *this;
+            for (auto k = 0_z; k < size(); ++k, ++first)
+            {
+                copy;
+                data()[k] = T{ *first };
+            }
+            return *this;
 		}
 		type& assign(std::initializer_list<T> list) noexcept
 		{
 			return assign(std::make_move_iterator(list.begin()), std::make_move_iterator(list.end()));
 		}
-		template<typename rhs_type, typename = std::enable_if_t<is_container<rhs_type>::value>>
+		template<typename rhs_type>
 		type& assign(rhs_type&& rhs) noexcept
 		{
 			assign(
-				detail::try_make_move_begin(std::forward<rhs_type>(rhs)),
-				detail::try_make_move_end(std::forward<rhs_type>(rhs)));
-			try_clear(std::forward<rhs_type>(rhs));
+				std::make_move_iterator(std::begin(rhs)),
+				std::make_move_iterator(std::end(rhs)));
+			clear(rhs);
 			return *this;
 		}
 		template<typename rhs_type>
@@ -524,6 +469,12 @@ namespace icy
 			return assign(list);
 		}
 	};
+
+    template<typename T>
+    int compare(const const_array_view<T> lhs, const const_array_view<T> rhs) noexcept
+    {
+        return detail::compare_container(lhs, rhs);
+    }
 
 	template<typename iterator_type, typename T>
 	iterator_type binary_search(const iterator_type first, const iterator_type last, const T& value) noexcept

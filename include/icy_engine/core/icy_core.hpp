@@ -74,7 +74,7 @@ noexcept(std::is_nothrow_copy_constructible<X>::value)                      \
     this->~X();                                                             \
     return *(new (this) X{ std::move(rhs) });                               \
 }
-#define ICY_DECLARE_CLASS_MEMBER_EXISTS(NAME)                               \
+/*#define ICY_DECLARE_CLASS_MEMBER_EXISTS(NAME)                               \
 template<typename class_type, typename... arg_types>                        \
 struct _CRT_CONCATENATE(_CRT_CONCATENATE(has_member_, NAME), _helper)       \
 {                                                                           \
@@ -133,7 +133,7 @@ template<typename class_type>                                               \
 using _CRT_CONCATENATE(has_subtype_, NAME) = std::bool_constant<            \
     _CRT_CONCATENATE(_CRT_CONCATENATE(has_subtype_, NAME), _helper)         \
     <class_type>::value>
-
+ */
 #define ICY_FIND_FUNC(LIB, X) LIB.find<decltype(&X)>(#X)
 
 #pragma endregion ICY_MACRO
@@ -255,94 +255,6 @@ namespace icy
             }
         };
 
-        template<typename class_type, typename index_type>
-        struct has_subscript_operator_helper
-        {
-            struct tag { };
-            template<typename = void> static auto test(int) -> decltype(
-                std::declval<class_type>()[std::declval<index_type>()]);
-            template<typename = void> static auto test(...)->tag;
-            using return_type = decltype(test<>(0));
-            static constexpr bool value = !std::is_same<return_type, tag>::value;
-        };
-        template<typename class_type, typename index_type> using has_subscript_operator =
-            std::bool_constant<has_subscript_operator_helper<class_type, index_type>::value>;
-
-        template<typename lhs_type, typename rhs_type>
-        struct is_explicitly_convertible_helper
-        {
-            struct tag { };
-            template<typename = void> static auto test(int) -> decltype(
-                static_cast<lhs_type>(std::declval<rhs_type>()));
-            template<typename = void> static auto test(...)->tag;
-            using return_type = decltype(test<>(0));
-            static constexpr bool value = !std::is_same<return_type, tag>::value;
-        };
-        template<typename lhs_type, typename rhs_type> using is_explicitly_convertible =
-            std::bool_constant<is_explicitly_convertible_helper<lhs_type, rhs_type>::value>;
-
-        ICY_DECLARE_GLOBAL_CALL_EXISTS_EX(begin, std::);
-        ICY_DECLARE_GLOBAL_CALL_EXISTS_EX(data, std::);
-
-        template<typename T, typename = can_global_call_begin<T>>
-        struct is_container;
-        template<typename T>
-        struct is_container<T, std::true_type> : std::true_type
-        {
-            using iterator_type = typename can_global_call_begin_helper<T>::return_type;
-            using value_type = remove_cvr<decltype(*std::declval<iterator_type>())>;
-        };
-        template<typename T>
-        struct is_container<T, std::false_type> : std::false_type
-        {
-            using iterator_type = void*;
-            using value_type = void;
-        };
-        template<typename T> using is_array = is_container<T, can_global_call_data<T>>;
-        template<typename T> struct is_std_array : public std::false_type
-        {
-            using value_type = void;
-            static constexpr size_t size = 0;
-        };
-        template<typename T, size_t N> struct is_std_array<T[N]> : public std::true_type
-        {
-            using value_type = T;
-            static constexpr size_t size = N;
-        };
-        template<typename T, size_t N> struct is_std_array<std::array<T, N>> : public std::true_type
-        {
-            using value_type = T;
-            static constexpr size_t size = N;
-        };
-
-        template<typename... Fs>
-        struct overload_set
-        {
-
-        };
-        template<typename F0, typename... Fs>
-        struct overload_set<F0, Fs...> : F0, overload_set<Fs...>
-        {
-            overload_set(F0 f0, Fs... fs) :
-                F0{ std::move(f0) }, overload_set<Fs...>{ std::move(fs)... }
-            {
-
-            }
-            using F0::operator();
-            using overload_set<Fs...>::operator();
-        };
-        template<typename F>
-        struct overload_set<F> : F
-        {
-            overload_set(F f) : F{ std::move(f) } {};
-            using F::operator();
-        };
-        template<typename... Fs>
-        overload_set<std::decay_t<Fs>...> overload(Fs&&...fs)
-        {
-            return{ std::forward<Fs>(fs)... };
-        }
-
         inline constexpr size_t constexpr_log2(const size_t n, const size_t p = 0) noexcept
         {
             return (n <= 1) ? p : constexpr_log2(n / 2, p + 1);
@@ -364,98 +276,99 @@ namespace icy
             return size_t(static_cast<const char*>(last) - static_cast<const char*>(first));
         }
 
-        ICY_DECLARE_CLASS_MEMBER_EXISTS(compare);
-        template<typename lhs_type, typename rhs_type>
-        int compare(const lhs_type& lhs, const rhs_type& rhs) noexcept;
-        struct compare_helper
+     
+        constexpr inline int compare(const uint8_t lhs, const uint8_t rhs) noexcept
         {
-            enum type
-            {
-                trivial,
-                member,
-                container,
-                invalid,
-            };
-            using tag_trivial = std::integral_constant<type, trivial>;
-            using tag_member = std::integral_constant<type, member>;
-            using tag_container = std::integral_constant<type, container>;
-            using tag_invalid = std::integral_constant<type, invalid>;
-
-            template<typename lhs_type, typename rhs_type>
-            static constexpr type get() noexcept
-            {
-                return has_member_compare<lhs_type, rhs_type>::value ? member :
-                    is_container<lhs_type>::value && is_container<rhs_type>::value ? container :
-                    std::is_scalar<lhs_type>::value && std::is_scalar<rhs_type>::value ? trivial : invalid;
-            }
-
-            template<typename lhs_type, typename rhs_type>
-            constexpr int operator()(const lhs_type& lhs, const rhs_type& rhs, tag_trivial) const noexcept
-            {
-                return int(rhs < lhs) - int(lhs < rhs);
-            }
-            template<typename lhs_type, typename rhs_type>
-            constexpr int operator()(const lhs_type& lhs, const rhs_type& rhs, tag_member) const noexcept
-            {
-                return lhs.compare(rhs);
-            }
-            template<typename lhs_type, typename rhs_type>
-            int operator()(const lhs_type& lhs, const rhs_type& rhs, tag_invalid) const noexcept
-            {
-                static_assert(false, "TYPES CAN'T BE COMPARED!");
-                return 0;
-            }
-            template<typename lhs_type, typename rhs_type>
-            int operator()(const lhs_type& lhs, const rhs_type& rhs, tag_container) const noexcept
-            {
-                const auto lhs_size = std::size(lhs);
-                const auto rhs_size = std::size(rhs);
-                const auto min_size = lhs_size < rhs_size ? lhs_size : rhs_size;
-                auto it = std::begin(lhs);
-                auto jt = std::begin(rhs);
-                for (auto k = 0_z; k < min_size; ++k, ++it, ++jt)
-                {
-                    const auto cmp = compare(*it, *jt);
-                    if (cmp != 0) return cmp;
-                }
-                return compare(lhs_size, rhs_size);
-            }
-        };
-        template<typename lhs_type, typename rhs_type>
-        int compare(const lhs_type& lhs, const rhs_type& rhs) noexcept
+            return int(rhs < lhs) - int(lhs < rhs);
+        }
+        constexpr inline int compare(const uint16_t lhs, const uint16_t rhs) noexcept
         {
-            return compare_helper{}(lhs, rhs, std::integral_constant<compare_helper::type,
-                compare_helper::get<lhs_type, rhs_type>()>{});
+            return int(rhs < lhs) - int(lhs < rhs);
+        }
+        constexpr inline int compare(const uint32_t lhs, const uint32_t rhs) noexcept
+        {
+            return int(rhs < lhs) - int(lhs < rhs);
+        }
+        constexpr inline int compare(const uint64_t lhs, const uint64_t rhs) noexcept
+        {
+            return int(rhs < lhs) - int(lhs < rhs);
+        }
+        constexpr inline int compare(const int8_t lhs, const int8_t rhs) noexcept
+        {
+            return int(rhs < lhs) - int(lhs < rhs);
+        }
+        constexpr inline int compare(const int16_t lhs, const int16_t rhs) noexcept
+        {
+            return int(rhs < lhs) - int(lhs < rhs);
+        }
+        constexpr inline int compare(const int32_t lhs, const int32_t rhs) noexcept
+        {
+            return int(rhs < lhs) - int(lhs < rhs);
+        }
+        constexpr inline int compare(const int64_t lhs, const int64_t rhs) noexcept
+        {
+            return int(rhs < lhs) - int(lhs < rhs);
+        }
+        constexpr inline int compare(const float lhs, const float rhs) noexcept
+        {
+            return int(rhs < lhs) - int(lhs < rhs);
+        }
+        constexpr inline int compare(const double lhs, const double rhs) noexcept
+        {
+            return int(rhs < lhs) - int(lhs < rhs);
         }
         template<typename T>
-        class rel_ops
+        constexpr int compare(const T* const lhs, const T* const rhs) noexcept
         {
-        public:
-            bool operator<(const rel_ops& rhs) const noexcept
+            return int(rhs < lhs) - int(lhs < rhs);
+        }
+        constexpr inline int compare(const bool lhs, const bool rhs) noexcept
+        {
+            return int(rhs < lhs) - int(lhs < rhs);
+        }
+
+
+        template<typename T>
+        int compare_container(const T& lhs, const T& rhs) noexcept
+        {
+            const auto lhs_size = std::size(lhs);
+            const auto rhs_size = std::size(rhs);
+            const auto min_size = lhs_size < rhs_size ? lhs_size : rhs_size;
+            auto it = std::begin(lhs);
+            auto jt = std::begin(rhs);
+            for (auto k = 0_z; k < min_size; ++k, ++it, ++jt)
             {
-                return compare(*static_cast<const T*>(this), *static_cast<const T*>(&rhs)) < 0;
+                const auto cmp = compare(*it, *jt);
+                if (cmp != 0) return cmp;
             }
-            bool operator>(const rel_ops& rhs) const noexcept
-            {
-                return compare(*static_cast<const T*>(this), *static_cast<const T*>(&rhs)) > 0;
-            }
-            bool operator<=(const rel_ops& rhs) const noexcept
-            {
-                return compare(*static_cast<const T*>(this), *static_cast<const T*>(&rhs)) <= 0;
-            }
-            bool operator>=(const rel_ops& rhs) const noexcept
-            {
-                return compare(*static_cast<const T*>(this), *static_cast<const T*>(&rhs)) >= 0;
-            }
-            bool operator==(const rel_ops& rhs) const noexcept
-            {
-                return compare(*static_cast<const T*>(this), *static_cast<const T*>(&rhs)) == 0;
-            }
-            bool operator!=(const rel_ops& rhs) const noexcept
-            {
-                return compare(*static_cast<const T*>(this), *static_cast<const T*>(&rhs)) != 0;
-            }
-        };
+            return compare(lhs_size, rhs_size);
+        }
+        
+#define rel_ops(T)                                                                          \
+        bool operator<(const T& rhs) const noexcept                                         \
+        {                                                                                   \
+            return compare(*static_cast<const T*>(this), *static_cast<const T*>(&rhs)) < 0; \
+        }                                                                                   \
+        bool operator>(const T& rhs) const noexcept                                         \
+        {                                                                                   \
+            return compare(*static_cast<const T*>(this), *static_cast<const T*>(&rhs)) > 0; \
+        }                                                                                   \
+        bool operator<=(const T& rhs) const noexcept                                        \
+        {                                                                                   \
+            return compare(*static_cast<const T*>(this), *static_cast<const T*>(&rhs)) <= 0;\
+        }                                                                                   \
+        bool operator>=(const T& rhs) const noexcept                                        \
+        {                                                                                   \
+            return compare(*static_cast<const T*>(this), *static_cast<const T*>(&rhs)) >= 0;\
+        }                                                                                   \
+        bool operator==(const T& rhs) const noexcept                                        \
+        {                                                                                   \
+            return compare(*static_cast<const T*>(this), *static_cast<const T*>(&rhs)) == 0;\
+        }                                                                                   \
+        bool operator!=(const T& rhs) const noexcept                                        \
+        {                                                                                   \
+            return compare(*static_cast<const T*>(this), *static_cast<const T*>(&rhs)) != 0;\
+        }
     }
 
     struct error_source;
@@ -532,9 +445,13 @@ namespace icy
     error_type to_string(const error_type error, string& str) noexcept;
     error_type to_string(const error_type error, string& str, const string_view locale) noexcept;
 
-    class guid : public detail::rel_ops<guid>
+    class guid;
+    inline int compare(const guid& lhs, const guid& rhs) noexcept;
+    class guid
     {
     public:
+        rel_ops(guid);
+        static guid create() noexcept;
         guid() noexcept
         {
             memset(this, 0, sizeof(*this));
@@ -544,10 +461,10 @@ namespace icy
             *reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(this) + 0x00) = x0;
             *reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(this) + 0x08) = x1;
         }
-        int compare(const guid& rhs) const noexcept
+        explicit operator bool() const noexcept
         {
-            const auto value = memcmp(this, &rhs, sizeof(*this));
-            return value > 0 ? 1 : value < 0 ? -1 : 0;
+            const guid null;
+            return memcmp(this, &null, sizeof(guid)) != 0;
         }
     private:
         uint32_t Data1;
@@ -555,7 +472,11 @@ namespace icy
         uint16_t Data3;
         uint8_t Data4[8];
     };
-    error_type create_guid(guid& guid) noexcept;
+    inline int compare(const guid& lhs, const guid& rhs) noexcept
+    {
+        const auto value = memcmp(&lhs, &rhs, sizeof(guid));
+        return value > 0 ? 1 : value < 0 ? -1 : 0;
+    }
 
     using clock_type = std::chrono::steady_clock;
     using duration_type = clock_type::duration;
@@ -568,10 +489,6 @@ namespace icy
     }
     static const auto max_timeout = std::chrono::milliseconds(0xFFFF'FFFF);
 
-    using detail::has_subscript_operator;
-    using detail::is_explicitly_convertible;
-    using detail::is_container;
-    using detail::is_array;
     inline constexpr size_t operator""_z(const uint64_t arg) noexcept
     {
         return size_t(arg);
@@ -614,21 +531,6 @@ namespace icy
     }
     using detail::compare;
 
-    struct window_size
-    {
-        window_size() noexcept : w(0), h(0)
-        {
-
-        }
-        window_size(const uint32_t w, const uint32_t h) noexcept : w(w), h(h)
-        {
-
-        }
-        window_size(const window_size& rhs) noexcept = default;
-        ICY_DEFAULT_COPY_ASSIGN(window_size);
-        const uint32_t w;
-        const uint32_t h;
-    };
     class mutex
     {
         friend cvar;
@@ -653,11 +555,6 @@ namespace icy
         void* m_ptr = nullptr;
     };
 
-    error_type console_exit() noexcept;
-    error_type console_write(const string_view str) noexcept;
-    error_type console_write(const string_view str, const color foreground) noexcept;
-    error_type console_read_line(string& str, bool& exit) noexcept;
-    error_type console_read_key(key& key) noexcept;
     error_type win32_parse_cargs(array<string>& args) noexcept;
     error_type computer_name(string& str) noexcept;
     error_type process_name(HINSTANCE__* module, string& str) noexcept;
@@ -699,24 +596,15 @@ namespace icy
         return library(name);
     }
 
-    struct inject_args
+    template<typename T>
+    inline error_type copy(const T& src, T& dst) noexcept
     {
-        error_type error;
-        size_t len = 0;
-        char str[1];
-    };
+        static_assert(std::is_trivially_destructible<T>::value, "CAN ONLY COPY TRIVIAL TYPES");
+        static_assert(std::is_rvalue_reference<decltype(dst)>::value == false, "COPY != MOVE");
+        dst = src;
+        return {};
+    }
 
-    struct rectangle
-    {
-        rectangle() noexcept : x(0), y(0), w(0), h(0)
-        {
-
-        }
-        uint32_t x;
-        uint32_t y;
-        uint32_t w;
-        uint32_t h;
-    };
 }
 
 #if !defined _CONSOLE

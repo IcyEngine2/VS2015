@@ -175,7 +175,7 @@ error_source icy::register_error_source(const string_view name, error_type(*func
     auto& pair = error_source_array()[count];
     pair.func = func;
     pair.hash = hash64(name);
-    copy(name, pair.name);
+    icy::strcopy(name, array_view<char>(pair.name));
 
     error_source source;
     source.hash = pair.hash;
@@ -207,190 +207,6 @@ error_type icy::to_string(const error_type error, string& str, const string_view
         return error_source_array()[k].func(error.code, locale, str);
     }
     return make_stdlib_error(std::errc::invalid_argument);
-}
-
-ICY_STATIC_NAMESPACE_BEG
-struct console_write_args
-{
-    array<wchar_t> text;
-    color color;
-};
-struct console_event
-{
-    bool exit = false;
-    key key = key::none;
-    string line;
-};
-mutex g_console_mutex;
-ICY_STATIC_NAMESPACE_END
-
-static error_type console_init() noexcept
-{
-    if (g_console_mutex)
-        return {};
-
-    if (!AllocConsole())
-    {
-        const auto error = last_system_error();
-        if (error == make_system_error(make_system_error_code(ERROR_ACCESS_DENIED)))
-            ;   //  already has console
-        else
-            ICY_ERROR(error);
-    }
-    
-    const auto func = [](DWORD)
-    {
-        event::post(nullptr, event_type::global_quit);
-        console_exit();        
-        Sleep(INFINITE);
-        return 0;
-    };
-    if (!SetConsoleCtrlHandler(func, TRUE))
-        return last_system_error();
-
-    ICY_ERROR(g_console_mutex.initialize());
-    return {};
-}
-static error_type console_loop(const event_type type, console_write_args&& args, console_event& output) noexcept
-{
-    ICY_ERROR(console_init());
-    shared_ptr<event_loop> loop;
-    ICY_ERROR(event_loop::create(loop, type));
-    if (type == event_type::console_write)
-    {
-        ICY_ERROR(event::post(nullptr, type, std::move(args)));
-    }
-    else
-    {
-        ICY_ERROR(event::post(nullptr, type));
-    }
-    event event;
-    ICY_ERROR(loop->loop(event));
-
-    if (event->type == event_type::global_quit)
-    {
-        output.exit = true;
-    }
-    else if (event->type == event_type::console_write)
-    {
-        auto& write = event->data<console_write_args>();
-        const auto r = (write.color.r) ? FOREGROUND_RED : 0;
-        const auto g = (write.color.g) ? FOREGROUND_GREEN : 0;
-        const auto b = (write.color.b) ? FOREGROUND_BLUE : 0;
-        const auto a = (write.color.a) ? FOREGROUND_INTENSITY : 0;
-        const auto attr = static_cast<WORD>(r | g | b | a);
-
-        CONSOLE_SCREEN_BUFFER_INFO info = { sizeof(info) };
-        if (!GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &info))
-            return last_system_error();
-
-        if (info.wAttributes != attr)
-        {
-            if (!SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), attr))
-                return last_system_error();
-        }
-
-        auto count = 0ul;
-        if (!WriteConsoleW(GetStdHandle(STD_OUTPUT_HANDLE), write.text.data(), uint32_t(write.text.size()) - 1, &count, nullptr))
-            return last_system_error();
-
-        if (info.wAttributes != attr)
-        {
-            if (!SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), info.wAttributes))
-                return last_system_error();
-        }
-    }
-    else if (event->type == event_type::console_read_key)
-    {
-        auto done = false;
-        while (!done)
-        {
-            const auto wait = WaitForSingleObject(GetStdHandle(STD_INPUT_HANDLE), ms_timeout(max_timeout));
-            if (wait != WAIT_OBJECT_0)
-                return last_system_error();
-
-            INPUT_RECORD buffer[256];
-            auto count = 0ul;
-            if (!ReadConsoleInputW(GetStdHandle(STD_INPUT_HANDLE), buffer, _countof(buffer), &count))
-                return last_system_error();
-
-            for (auto k = 0u; k < count; ++k)
-            {
-                if (buffer[k].EventType == 0)
-                    return {};
-
-                if (buffer[k].EventType != KEY_EVENT)
-                    continue;
-
-                const auto win32_msg = buffer[k].Event.KeyEvent;
-                output.key = key(win32_msg.wVirtualKeyCode);
-                //  detail::scan_vk_to_key(win32_msg.wVirtualKeyCode, win32_msg.wVirtualScanCode, false);
-                //ICY_ERROR(event::post(nullptr, event_type::console_read_key, std::move(read_key)));
-                done = true;
-                break;
-            }
-        }
-    }
-    else if (event->type == event_type::console_read_line)
-    {
-        wchar_t buffer[4096] = {};
-        auto count = 0ul;
-        CONSOLE_READCONSOLE_CONTROL control = { sizeof(control) };
-        control.dwCtrlWakeupMask = 1 << uint32_t(key::enter);
-        if (!ReadConsoleW(GetStdHandle(STD_INPUT_HANDLE), buffer, _countof(buffer), &count, &control))
-            return last_system_error();
-
-        if (count < 2)
-            output.exit = true;
-
-        while (count && (buffer[count - 1] == '\r' || buffer[count - 1] == '\n'))
-            --count;
-
-        ICY_ERROR(to_string({ buffer, count }, output.line));
-    }
-    else
-    {
-        return make_stdlib_error(std::errc::invalid_argument);
-    }
-    return {};
-}
-icy::error_type icy::console_exit() noexcept
-{
-    INPUT_RECORD buffer[1] = {};
-    buffer[0].EventType = KEY_EVENT;
-    buffer[0].Event.KeyEvent = { TRUE, 1, VK_RETURN, 0, { L'\r' } };
-    auto count = 0ul;
-    if (!WriteConsoleInputW(GetStdHandle(STD_INPUT_HANDLE), buffer, _countof(buffer), &count))
-        return last_system_error();
-    return {};
-}
-error_type icy::console_write(const string_view str) noexcept
-{
-    return console_write(str, color(colors::white, 0x00));
-}
-error_type icy::console_write(const string_view str, const color foreground) noexcept
-{
-    console_write_args args;
-    ICY_ERROR(to_utf16(str, args.text));
-    args.color = foreground;
-    console_event output;
-    ICY_ERROR(console_loop(event_type::console_write, std::move(args), output));
-    return {};
-}
-error_type icy::console_read_line(string& str, bool& exit) noexcept
-{
-    console_event output;
-    ICY_ERROR(console_loop(event_type::console_read_line, {}, output));
-    str = std::move(output.line);
-    exit = output.exit;
-    return {};
-}
-error_type icy::console_read_key(key& key) noexcept
-{
-    console_event output;
-    ICY_ERROR(console_loop(event_type::console_read_key, {}, output));
-    key = output.key;
-    return {};
 }
 
 error_type library::initialize() noexcept
@@ -567,20 +383,14 @@ error_type icy::win32_parse_cargs(array<string>& args) noexcept
     }
     return {};
 }
-error_type icy::create_guid(guid& guid) noexcept
+guid icy::guid::create() noexcept
 {
+    guid output;
     auto lib = "ole32.dll"_lib;
-    ICY_ERROR(lib.initialize());
+    lib.initialize();
     if (const auto func = ICY_FIND_FUNC(lib, CoCreateGuid))
-    {
-        if (const auto hr = func(reinterpret_cast<GUID*>(&guid)))
-            return make_system_error(hr);
-    }
-    else
-    {
-        return make_stdlib_error(std::errc::function_not_supported);
-    }
-    return {};
+        func(reinterpret_cast<GUID*>(&output));
+    return output;
 }
 
 error_type icy::computer_name(string& str) noexcept

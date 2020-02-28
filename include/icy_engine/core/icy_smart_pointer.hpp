@@ -8,19 +8,23 @@
 namespace icy
 {
 	template<typename T> class unique_ptr;
+    template<typename T> class weak_ptr;
     template<typename T> class shared_ptr;
     template<typename T, typename... arg_types> unique_ptr<T> make_unique(arg_types&&... args) noexcept;
+    template<typename T> int compare(const unique_ptr<T>& lhs, const unique_ptr<T>& rhs) noexcept;
 
     template<typename T>
-    class unique_ptr : public detail::rel_ops<unique_ptr<T>>
+    class unique_ptr
     {
         template<typename U> friend class unique_ptr;
-        template<typename U, typename... arg_types> friend unique_ptr<U> make_unique(arg_types&&...) noexcept;
+        template<typename U, typename... arg_types>
+        friend unique_ptr<U> make_unique(arg_types&&... args) noexcept;
         explicit unique_ptr(T* const ptr) noexcept : m_ptr{ ptr }
         {
 
         }
     public:
+        rel_ops(unique_ptr);
         unique_ptr() noexcept = default;
         unique_ptr(unique_ptr&& rhs) noexcept : m_ptr{ rhs.m_ptr }
         {
@@ -74,10 +78,6 @@ namespace icy
             m_ptr = nullptr;
             return ptr;
         }
-        int compare(const unique_ptr<T>& rhs) const noexcept
-        {
-            return icy::compare(m_ptr, rhs.m_ptr);
-        }
         void operator=(const std::nullptr_t) noexcept
         {
             *this = unique_ptr();
@@ -85,6 +85,11 @@ namespace icy
     private:
         T* m_ptr = nullptr;
     };
+    template<typename T>
+    int compare(const unique_ptr<T>& lhs, const unique_ptr<T>& rhs) noexcept
+    {
+        return icy::compare(lhs.get(), rhs.get());
+    }
 
     namespace detail
     {
@@ -188,11 +193,12 @@ namespace icy
     }
 
     template<typename T>
-    class weak_ptr : public detail::rel_ops<weak_ptr<T>>
+    class weak_ptr
     {
         template<typename U> friend class shared_ptr;
         template<typename U> friend class weak_ptr;
     public:
+        rel_ops(weak_ptr);
         weak_ptr() noexcept = default;
         weak_ptr(const weak_ptr& rhs) noexcept : m_ptr(rhs.m_ptr)
         {
@@ -242,13 +248,15 @@ namespace icy
     };
 
     template<typename T>
-    class shared_ptr : public detail::rel_ops<shared_ptr<T>>
+    class shared_ptr
     {
+        friend int compare(const shared_ptr<T>& lhs, const shared_ptr<T>& rhs) noexcept;
         template<typename U> friend class shared_ptr;
         template<typename U> friend class weak_ptr;
         template<typename T>
         friend shared_ptr<T> make_shared_from_this(T* ptr) noexcept;
     public:
+        rel_ops(shared_ptr);
         shared_ptr() noexcept = default;
         shared_ptr(std::nullptr_t) noexcept
         {
@@ -318,10 +326,6 @@ namespace icy
         {
             return !!m_ptr;
         }
-        int compare(const shared_ptr<T>& rhs) const noexcept
-        {
-            return icy::compare(m_ptr, rhs.m_ptr);
-        }
         T* get() noexcept
         {
             return m_ptr ? reinterpret_cast<T*>(m_ptr->buffer) : nullptr;
@@ -349,15 +353,6 @@ namespace icy
         detail::shared_ptr_buffer* m_ptr = nullptr;
     };
 
-    template<typename T, typename... arg_types>
-	unique_ptr<T> make_unique(arg_types&&... args) noexcept
-    {
-        auto ptr = allocator_type::allocate<T>(1);
-        if (ptr)
-            new (ptr) T{ std::forward<arg_types>(args)... };
-        return unique_ptr<T>(ptr);
-    }
-
     template<typename T>
     shared_ptr<T> make_shared_from_this(T* ptr) noexcept
     {
@@ -384,6 +379,25 @@ namespace icy
     {
         //static_assert(std::is_nothrow_constructible<T, arg_types...>::value, "INVALID CONSTRUCTOR (MUST NOT THROW)");
         return shared_ptr<T>::make_shared(ptr, std::forward<arg_types>(args)...);
+    }
+
+    template<typename T, typename... arg_types> 
+    unique_ptr<T> make_unique(arg_types&&... args) noexcept
+    {
+        auto ptr = allocator_type::allocate<T>(1);
+        if (ptr)
+            allocator_type::construct(ptr, std::forward<arg_types>(args)...);
+        return unique_ptr<T>(ptr);
+    }
+    template<typename T>
+    error_type make_unique(const T& src, unique_ptr<T>& dst) noexcept
+    {
+        T tmp = {};
+        ICY_ERROR(copy(src, tmp));
+        dst = make_unique<T>(std::move(tmp));
+        if (!dst)
+            return make_stdlib_error(std::errc::not_enough_memory);
+        return {};
     }
 }
 #pragma pop_macro("small")

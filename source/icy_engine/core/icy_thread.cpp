@@ -1,5 +1,7 @@
 #include <icy_engine/core/icy_thread.hpp>
 #include <icy_engine/core/icy_memory.hpp>
+#include <icy_engine/core/icy_event.hpp>
+#include <icy_engine/core/icy_string_view.hpp>
 #include <windows.h>
 #include <winternl.h> // for Unicode_string
 #include <cstdio>
@@ -130,7 +132,7 @@ icy::thread_system::~thread_system() noexcept
 static thread_local thread* g_this_thread = nullptr;
 struct thread::data_type 
 {
-    error_type wait() noexcept
+    error_type wait(const duration_type timeout) noexcept
     {
         if (handle)
         {
@@ -139,7 +141,7 @@ struct thread::data_type
                 state = thread_state::done;
             }
             cvar.wake();
-            WaitForSingleObject(handle, INFINITE);
+            WaitForSingleObject(handle, ms_timeout(timeout));
             CloseHandle(handle);
             handle = nullptr;
         }
@@ -147,7 +149,7 @@ struct thread::data_type
     }
     ~data_type() noexcept
     {
-        wait();
+        wait(std::chrono::seconds(1));
     }
     mutex lock;
     cvar cvar;
@@ -208,7 +210,7 @@ error_type thread::wait() noexcept
     if (m_data)
     {
         cancel();
-        error = m_data->wait();
+        error = m_data->wait(max_timeout);
         allocator_type::destroy(m_data);
         allocator_type::deallocate(m_data);
     }
@@ -232,8 +234,8 @@ error_type thread::launch() noexcept
 
     const auto proc = [](void* ptr)
     {
-        const auto thr = static_cast<thread*>(ptr);
-        g_this_thread = thr;
+        auto thr = make_shared_from_this(static_cast<thread*>(ptr));
+        g_this_thread = thr.get();
         {
             ICY_LOCK_GUARD(thr->m_data->lock);
             thr->m_data->state = thread_state::run;
@@ -263,16 +265,21 @@ error_type thread::launch() noexcept
     success = true;
     return {};
 }
+error_type thread::rename(const string_view name) noexcept
+{
+    wchar_t wide[256] = {};
+    auto size = _countof(wide);
+    ICY_ERROR(name.to_utf16(wide, &size));
+    const auto hr = SetThreadDescription(m_data->handle, wide);
+    if (FAILED(hr))
+        return make_system_error(hr);
+    return {};
+}
 
 thread::~thread() noexcept
 {
     if (m_data)
     {
-        if (m_data->handle)
-        {
-            CloseHandle(m_data->handle);
-            m_data->handle = nullptr;
-        }
         allocator_type::destroy(m_data);
         allocator_type::deallocate(m_data);
     }
@@ -282,4 +289,29 @@ thread::~thread() noexcept
 size_t thread::cores() noexcept
 {
     return std::thread::hardware_concurrency();
+}
+
+error_type icy::create_event_thread(shared_ptr<thread>& thread, const shared_ptr<event_system> system) noexcept
+{
+    class event_thread : public icy::thread
+    {
+    public:
+        error_type run() noexcept override
+        {
+            auto sys = std::move(system);
+            if (const auto error = sys->exec())
+            {
+                event::post(nullptr, event_type::global_quit);
+                return error;
+            }
+            return error_type();
+        }
+    public:
+        shared_ptr<event_system> system;
+    };
+    shared_ptr<event_thread> ptr;
+    ICY_ERROR(make_shared(ptr));
+    ptr->system = system;
+    thread = std::move(ptr);
+    return {};
 }

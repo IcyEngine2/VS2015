@@ -76,9 +76,9 @@ error_type http_thread::loop(http_event& event, uint32_t& code) noexcept
 		{
 			if (reply.type == network_request_type::recv)
 			{
-               
-				const auto text_error = event.request.initialize(
-                    string_view(reinterpret_cast<const char*>(reply.bytes.data()), reply.bytes.size()));
+                const auto buffer = string_view(
+                    reinterpret_cast<const char*>(reply.bytes.data()), reply.bytes.size());
+                const auto text_error = to_value(buffer, event.request);
 				TRY_RECONNECT(text_error);
 			}
 			else
@@ -104,13 +104,13 @@ error_type http_thread::loop(http_event& event, uint32_t& code) noexcept
 	}
 	return {};
 }
-error_type http_thread::reply(http_event& event, const http_response& response, const const_array_view<uint8_t> bytes) noexcept
+error_type http_thread::reply(http_event& event, const http_response& response) noexcept
 {
 	if (event.type != network_request_type::recv || !event.m_conn)
 		return make_stdlib_error(std::errc::invalid_argument);
 	
 	string msg;
-	ICY_ERROR(to_string(response, msg, bytes));
+	ICY_ERROR(to_string(response, msg));
 
     if (m_system.m_config.file_size && !m_system.m_config.file_path.empty())
     {

@@ -155,7 +155,8 @@ namespace icy
 	class color;
 	class color_hsv;
 
-    class color : public detail::rel_ops<color>
+    int compare(const color& lhs, const color& rhs) noexcept;
+    class color
     {
     public:
 		struct float_array
@@ -179,6 +180,7 @@ namespace icy
             uint32_t bgra;
         };
     public:
+        rel_ops(color);
 		color() noexcept : bgra(0)
 		{
 
@@ -243,10 +245,6 @@ namespace icy
         {
 			to_rgbaf(float_array(rgba_array));
         }
-        int compare(const color& rhs) const noexcept
-        {
-            return icy::compare(array, rhs.array);
-        }
 		float operator-(const color& rhs) const noexcept;
     private:
         enum
@@ -274,6 +272,11 @@ namespace icy
         }
 		color_hsv(const color& color) noexcept;
     };
+
+    inline int compare(const color& lhs, const color& rhs) noexcept
+    {
+        return icy::compare(lhs.to_rgb(), rhs.to_rgb());
+    }
 
 	string_view to_string(const colors value) noexcept;
 	error_type to_string(const color value, string& str) noexcept;

@@ -14,9 +14,10 @@ public:
     void shutdown() noexcept;
 private:
     icy::error_type initialize() noexcept override;
-    icy::error_type loop(icy::event& event, const icy::duration_type timeout) noexcept override;
     icy::error_type restyle(const icy::window_style style) noexcept override;
     icy::error_type rename(const icy::string_view name) noexcept override;
+    icy::error_type exec() noexcept override;
+    icy::error_type exec(icy::event& event, const icy::duration_type timeout) noexcept;
     //icy::error_type render() noexcept override;
     HWND__* handle() const noexcept
     {

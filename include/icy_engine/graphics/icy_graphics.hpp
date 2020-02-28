@@ -84,11 +84,10 @@ namespace icy
         class data_type;
         data_type* data = nullptr;
     };
-    class window : public event_loop
+    class window : public event_system
     {
     public:
         virtual error_type initialize() noexcept = 0;
-        virtual error_type loop(event& event, const duration_type timeout = max_timeout) noexcept = 0;
         virtual error_type restyle(const window_style style) noexcept = 0;
         virtual error_type rename(const string_view name) noexcept = 0;
         //virtual error_type render() noexcept;
@@ -96,8 +95,21 @@ namespace icy
         virtual size_t frame() const noexcept = 0;
         virtual window_flags flags() const noexcept = 0;
     };
-    error_type make_window(shared_ptr<window>& window, const adapter& adapter, const window_flags flags = default_window_flags) noexcept;
+    struct window_size
+    {
+        window_size() noexcept : x(0), y(0)
+        {
 
+        }
+        window_size(const uint32_t x, const uint32_t y) noexcept : x(x), y(y)
+        {
+
+        }
+        uint32_t x;
+        uint32_t y;
+    };
+    error_type create_window_system(shared_ptr<window>& window, const adapter& adapter, const window_flags flags = default_window_flags) noexcept;
+    
 
     inline bool operator&(const window_style lhs, const window_style rhs) noexcept
     {

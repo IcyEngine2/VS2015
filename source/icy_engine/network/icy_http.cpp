@@ -162,7 +162,7 @@ static error_type parse(const string_view input, const char delim, map<string, s
 		return {};
 }
 
-error_type http_request::initialize(const string_view buffer) noexcept
+error_type icy::to_value(const string_view buffer, http_request& request) noexcept
 {
 	enum
 	{
@@ -194,13 +194,13 @@ error_type http_request::initialize(const string_view buffer) noexcept
 				switch (hash(string_view{ beg, ptr + k }))
 				{
 				case "GET"_hash: 
-					type = http_request_type::get; 
+                    request.type = http_request_type::get;
 					break;
 				case "POST"_hash: 
-					type = http_request_type::post; 
+                    request.type = http_request_type::post;
 					break;
 				case "OPTIONS"_hash:
-					type = http_request_type::options;
+                    request.type = http_request_type::options;
 					break;
 				default:
 					return make_stdlib_error(std::errc::illegal_byte_sequence);
@@ -229,10 +229,8 @@ error_type http_request::initialize(const string_view buffer) noexcept
 				break;
 
 			string path;
-			if (const auto error = decode(string_view{ beg, ptr + k }, path))
-				return error;
-			if (const auto error = url_sub.push_back(std::move(path)))
-				return error;
+            ICY_ERROR(decode(string_view{ beg, ptr + k }, path));
+            ICY_ERROR(request.url_sub.push_back(std::move(path)));
 			beg = ptr + k + 1;
 			break;
 		}
@@ -257,12 +255,9 @@ error_type http_request::initialize(const string_view buffer) noexcept
 
 			string key;
 			string val;
-			if (const auto error = decode(url_arg_key, key))
-				return error;
-			if (const auto error = decode(string_view{ beg, ptr + k }, val))
-				return error;
-			if (const auto error = url_args.insert(std::move(key), std::move(val)))
-				return error;
+            ICY_ERROR(decode(url_arg_key, key));
+            ICY_ERROR(decode(string_view{ beg, ptr + k }, val));
+            ICY_ERROR(request.url_args.insert(std::move(key), std::move(val)));
 			beg = ptr + k + 1;
 			break;
 		}
@@ -304,7 +299,7 @@ error_type http_request::initialize(const string_view buffer) noexcept
 
 			if (header_key == http_key_cookie_r)
 			{
-				ICY_ERROR(parse(string_view{ beg, ptr + k }, ';', cookies));
+				ICY_ERROR(parse(string_view{ beg, ptr + k }, ';', request.cookies));
 			}
 			else if (header_key == http_key_cookie_w)
 			{
@@ -316,7 +311,7 @@ error_type http_request::initialize(const string_view buffer) noexcept
 				string val;
 				ICY_ERROR(decode(header_key, key));
 				ICY_ERROR(decode(string_view{ beg, ptr + k }, val));
-				ICY_ERROR(headers.insert(std::move(key), std::move(val)));
+				ICY_ERROR(request.headers.insert(std::move(key), std::move(val)));
 			}
 
 			if (ptr[k + 2] == '\r' && ptr[k + 3] == '\n')
@@ -337,19 +332,21 @@ error_type http_request::initialize(const string_view buffer) noexcept
 			return make_stdlib_error(std::errc::illegal_byte_sequence);
 		}
 	}
-	const auto keys = headers.keys();
+	const auto keys = request.headers.keys();
 	const auto key_content_size = binary_search(keys.begin(), keys.end(), http_key_content_size);
 	const auto key_content_type = binary_search(keys.begin(), keys.end(), http_key_content_type);
 	const auto key_host = binary_search(keys.begin(), keys.end(), http_key_host);
 
+    string_view body_str;
 	if (key_content_size != keys.end())
 	{
-		const auto val_content_size = string_view{ headers.vals()[key_content_size - keys.begin()] };
+		const auto val_content_size = string_view{ request.headers.vals()[key_content_size - keys.begin()] };
 		auto size = 0u;
-		if (val_content_size.to_value(size) || beg + size != ptr + len)
+		if (to_value(val_content_size, size) || beg + size != ptr + len)
 			return make_stdlib_error(std::errc::illegal_byte_sequence);
 
-		ICY_ERROR(to_string(string_view{ beg, size }, body));
+        body_str = string_view(beg, size);
+        ICY_ERROR(request.body.append(body_str.ubytes()));
 	}
 	else if (beg != ptr + len)
 	{
@@ -358,27 +355,27 @@ error_type http_request::initialize(const string_view buffer) noexcept
 
 	if (key_host != keys.end())
 	{
-		ICY_ERROR(to_string(headers.vals()[key_host - keys.begin()], host));
+		ICY_ERROR(copy(request.headers.vals()[key_host - keys.begin()], request.host));
 	}
 
 	if (key_content_type != keys.end())
 	{
-		const auto& val = headers.vals()[key_content_type - keys.begin()];
+		const auto& val = request.headers.vals()[key_content_type - keys.begin()];
 		for (auto k = http_content_type::none; k < http_content_type::_count; )
 		{
 			if (::to_string(k) == val)
 			{
-				content = k;
+                request.content = k;
 				break;
 			}
 			k = http_content_type(uint32_t(k) + 1);
 		}
-		if (content == http_content_type::application_x_www_form_urlencoded)
-			ICY_ERROR(parse(body, '&', body_args));
+		if (request.content == http_content_type::application_x_www_form_urlencoded)
+			ICY_ERROR(parse(body_str, '&', request.body_args));
 	}
 	return {};
 }
-error_type http_response::initialize(const string_view buffer, const_array_view<uint8_t>& body) noexcept
+error_type icy::to_value(const string_view buffer, http_response& response) noexcept
 {
 	enum
 	{
@@ -415,7 +412,7 @@ error_type http_response::initialize(const string_view buffer, const_array_view<
 		{
 			if (ptr[k] == '\r')
 			{
-				if (string_view(beg, ptr + k).to_value(reinterpret_cast<uint32_t&>(herror)) != error_type{} || k + 1 >= len || ptr[k + 1] != '\n')
+				if (to_value(string_view(beg, ptr + k), reinterpret_cast<uint32_t&>(response.herror)) != error_type{} || k + 1 >= len || ptr[k + 1] != '\n')
 					return make_stdlib_error(std::errc::illegal_byte_sequence);
 				state = parse_header_key;
 				beg = ptr + k + 2;
@@ -474,7 +471,7 @@ error_type http_response::initialize(const string_view buffer, const_array_view<
 				string val;
 				ICY_ERROR(decode(cookie_key, key));
 				ICY_ERROR(decode(cookie_val, val));
-				ICY_ERROR(cookies.insert(std::move(key), std::move(val)));
+				ICY_ERROR(response.cookies.insert(std::move(key), std::move(val)));
 			}
 			else
 			{
@@ -482,7 +479,7 @@ error_type http_response::initialize(const string_view buffer, const_array_view<
 				string val;
 				ICY_ERROR(decode(header_key, key));
 				ICY_ERROR(decode(string_view{ beg, ptr + k }, val));
-				ICY_ERROR(headers.insert(std::move(key), std::move(val)));
+				ICY_ERROR(response.headers.insert(std::move(key), std::move(val)));
 			}
 
 			if (ptr[k + 2] == '\r' && ptr[k + 3] == '\n')
@@ -503,18 +500,18 @@ error_type http_response::initialize(const string_view buffer, const_array_view<
 			return make_stdlib_error(std::errc::illegal_byte_sequence);
 		}
 	}
-	const auto keys = headers.keys();
+	const auto keys = response.headers.keys();
 	const auto key_content_size = binary_search(keys.begin(), keys.end(), http_key_content_size);
 	//const auto key_content_type = binary_search(keys.begin(), keys.end(), http_key_content_type);
 
 	if (key_content_size != keys.end())
 	{
-		const auto val_content_size = string_view{ headers.vals()[key_content_size - keys.begin()] };
+		const auto val_content_size = string_view{ response.headers.vals()[key_content_size - keys.begin()] };
 		auto size = 0u;
-		if (val_content_size.to_value(size) || beg + size != ptr + len)
+		if (to_value(val_content_size, size) || beg + size != ptr + len)
 			return make_stdlib_error(std::errc::illegal_byte_sequence);
 
-		body = { reinterpret_cast<const uint8_t*>(beg), size };
+        ICY_ERROR(copy({ reinterpret_cast<const uint8_t*>(beg), size }, response.body));
 	}
 	else if (beg != ptr + len)
 	{
@@ -523,7 +520,6 @@ error_type http_response::initialize(const string_view buffer, const_array_view<
 
 	return {};
 }
-
 
 http_content_type icy::is_http_content_type(const string_view filename) noexcept
 {
@@ -677,7 +673,7 @@ error_type icy::to_string(const http_request& request, string& str) noexcept
 		string content_size;
 		if (body_args.empty())
 		{
-			ICY_ERROR(to_string(request.body.bytes().size(), content_size));
+			ICY_ERROR(to_string(request.body.size(), content_size));
 		}
 		else
 		{
@@ -721,7 +717,7 @@ error_type icy::to_string(const http_request& request, string& str) noexcept
 
 	if (body_args.empty())
 	{
-		ICY_ERROR(str.append(request.body));
+		//ICY_ERROR(str.append(request.body));
 	}
 	else
 	{
@@ -729,7 +725,7 @@ error_type icy::to_string(const http_request& request, string& str) noexcept
 	}
 	return {};
 }
-error_type icy::to_string(const http_response& response, string& str, const const_array_view<uint8_t> body) noexcept
+error_type icy::to_string(const http_response& response, string& str) noexcept
 {
 	const auto type_str = ::to_string(response.type);
 	const auto error_str = ::to_string(response.herror);
@@ -738,7 +734,7 @@ error_type icy::to_string(const http_response& response, string& str, const cons
 	if (error_str.empty())
 		return make_stdlib_error(std::errc::invalid_argument);
 
-	ICY_ERROR(to_string(body.size(), length_str));
+	ICY_ERROR(to_string(response.body.size(), length_str));
 
 	
 	ICY_ERROR(str.append("HTTP/1.1 "_s));
@@ -759,6 +755,12 @@ error_type icy::to_string(const http_response& response, string& str, const cons
 
 	for (auto&& pair : response.headers)
 	{
+        if (pair.key == http_key_content_size ||
+            pair.key == http_key_content_type ||
+            pair.key == http_key_host ||
+            pair.key == http_key_cookie_r)
+            continue;
+
 		ICY_ERROR(str.append("\r\n"_s));
 		ICY_ERROR(str.append(pair.key));
 		ICY_ERROR(str.append(": "_s));
@@ -775,6 +777,29 @@ error_type icy::to_string(const http_response& response, string& str, const cons
 		ICY_ERROR(str.append(cookie.value));
 	}
 	ICY_ERROR(str.append("\r\n\r\n"_s));
-	ICY_ERROR(str.append(string_view(reinterpret_cast<const char*>(body.data()), body.size())));
 	return {};
+}
+
+error_type icy::copy(const http_request& src, http_request& dst) noexcept
+{
+    dst.type = src.type;
+    dst.content = src.content;
+    ICY_ERROR(copy(src.url_path, dst.url_path));
+    ICY_ERROR(copy(src.url_sub, dst.url_sub));
+    ICY_ERROR(copy(src.url_args, dst.url_args));
+    ICY_ERROR(copy(src.headers, dst.headers));
+    ICY_ERROR(copy(src.cookies, dst.cookies));
+    ICY_ERROR(copy(src.host, dst.host));
+    ICY_ERROR(copy(src.body, dst.body));
+    ICY_ERROR(copy(src.body_args, dst.body_args));
+    return {};
+}
+error_type icy::copy(const http_response& src, http_response& dst) noexcept
+{
+    dst.type = src.type;
+    dst.herror = src.herror;
+    ICY_ERROR(copy(src.headers, dst.headers));
+    ICY_ERROR(copy(src.cookies, dst.cookies));
+    ICY_ERROR(copy(src.body, dst.body));
+    return {};
 }

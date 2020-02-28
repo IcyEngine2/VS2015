@@ -32,7 +32,6 @@ namespace icy
 		string(string&& rhs) noexcept;
 		~string() noexcept;
 		ICY_DEFAULT_MOVE_ASSIGN(type);
-        using string_view::compare;
 	public:
 		size_type capacity() const noexcept
 		{
@@ -54,10 +53,6 @@ namespace icy
 		error_type replace(const string_view find, const string_view replace) noexcept;
 		error_type reserve(const size_type capacity) noexcept;
 		error_type resize(const size_type size, const char symb = '\0') noexcept;
-		int compare(const string& rhs) const noexcept
-		{
-			return string_view::compare(rhs);
-		}
 	private:
 		char m_buffer[ICY_DEFAULT_STRING_BUFFER] = {};
         size_t m_capacity = 0;
@@ -240,7 +235,7 @@ namespace icy
 					while (k < len && ptr[k] >= '0' && ptr[k] <= '9')
 						++k;
 					size_t index = 0;
-					if (const auto error = string_view{ beg, ptr + k }.to_value_uint(index))
+					if (const auto error = to_value_uint(string_view{ beg, ptr + k }, index))
 						return error;
 					if (index > sizeof...(args))
 						return make_stdlib_error(std::errc::invalid_argument);
@@ -335,4 +330,6 @@ namespace icy
     }
     error_type to_lower(const string_view str, string& output) noexcept;
     error_type to_upper(const string_view str, string& output) noexcept;
+    error_type copy(const string_view src, string& dst) noexcept;
+    error_type copy(const string& src, string& dst) noexcept;
  }

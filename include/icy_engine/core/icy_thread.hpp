@@ -47,6 +47,7 @@ namespace icy
         }
         error_type launch() noexcept;
         error_type wait() noexcept;
+        error_type rename(const string_view name) noexcept;
     protected:
         virtual error_type run() = 0;
         virtual void cancel() noexcept

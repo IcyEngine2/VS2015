@@ -16,7 +16,7 @@
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>core</RootNamespace>
     <WindowsTargetPlatformVersion>10.0.17763.0</WindowsTargetPlatformVersion>
-    <ProjectName>core</ProjectName>
+    <ProjectName>icy_engine_core</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
@@ -48,11 +48,11 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <TargetName>icy_engine_$(ProjectName)d</TargetName>
+    <TargetName>$(ProjectName)d</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <TargetName>icy_engine_$(ProjectName)</TargetName>
+    <TargetName>$(ProjectName)</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -86,6 +86,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\..\source\icy_engine\core\icy_color.cpp" />
+    <ClCompile Include="..\..\..\source\icy_engine\core\icy_console.cpp" />
     <ClCompile Include="..\..\..\source\icy_engine\core\icy_event.cpp" />
     <ClCompile Include="..\..\..\source\icy_engine\core\icy_file.cpp" />
     <ClCompile Include="..\..\..\source\icy_engine\core\icy_input.cpp" />
@@ -100,6 +101,7 @@
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_array_view.hpp" />
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_atomic.hpp" />
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_color.hpp" />
+    <ClInclude Include="..\..\..\include\icy_engine\core\icy_console.hpp" />
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_core.hpp" />
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_event.hpp" />
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_file.hpp" />

@@ -57,29 +57,34 @@ namespace icy
 		internal	= 500,
 	};
 	struct http_request
-	{
-		error_type initialize(const string_view buffer) noexcept;		
+	{	
 		http_request_type type = http_request_type::none;
 		http_content_type content = http_content_type::none;
 		string url_path;
 		array<string> url_sub;
-		map<string, string> url_args;
-		map<string, string> headers;
-		map<string, string> cookies;
+        dictionary<string> url_args;
+        dictionary<string> headers;
+        dictionary<string> cookies;
 		string host;
-		string body;
-		map<string, string> body_args;
+		array<uint8_t> body;
+		dictionary<string> body_args;
 	};
 	struct http_response
 	{
-		error_type initialize(const string_view buffer, const_array_view<uint8_t>& body) noexcept;
 		http_error herror = http_error::success;
 		http_content_type type = http_content_type::none;
-		map<string, string> headers;
-		map<string, string> cookies;
+        dictionary<string> headers;
+        dictionary<string> cookies;
+        array<uint8_t> body;
 	};
 
 	http_content_type is_http_content_type(const string_view filename) noexcept;
 	error_type to_string(const http_request& request, string& str) noexcept;
-    error_type to_string(const http_response& response, string& str, const const_array_view<uint8_t> body = {}) noexcept;
+    error_type to_string(const http_response& response, string& str) noexcept;
+
+    error_type to_value(const string_view buffer, http_request& request) noexcept;
+    error_type to_value(const string_view buffer, http_response& response) noexcept;
+
+    error_type copy(const http_request& src, http_request& dst) noexcept;
+    error_type copy(const http_response& src, http_response& dst) noexcept;
 }

@@ -71,65 +71,70 @@ namespace icy
 		}
 		error_type push_back(const const_reference value) noexcept
 		{
-			return emplace_back(value);
+            value_type tmp;
+            ICY_ERROR(copy(value, tmp));
+			return emplace_back(std::move(tmp));
 		}
 		template<typename... arg_types>
 		error_type emplace_back(arg_types&& ... args) noexcept
 		{
-			if (const auto error = reserve(m_size + 1))
-				return error;
-
-			allocator_type::construct(m_ptr + m_size, std::forward<arg_types>(args)...);
+            ICY_ERROR(reserve(m_size + 1));
+            allocator_type::construct(m_ptr + m_size, std::forward<arg_types>(args)...);
 			++m_size;
 			return {};
 		}
 
 		template<typename iter_type>
-		error_type append(iter_type first, const iter_type last) noexcept
+		error_type append(std::move_iterator<iter_type> first, const std::move_iterator<iter_type> last) noexcept
 		{
-			if (const auto error = reserve(size() + std::distance(first, last)))
-				return error;
+            ICY_ERROR(reserve(size() + std::distance(first, last)));
 			for (; first != last; ++first)
-				allocator_type::construct(m_ptr + (m_size++), *first);
+				allocator_type::construct(m_ptr + (m_size++), std::move(*first));
 			return {};
 		}
+        template<typename iter_type>
+        error_type append(iter_type first, const iter_type last) noexcept
+        {
+            ICY_ERROR(reserve(size() + std::distance(first, last)));
+            for (; first != last; ++first)
+            {
+                T tmp;
+                ICY_ERROR(copy(*first, tmp));
+                allocator_type::construct(m_ptr + (m_size++), std::move(tmp));
+            }
+            return {};
+        }
 		error_type append(const std::initializer_list<T> list)
 		{
 			return append(
 				std::make_move_iterator(const_cast<pointer>(list.begin())),
 				std::make_move_iterator(const_cast<pointer>(list.end())));
 		}
-		template<typename rhs_type, typename = std::enable_if_t<is_container<rhs_type>::value>>
+		template<typename rhs_type>
 		error_type append(rhs_type&& rhs) noexcept
 		{
-			return append(
-				detail::try_make_move_begin(rhs),
-				detail::try_make_move_end(rhs));
+            return _append(std::is_rvalue_reference<decltype(rhs)>(), rhs);
 		}
-
 		template<typename iter_type>
 		error_type assign(iter_type first, iter_type last) noexcept
 		{
 			array tmp;
-			if (const auto error = tmp.append(first, last))
-				return error;
+            ICY_ERROR(tmp.append(first, last));
 			*this = std::move(tmp);
 			return {};
 		}
 		error_type assign(const std::initializer_list<T> list) noexcept
 		{
 			array tmp;
-			if (const auto error = tmp.append(list))
-				return error;
+            ICY_ERROR(tmp.append(list));
 			*this = std::move(tmp);
 			return {};
 		}
-		template<typename rhs_type, typename = std::enable_if_t<is_container<rhs_type>::value>>
+		template<typename rhs_type>
 		error_type assign(rhs_type&& rhs) noexcept
 		{
 			array tmp;
-			if (const auto error = tmp.append(std::forward<rhs_type>(rhs)))
-				return error;
+            ICY_ERROR(tmp.append(std::forward<rhs_type>(rhs)));
 			*this = std::move(tmp);
 			return {};
 		}
@@ -145,6 +150,16 @@ namespace icy
 				allocator_type::destroy(m_ptr + (--m_size));
 		}
 	private:
+        template<typename rhs_type>
+        error_type _append(std::true_type, rhs_type&& rhs) noexcept
+        {
+            return append(std::make_move_iterator(std::begin(rhs)), std::make_move_iterator(std::end(rhs)));          
+        }
+        template<typename rhs_type>
+        error_type _append(std::false_type, rhs_type&& rhs) noexcept
+        {
+            return append(std::begin(rhs), std::end(rhs));
+        }
 		error_type _reserve(const size_type capacity, const bool clear) noexcept
 		{
 			if (capacity > this->capacity())
@@ -171,5 +186,20 @@ namespace icy
     private:
         size_type m_capacity = 0_z;
 	};
+
+    template<typename T>
+    error_type copy(const const_array_view<T>& src, array<T>& dst) noexcept
+    {
+        array<T> tmp;
+        ICY_ERROR(tmp.assign(src));
+        dst = std::move(tmp);
+        return {};
+    }
+
+    template<typename T>
+    error_type copy(const array<T>& src, array<T>& dst) noexcept
+    {
+        return copy(const_array_view<T>(src), dst);
+    }
 
 }

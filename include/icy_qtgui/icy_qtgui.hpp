@@ -12,6 +12,10 @@
 
 #define ICY_GUI_ERROR(X) if (const auto error = (X)) return make_stdlib_error(static_cast<std::errc>(error)); return {};
 
+#ifndef ICY_QTGUI_STATIC
+#define ICY_QTGUI_STATIC 1
+#endif
+
 #if ICY_QTGUI_STATIC
 #define ICY_QTGUI_API
 #else
@@ -114,7 +118,7 @@ namespace icy
     };
     
     class gui_variant;
-    class gui_node : public detail::rel_ops<gui_node>
+    class gui_node
     {
     public:
         struct data_type
@@ -127,7 +131,9 @@ namespace icy
             virtual uint64_t model() const noexcept = 0;
             virtual gui_variant udata() const noexcept = 0;
         };
+        friend int compare(const gui_node& lhs, const gui_node& rhs) noexcept;
     public:
+        rel_ops(gui_node);
         gui_node() noexcept = default;
         gui_node(const gui_node& rhs) noexcept : _ptr(rhs._ptr)
         {
@@ -164,10 +170,6 @@ namespace icy
             else
                 return SIZE_MAX;
         }
-        int compare(const gui_node& rhs) const noexcept
-        {
-            return icy::compare(_ptr, rhs._ptr);
-        }
         uint64_t model() const noexcept
         {
             if (_ptr)
@@ -178,7 +180,11 @@ namespace icy
     public:
         data_type* _ptr = nullptr;
     };
-    
+    inline int compare(const gui_node& lhs, const gui_node& rhs) noexcept
+    {
+        return icy::compare(lhs._ptr, rhs._ptr);
+    }
+
     class gui_variant
     {
     public:
@@ -541,30 +547,37 @@ namespace icy
         return !!(uint32_t(lhs) & uint32_t(rhs));
     }
 
-    struct gui_widget : detail::rel_ops<gui_widget>
+
+    struct gui_widget
     {
-        int compare(const gui_widget rhs) const noexcept
-        {
-            return icy::compare(index, rhs.index);
-        }
+        friend int compare(const gui_widget& lhs, const gui_widget& rhs) noexcept;
+        rel_ops(gui_widget);
         uint64_t index = 0;
     };
-    struct gui_action : detail::rel_ops<gui_action>
+    struct gui_action
     {
-        int compare(const gui_action rhs) const noexcept
-        {
-            return icy::compare(index, rhs.index);
-        }
+        friend int compare(const gui_action& lhs, const gui_action& rhs) noexcept;
+        rel_ops(gui_action);
         uint64_t index = 0;
     };
-    struct gui_image : detail::rel_ops<gui_image>
+    struct gui_image
     {
-        int compare(const gui_image rhs) const noexcept
-        {
-            return icy::compare(index, rhs.index);
-        }
+        friend int compare(const gui_image& lhs, const gui_image& rhs) noexcept;
+        rel_ops(gui_image);
         uint64_t index = 0;
     };
+    inline int compare(const gui_widget& lhs, const gui_widget& rhs) noexcept
+    {
+        return icy::compare(lhs.index, rhs.index);
+    }
+    inline int compare(const gui_action& lhs, const gui_action& rhs) noexcept
+    {
+        return icy::compare(lhs.index, rhs.index);
+    }
+    inline int compare(const gui_image& lhs, const gui_image& rhs) noexcept
+    {
+        return icy::compare(lhs.index, rhs.index);
+    }
 
     struct gui_event
     {
@@ -698,7 +711,7 @@ namespace icy
     class gui_queue;
     //inline error_type create_gui(shared_ptr<gui_queue>& queue) noexcept;
 
-    class gui_queue : public event_queue
+    class gui_queue : public event_system
     {
         friend error_type create_gui(shared_ptr<gui_queue>& queue) noexcept;
         enum { tag };
@@ -706,7 +719,7 @@ namespace icy
     public:
         gui_queue(decltype(tag)) noexcept
         {
-            event_queue::filter(event_type::global_quit);
+            event_system::filter(event_type::global_quit);
         }
         ~gui_queue() noexcept override
         {
@@ -723,7 +736,7 @@ namespace icy
         {
             ICY_GUI_ERROR(m_system->wake());
         }
-        error_type loop() noexcept
+        error_type exec() noexcept override
         {
             while (true)
             {
@@ -863,14 +876,14 @@ namespace icy
         {
             ICY_ERROR(show(widget, true));
 
-            shared_ptr<event_loop> loop;
-            ICY_ERROR(event_loop::create(loop, event_type::gui_action));
+            shared_ptr<event_queue> loop;
+            ICY_ERROR(create_event_queue(loop, event_type::gui_action));
 
             auto timeout = max_timeout;
             while (true)
             {
                 event event;
-                if (const auto error = loop->loop(event, timeout))
+                if (const auto error = loop->pop(event, timeout))
                 {
                     if (error == make_stdlib_error(std::errc::timed_out))
                         break;

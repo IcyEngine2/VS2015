@@ -27,7 +27,11 @@ namespace icy
 	}
 
 	class string;
-	class string_iterator : public detail::rel_ops<string_iterator>
+    class string_iterator;
+    inline int compare(const string_iterator& lhs, const string_iterator& rhs) noexcept;
+    inline int compare(const string_view& lhs, const string_view& rhs) noexcept;
+
+	class string_iterator
 	{
 		friend string;
 		enum : uint8_t
@@ -55,6 +59,7 @@ namespace icy
 
 		}
 	public:
+        rel_ops(string_iterator);
         string_iterator& operator++() noexcept;
 		auto operator++(int) noexcept
 		{
@@ -102,18 +107,12 @@ namespace icy
             to_char(chr);
             return chr;
         }
-	public:
-		int compare(const string_iterator& rhs) const noexcept
-		{
-			return icy::compare(m_ptr, rhs.m_ptr);
-		}
 	private:
 		pointer m_ptr;
 		const pointer m_begin;
 		const pointer m_end;
 	};
-
-	class string_view : public detail::rel_ops<string_view>
+	class string_view
 	{
 		friend constexpr string_view operator""_s(const char*, size_t) noexcept;
 		friend string;
@@ -131,6 +130,7 @@ namespace icy
 		using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 		using reverse_iterator = std::reverse_iterator<iterator>;
 	public:
+        rel_ops(string_view);
 		string_view() noexcept : m_ptr{}, m_size{}
 		{
 
@@ -209,68 +209,19 @@ namespace icy
 		}
         const_iterator find(const string_view& rhs) const noexcept;
         const_iterator rfind(const string_view& rhs) const noexcept;
-		int compare(const string_view& rhs) const noexcept
-		{
-			return icy::compare(bytes(), rhs.bytes());
-		}
-        error_type to_utf16(wchar_t* const data, size_t* const size) const noexcept;
-        error_type to_value(float& value) const noexcept;
-        error_type to_value(double& value) const noexcept;
-        error_type to_value(bool& value) const noexcept;
-        error_type to_value(int64_t& value) const noexcept;
-		error_type to_value(int32_t& value) const noexcept
-		{
-			return to_value_int(value);
-		}
-		error_type to_value(int16_t& value) const noexcept
-		{
-			return to_value_int(value);
-		}
-		error_type to_value(int8_t& value) const noexcept
-		{
-			return to_value_int(value);
-		}
-        error_type to_value(uint64_t& value) const noexcept;
-		error_type to_value(uint32_t& value) const noexcept
-		{
-			return to_value_uint(value);
-		}
-		error_type to_value(uint16_t& value) const noexcept
-		{
-			return to_value_uint(value);
-		}
-		error_type to_value(uint8_t& value) const noexcept
-		{
-			return to_value_uint(value);
-		}
-		template<typename T>
-		error_type to_value_int(T& value) const noexcept
-		{
-			auto integer = 0i64;
-			ICY_ERROR(to_value(integer));
-			if (integer < std::numeric_limits<T>::min() || integer > std::numeric_limits<T>::max())
-				return make_stdlib_error(std::errc::illegal_byte_sequence);
-			value = T(integer);
-			return {};
-		}
-		template<typename T>
-		error_type to_value_uint(T& value) const noexcept
-		{
-			auto integer = 0ui64;
-			ICY_ERROR(to_value(integer));
-			if (integer > std::numeric_limits<T>::max())
-				return make_stdlib_error(std::errc::illegal_byte_sequence);
-			value = T(integer);
-			return {};
-		}
-        error_type to_value(std::chrono::system_clock::time_point& time, const bool local = true) const noexcept;
-        error_type to_value(clock_type::time_point& time, const bool local = true) const noexcept;
-        error_type to_value(guid& guid) const noexcept;
+        error_type to_utf16(wchar_t* const data, size_t* const size) const noexcept;        
 	protected:
 		pointer m_ptr;
 		size_type m_size;
 	};
-	static_assert(detail::has_member_compare<string_view, string_view>::value, "");
+    inline int compare(const string_iterator& lhs, const string_iterator& rhs) noexcept
+    {
+        return compare(static_cast<const char*>(lhs), static_cast<const char*>(rhs));
+    }
+    inline int compare(const string_view& lhs, const string_view& rhs) noexcept
+    {
+        return detail::compare_container(lhs.bytes(), rhs.bytes());
+    }
 
 	inline constexpr string_view operator""_s(const char* const ptr, const size_t size) noexcept
 	{
@@ -323,5 +274,71 @@ namespace icy
         return base64_decode(input.bytes(), array_view<uint8_t>{ as_bytes, sizeof(T) });
     }
 
-    size_t copy(const string_view src, array_view<char> dst) noexcept;
+    size_t strcopy(const string_view src, array_view<char> dst) noexcept;
+    inline size_t strcopy(const string_view src, array_view<uint8_t> dst) noexcept
+    {
+        return strcopy(src, array_view<char>(reinterpret_cast<char*>(dst.data()), dst.size()));
+    }
+    template<size_t N> inline size_t strcopy(const string_view src, char(&dst)[N]) noexcept
+    {
+        return strcopy(src, array_view<char>(dst));
+    }
+    template<size_t N> inline size_t strcopy(const string_view src, uint8_t(&dst)[N]) noexcept
+    {
+        return strcopy(src, array_view<uint8_t>(dst));
+    }
+    
+    error_type to_value(const string_view str, uint64_t& value) noexcept;
+    error_type to_value(const string_view str, int64_t& value) noexcept;
+    template<typename T>
+    error_type to_value_int(const string_view str, T& value) noexcept
+    {
+        auto integer = 0i64;
+        ICY_ERROR(to_value(str, integer));
+        if (integer < std::numeric_limits<T>::min() || integer > std::numeric_limits<T>::max())
+            return make_stdlib_error(std::errc::illegal_byte_sequence);
+        value = T(integer);
+        return {};
+    }
+    template<typename T>
+    error_type to_value_uint(const string_view str, T& value) noexcept
+    {
+        auto integer = 0ui64;
+        ICY_ERROR(to_value(str, integer));
+        if (integer > std::numeric_limits<T>::max())
+            return make_stdlib_error(std::errc::illegal_byte_sequence);
+        value = T(integer);
+        return {};
+    }
+    error_type to_value(const string_view str, float& value) noexcept;
+    error_type to_value(const string_view str, double& value) noexcept;
+    error_type to_value(const string_view str, bool& value) noexcept;
+    inline error_type to_value(const string_view str, int32_t& value) noexcept
+    {
+        return to_value_int(str, value);
+    }
+    inline error_type to_value(const string_view str, int16_t& value) noexcept
+    {
+        return to_value_int(str, value);
+    }
+    inline error_type to_value(const string_view str, int8_t& value) noexcept
+    {
+        return to_value_int(str, value);
+    }
+    inline error_type to_value(const string_view str, uint32_t& value) noexcept
+    {
+        return to_value_uint(str, value);
+    }
+    inline error_type to_value(const string_view str, uint16_t& value) noexcept
+    {
+        return to_value_uint(str, value);
+    }
+    inline error_type to_value(const string_view str, uint8_t& value) noexcept
+    {
+        return to_value_uint(str, value);
+    }
+    error_type to_value(const string_view str, std::chrono::system_clock::time_point& time, const bool local = true) noexcept;
+    error_type to_value(const string_view str, clock_type::time_point& time, const bool local = true) noexcept;
+    error_type to_value(const string_view str, guid& guid) noexcept;
+
 }
