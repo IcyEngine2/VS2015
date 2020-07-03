@@ -626,7 +626,11 @@ public:
 
 class qtgui_splitter : public QSplitter
 {
-    using QSplitter::QSplitter;
+public:
+    qtgui_splitter(const Qt::Orientation orientation, QWidget* parent) : QSplitter(orientation, parent)
+    {
+        QWidget::setSizePolicy(QSizePolicy::Policy::Expanding, QSizePolicy::Policy::Expanding);
+    }
 };
 class qtgui_tree_view : public QTreeView
 {
@@ -687,7 +691,7 @@ struct qtgui_node
     int32_t row = 0;
     int32_t col = 0;
     int32_t rowCount = 0;
-    int32_t colCount = 0;
+    int32_t colCount = 1;
     QString text;
     QIcon icon;
     QVariant udata;
@@ -902,21 +906,22 @@ bool qtgui_system::notify(QObject* object, QEvent* event) noexcept
                 qtgui_exit();
                 return 0;
             }
-            else if (event->type() == QEvent::Type::FocusIn || event->type() == QEvent::Type::FocusOut)
+            /*else if (event->type() == QEvent::Type::FocusIn || event->type() == QEvent::Type::FocusOut)
             {
                 const auto widget = qobject_cast<QWidget*>(object);
-                uint64_t index = widget ? widget->property(qtgui_property_name).toULongLong() : 0;
-                
-                auto node = new qtgui_event_node;
-                node->type = event_type::window_active;
-                node->args.widget.index = index;
-                node->args.data = event->type() == QEvent::Type::FocusIn;
-                m_queue.push(node);
-                qtgui_exit();
-
+                if (qobject_cast<QMenu*>(widget) == nullptr)
+                {
+                    const uint64_t index = widget ? widget->property(qtgui_property_name).toULongLong() : 0;
+                    auto node = new qtgui_event_node;
+                    node->type = event_type::window_active;
+                    node->args.widget.index = index;
+                    node->args.data = event->type() == QEvent::Type::FocusIn;
+                    m_queue.push(node);
+                    qtgui_exit();
+                }
                 output = QApplication::notify(object, event);
                 return 0;
-            }
+            }*/
             else if (event->type() == QEvent::Type::Quit)
             {
                 qtgui_exit();
@@ -1150,7 +1155,7 @@ uint32_t qtgui_system::wake() noexcept
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::loop(event_type& type, gui_event& args) noexcept
 {
@@ -1172,7 +1177,7 @@ uint32_t qtgui_system::loop(event_type& type, gui_event& args) noexcept
         }
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::create(gui_widget& widget, const gui_widget_type type, const gui_widget parent, const gui_widget_flag flags) noexcept
 {
@@ -1195,7 +1200,7 @@ uint32_t qtgui_system::create(gui_widget& widget, const gui_widget_type type, co
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::create(gui_widget& widget, HWND__* const win32, const gui_widget parent, const gui_widget_flag flags) noexcept
 {
@@ -1218,7 +1223,7 @@ uint32_t qtgui_system::create(gui_widget& widget, HWND__* const win32, const gui
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 
 uint32_t qtgui_system::create(gui_action& action, const string_view text) noexcept
@@ -1240,7 +1245,7 @@ uint32_t qtgui_system::create(gui_action& action, const string_view text) noexce
         }
         const auto event = new qtgui_event_create_action(action, make_string(text));
         qApp->postEvent(this, event);
-        return {};
+        return 0;
     }
     ICY_CATCH;
 }
@@ -1264,7 +1269,7 @@ uint32_t qtgui_system::create(gui_node& root) noexcept
         }
         const auto event = new qtgui_event_create_model(root);
         qApp->postEvent(this, event);
-        return {};
+        return 0;
     }
     ICY_CATCH;
 }
@@ -1300,7 +1305,7 @@ uint32_t qtgui_system::create(gui_image& image, const const_matrix_view<color> c
         }
         const auto event = new qtgui_event_create_image(image, std::move(qImage));
         qApp->postEvent(this, event);
-        return {};
+        return 0;
     }
     ICY_CATCH;
 }
@@ -1312,7 +1317,7 @@ uint32_t qtgui_system::insert(const gui_widget widget, const gui_insert args) no
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::insert(const gui_widget widget, const gui_action action) noexcept
 {
@@ -1322,7 +1327,7 @@ uint32_t qtgui_system::insert(const gui_widget widget, const gui_action action) 
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::insert_rows(const gui_node parent, const size_t offset, const size_t count) noexcept
 {
@@ -1334,7 +1339,7 @@ uint32_t qtgui_system::insert_rows(const gui_node parent, const size_t offset, c
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::insert_cols(const gui_node parent, const size_t offset, const size_t count) noexcept
 {
@@ -1346,7 +1351,7 @@ uint32_t qtgui_system::insert_cols(const gui_node parent, const size_t offset, c
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::remove_rows(const gui_node parent, const size_t offset, const size_t count) noexcept
 {
@@ -1358,7 +1363,7 @@ uint32_t qtgui_system::remove_rows(const gui_node parent, const size_t offset, c
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::remove_cols(const gui_node parent, const size_t offset, const size_t count) noexcept
 {
@@ -1370,7 +1375,7 @@ uint32_t qtgui_system::remove_cols(const gui_node parent, const size_t offset, c
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::move_rows(const gui_node node_src, const size_t offset_src, const size_t count, const gui_node node_dst, const size_t offset_dst) noexcept
 {
@@ -1383,7 +1388,7 @@ uint32_t qtgui_system::move_rows(const gui_node node_src, const size_t offset_sr
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::move_cols(const gui_node node_src, const size_t offset_src, const size_t count, const gui_node node_dst, const size_t offset_dst) noexcept
 {
@@ -1396,21 +1401,21 @@ uint32_t qtgui_system::move_cols(const gui_node node_src, const size_t offset_sr
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 gui_node qtgui_system::node(const gui_node parent, const size_t row, const size_t col) noexcept
 {
     try
     {
         if (!parent || row >= INT32_MAX || col >= INT32_MAX)
-            return {};
+            return gui_node();
         gui_node node;
         node._ptr = new qtgui_node_data(parent.model(), parent, uint32_t(row), uint32_t(col), gui_variant());
         return node;
     }
     catch (...)
     {
-        return {};
+        return gui_node();
     }
 }
 uint32_t qtgui_system::show(const gui_widget widget, const bool value) noexcept
@@ -1421,7 +1426,7 @@ uint32_t qtgui_system::show(const gui_widget widget, const bool value) noexcept
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::text(const gui_widget widget, const string_view text) noexcept
 {
@@ -1431,7 +1436,7 @@ uint32_t qtgui_system::text(const gui_widget widget, const string_view text) noe
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::text(const gui_widget tabs, const gui_widget widget, const string_view text) noexcept
 {
@@ -1441,7 +1446,7 @@ uint32_t qtgui_system::text(const gui_widget tabs, const gui_widget widget, cons
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::text(const gui_node node, const string_view text) noexcept
 {
@@ -1451,7 +1456,7 @@ uint32_t qtgui_system::text(const gui_node node, const string_view text) noexcep
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::udata(const gui_node node, const gui_variant& var) noexcept
 {
@@ -1461,7 +1466,7 @@ uint32_t qtgui_system::udata(const gui_node node, const gui_variant& var) noexce
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::icon(const gui_node node, const gui_image image) noexcept
 {
@@ -1471,7 +1476,7 @@ uint32_t qtgui_system::icon(const gui_node node, const gui_image image) noexcept
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::icon(const gui_widget widget, const gui_image image) noexcept
 {
@@ -1481,7 +1486,7 @@ uint32_t qtgui_system::icon(const gui_widget widget, const gui_image image) noex
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::vheader(const gui_node node, const uint32_t index, const string_view text) noexcept
 {
@@ -1491,7 +1496,7 @@ uint32_t qtgui_system::vheader(const gui_node node, const uint32_t index, const 
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::hheader(const gui_node node, const uint32_t index, const string_view text) noexcept
 {
@@ -1501,7 +1506,7 @@ uint32_t qtgui_system::hheader(const gui_node node, const uint32_t index, const 
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::bind(const gui_action action, const gui_widget widget) noexcept
 {
@@ -1511,7 +1516,7 @@ uint32_t qtgui_system::bind(const gui_action action, const gui_widget widget) no
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::bind(const gui_widget widget, const gui_node node) noexcept
 {
@@ -1521,7 +1526,7 @@ uint32_t qtgui_system::bind(const gui_widget widget, const gui_node node) noexce
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::enable(const gui_action action, const bool value) noexcept
 {
@@ -1531,7 +1536,7 @@ uint32_t qtgui_system::enable(const gui_action action, const bool value) noexcep
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::enable(const gui_widget widget, const bool value) noexcept
 {
@@ -1541,7 +1546,7 @@ uint32_t qtgui_system::enable(const gui_widget widget, const bool value) noexcep
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::modify(const gui_widget widget, const string_view args) noexcept
 {
@@ -1552,7 +1557,7 @@ uint32_t qtgui_system::modify(const gui_widget widget, const string_view args) n
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::destroy(const gui_widget widget) noexcept
 {
@@ -1562,7 +1567,7 @@ uint32_t qtgui_system::destroy(const gui_widget widget) noexcept
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::destroy(const gui_action action) noexcept
 {
@@ -1572,7 +1577,7 @@ uint32_t qtgui_system::destroy(const gui_action action) noexcept
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::destroy(const gui_node root) noexcept
 {
@@ -1582,7 +1587,7 @@ uint32_t qtgui_system::destroy(const gui_node root) noexcept
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::destroy(const gui_image image) noexcept
 {
@@ -1592,7 +1597,7 @@ uint32_t qtgui_system::destroy(const gui_image image) noexcept
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::clear(const gui_node root) noexcept
 {
@@ -1602,7 +1607,7 @@ uint32_t qtgui_system::clear(const gui_node root) noexcept
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::scroll(const gui_widget widget, const gui_node node) noexcept
 {
@@ -1612,7 +1617,7 @@ uint32_t qtgui_system::scroll(const gui_widget widget, const gui_node node) noex
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::scroll(const gui_widget tabs, const gui_widget widget) noexcept
 {
@@ -1622,7 +1627,7 @@ uint32_t qtgui_system::scroll(const gui_widget tabs, const gui_widget widget) no
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 uint32_t qtgui_system::input(const gui_widget widget, const input_message& msg) noexcept
 {
@@ -1632,7 +1637,7 @@ uint32_t qtgui_system::input(const gui_widget widget, const input_message& msg) 
         qApp->postEvent(this, event);
     }
     ICY_CATCH;
-    return {};
+    return 0;
 }
 
 std::errc qtgui_system::process(const qtgui_event_create_widget& event)
@@ -1907,7 +1912,7 @@ std::errc qtgui_system::process(const qtgui_event_create_widget& event)
     }
 
     m_widgets[event.widget.index] = widget;
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_create_win32& event)
 {
@@ -1957,7 +1962,7 @@ std::errc qtgui_system::process(const qtgui_event_create_win32& event)
     }
 
     if (!widget)
-        return {};
+        return std::errc(0);
 
     if (event.flags & gui_widget_flag::auto_insert)
     {
@@ -1977,7 +1982,7 @@ std::errc qtgui_system::process(const qtgui_event_create_win32& event)
     //widget->setFocusPolicy(Qt::FocusPolicy::NoFocus);
 
     m_widgets[event.widget.index] = widget;
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_create_action& event)
 {
@@ -1997,7 +2002,7 @@ std::errc qtgui_system::process(const qtgui_event_create_action& event)
             m_queue.push(node);
             qtgui_exit();
         });
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_create_model& event)
 {
@@ -2007,7 +2012,7 @@ std::errc qtgui_system::process(const qtgui_event_create_model& event)
     auto model = new qtgui_model(&m_root);
     model->setProperty(qtgui_property_name, event.root.model());
     m_models[event.root.model()] = model;
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_create_image& event)
 {
@@ -2017,7 +2022,7 @@ std::errc qtgui_system::process(const qtgui_event_create_image& event)
     auto image = new QIcon;
     m_images[event.image.index] = image;
     image->addPixmap(QPixmap::fromImage(event.data));
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_insert_widget& event)
 {
@@ -2044,7 +2049,7 @@ std::errc qtgui_system::process(const qtgui_event_insert_widget& event)
     {
         return std::errc::invalid_argument;
     }
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_insert_action& event)
 {
@@ -2076,7 +2081,7 @@ std::errc qtgui_system::process(const qtgui_event_insert_action& event)
     {
         menubar->addAction(action);
     }
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_insert_model_rows& event)
 {
@@ -2090,7 +2095,7 @@ std::errc qtgui_system::process(const qtgui_event_insert_model_rows& event)
     if (!model->insertRows(event.offset, event.count, model->index(event.node)))
         return std::errc::invalid_argument;
     
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_insert_model_cols& event)
 {
@@ -2104,7 +2109,7 @@ std::errc qtgui_system::process(const qtgui_event_insert_model_cols& event)
     if (!model->insertColumns(event.offset, event.count, model->index(event.node)))
         return std::errc::invalid_argument;
 
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_remove_model_rows& event)
 {
@@ -2118,7 +2123,7 @@ std::errc qtgui_system::process(const qtgui_event_remove_model_rows& event)
     if (!model->removeRows(event.offset, event.count, model->index(event.node)))
         return std::errc::invalid_argument;
 
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_remove_model_cols& event)
 {
@@ -2132,7 +2137,7 @@ std::errc qtgui_system::process(const qtgui_event_remove_model_cols& event)
     if (!model->removeColumns(event.offset, event.count, model->index(event.node)))
         return std::errc::invalid_argument;
 
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_move_model_rows& event)
 {
@@ -2149,7 +2154,7 @@ std::errc qtgui_system::process(const qtgui_event_move_model_rows& event)
         event.offset_src, event.count, model->index(event.node_dst), event.offset_dst))
         return std::errc::invalid_argument;
 
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_move_model_cols& event)
 {
@@ -2166,7 +2171,7 @@ std::errc qtgui_system::process(const qtgui_event_move_model_cols& event)
         event.offset_src, event.count, model->index(event.node_dst), event.offset_dst))
         return std::errc::invalid_argument;
 
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_show& event)
 {
@@ -2204,7 +2209,7 @@ std::errc qtgui_system::process(const qtgui_event_show& event)
     else
     {*/
     //}
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_text_widget& event)
 {
@@ -2239,7 +2244,7 @@ std::errc qtgui_system::process(const qtgui_event_text_widget& event)
     {
         widget->setWindowTitle(event.text);
     }
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_text_tabs& event)
 {
@@ -2257,7 +2262,7 @@ std::errc qtgui_system::process(const qtgui_event_text_tabs& event)
         if (tabs->widget(k) == widget)
         {
             tabs->setTabText(k, event.text);
-            return {};
+            return std::errc(0);
         }
     }
     return std::errc::invalid_argument;
@@ -2274,7 +2279,7 @@ std::errc qtgui_system::process(const qtgui_event_text_model& event)
     const auto qIndex = model->index(event.node);
     if (!model->setData(qIndex, event.text, Qt::ItemDataRole::DisplayRole))
         return std::errc::invalid_argument;
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_udata_model& event)
 {
@@ -2288,7 +2293,7 @@ std::errc qtgui_system::process(const qtgui_event_udata_model& event)
     const auto qIndex = model->index(event.node);
     if (!model->setData(qIndex, event.var, Qt::ItemDataRole::UserRole))
         return std::errc::invalid_argument;
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_icon_model& event)
 {
@@ -2304,7 +2309,7 @@ std::errc qtgui_system::process(const qtgui_event_icon_model& event)
     const auto qIndex = model->index(event.node);
     if (!model->setData(qIndex, *image, Qt::ItemDataRole::DecorationRole))
         return std::errc::invalid_argument;
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_icon_widget& event)
 {
@@ -2329,7 +2334,7 @@ std::errc qtgui_system::process(const qtgui_event_icon_widget& event)
     {
         return std::errc::invalid_argument;
     }
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_text_header& event)
 {
@@ -2342,7 +2347,7 @@ std::errc qtgui_system::process(const qtgui_event_text_header& event)
 
     if (!model->setHeaderData(event.index, event.orientation, event.text, Qt::ItemDataRole::DisplayRole))
         return std::errc::invalid_argument;
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_bind_action& event)
 {
@@ -2360,7 +2365,7 @@ std::errc qtgui_system::process(const qtgui_event_bind_action& event)
         action->setMenu(menu);
     else
         return std::errc::invalid_argument;
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_bind_widget& event)
 {
@@ -2413,7 +2418,7 @@ std::errc qtgui_system::process(const qtgui_event_bind_widget& event)
     }
     else
         return std::errc::invalid_argument;
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_enable_action& event)
 {
@@ -2425,7 +2430,7 @@ std::errc qtgui_system::process(const qtgui_event_enable_action& event)
         return std::errc::invalid_argument;
 
     action->setEnabled(event.value);
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_enable_widget& event)
 {
@@ -2447,7 +2452,7 @@ std::errc qtgui_system::process(const qtgui_event_enable_widget& event)
         lineEdit->setReadOnly(!event.value);
     }
 
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_modify_widget& event)
 {
@@ -2539,8 +2544,7 @@ std::errc qtgui_system::process(const qtgui_event_modify_widget& event)
         }
     }
     */
-    
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_destroy_widget& event)
 {
@@ -2551,26 +2555,30 @@ std::errc qtgui_system::process(const qtgui_event_destroy_widget& event)
     if (!widget)
         return std::errc::invalid_argument;
 
-    if (const auto window = widget->property(qtgui_property_hwnd_window).value<QWindow*>())
-    {
-        window->setParent(nullptr);
-        window->setFlag(Qt::WindowType::Window);        
-        widget->setParent(nullptr);
-        widget->setAttribute(Qt::WidgetAttribute::WA_DeleteOnClose);
-
-        const auto hwnd = reinterpret_cast<HWND__*>(window->winId());
-        m_win32_style(hwnd, -20, widget->property(qtgui_property_hwnd_xstyle).toLongLong());        
-    }
-    else
+    const auto windowProperty = widget->property(qtgui_property_hwnd_window);
+    if (windowProperty.isNull())
     {
         widget->hide();
         widget->setParent(nullptr);
         widget->deleteLater();
     }
+    else
+    {
+        const auto window = windowProperty.value<QWindow*>();
+        if (window)
+        {
+            window->setParent(nullptr);
+            window->setFlag(Qt::WindowType::Window);
+            widget->setParent(nullptr);
+            widget->setAttribute(Qt::WidgetAttribute::WA_DeleteOnClose);
+
+            const auto hwnd = reinterpret_cast<HWND__*>(window->winId());
+            m_win32_style(hwnd, -20, widget->property(qtgui_property_hwnd_xstyle).toLongLong());
+        }
+    }
     m_widgets[event.widget.index] = nullptr;
     m_free_widgets.push_back(event.widget.index);
-
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_destroy_action& event)
 {
@@ -2584,8 +2592,7 @@ std::errc qtgui_system::process(const qtgui_event_destroy_action& event)
     action->deleteLater();
     m_actions[event.action.index] = nullptr;
     m_free_actions.push_back(event.action.index);
-
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_destroy_model& event)
 {
@@ -2598,8 +2605,8 @@ std::errc qtgui_system::process(const qtgui_event_destroy_model& event)
 
     model->deleteLater();
     m_models[event.root.model()] = nullptr;
-    m_free_models.push_back(event.root.model());
-    return {};
+    m_free_models.push_back(event.root.model()); 
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_destroy_image& event)
 {
@@ -2613,7 +2620,7 @@ std::errc qtgui_system::process(const qtgui_event_destroy_image& event)
     delete image;
     m_images[event.image.index] = nullptr;
     m_free_models.push_back(event.image.index);
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_clear_model& event)
 {
@@ -2625,7 +2632,7 @@ std::errc qtgui_system::process(const qtgui_event_clear_model& event)
         return std::errc::invalid_argument;
 
     model->reset();
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_scroll& event)
 {
@@ -2660,7 +2667,7 @@ std::errc qtgui_system::process(const qtgui_event_scroll& event)
     }
     else
         return std::errc::invalid_argument;
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_scroll_tabs& event)
 {
@@ -2674,7 +2681,7 @@ std::errc qtgui_system::process(const qtgui_event_scroll_tabs& event)
         return std::errc::invalid_argument;
 
     tabs->setCurrentWidget(widget);
-    return {};
+    return std::errc(0);
 }
 std::errc qtgui_system::process(const qtgui_event_input& event)
 {
@@ -2775,7 +2782,7 @@ std::errc qtgui_system::process(const qtgui_event_input& event)
     }*/
 
     //QApplication::sendEvent(widget, event);
-    return {};
+    return std::errc(0);
 }
 
 QModelIndex qtgui_model::index(const gui_node gui_index) const
@@ -3230,7 +3237,7 @@ QVariant qtgui_make_variant(const gui_variant& var)
         return QString::fromUtf8(bytes.data(), static_cast<int>(bytes.size()));
     }
     }
-    return {};
+    return QVariant();
 }
 std::errc qtgui_make_variant(const QVariant& qvar, gui_variant& var)
 {
@@ -3296,7 +3303,7 @@ std::errc qtgui_make_variant(const QVariant& qvar, gui_variant& var)
     if (!ok)
         return std::errc::invalid_argument;
 
-    return {};
+    return std::errc(0);
 }
 
 #undef ICY_GUI_ERROR
@@ -3333,7 +3340,11 @@ uint32_t ICY_QTGUI_API icy_gui_system_create(const int version, gui_system*& sys
         qtapp_argc = 1;
         qtapp_argv = args;
         system = new qtgui_system;
-        return 0;
+
+        QTimer timer;
+        QObject::connect(&timer, &QTimer::timeout, [] { qApp->exit(0); });
+        timer.start();
+        return qApp->exec();
     }
     ICY_CATCH;
 }

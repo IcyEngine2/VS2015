@@ -46,7 +46,7 @@ error_type event_data::create(const event_type type, event_system* const source,
         return make_stdlib_error(std::errc::not_enough_memory);
 
     new (new_event) event_data(type, make_shared_from_this(source));
-    return {};
+    return error_type();
 }
 void event_system::filter(const uint64_t mask) noexcept
 {
@@ -115,7 +115,7 @@ error_type event_system::post(event_data& event) noexcept
     event.m_ref.fetch_add(1, std::memory_order_release);
     m_queue.push(new_ptr);
     ICY_ERROR(signal(event));
-    return {};
+    return error_type();
 }
 detail::rw_spin_lock event_system::g_lock;
 event_system* event_system::g_list;
@@ -127,7 +127,7 @@ error_type icy::create_event_queue(shared_ptr<event_queue>& queue, const uint64_
     ICY_ERROR(new_queue->m_mutex.initialize());
     new_queue->filter(mask);
     queue = std::move(new_queue);
-    return {};
+    return error_type();
 }
 error_type event_queue::pop(event& event, const duration_type timeout) noexcept
 {
@@ -138,7 +138,7 @@ error_type event_queue::pop(event& event, const duration_type timeout) noexcept
             break;
         ICY_ERROR(m_cvar.wait(m_mutex, timeout));
     }
-    return {};
+    return error_type();
 }
 
 string_view icy::to_string(const event_type type) noexcept

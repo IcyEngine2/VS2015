@@ -87,8 +87,8 @@
     <ClCompile Include="..\..\..\source\icy_engine\utility\icy_database.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\..\source\icy_dcl\include\icy_dcl.hpp" />
-    <ClInclude Include="..\..\..\source\icy_dcl\include\icy_dcl_system.hpp" />
+    <ClInclude Include="..\..\..\source\icy_dcl\core\icy_dcl.hpp" />
+    <ClInclude Include="..\..\..\source\icy_dcl\core\icy_dcl_system.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

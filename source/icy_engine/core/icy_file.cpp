@@ -46,9 +46,21 @@ error_type file_info::initialize(const string_view path) noexcept
 		return last_system_error();
 
 	file_info_create(stat, *this);
-	return {};
+	return error_type();
 }
 
+error_type file::remove(const string_view path) noexcept
+{
+    array<wchar_t> wpath;
+    ICY_ERROR(to_utf16(path, wpath));
+    if (!DeleteFileW(wpath.data()))
+    {
+        const auto error = last_system_error();
+        if (error == make_system_error(make_system_error_code(ERROR_FILE_NOT_FOUND)))
+            return make_stdlib_error(std::errc::no_such_file_or_directory);
+    }
+    return error_type();
+}
 error_type file::replace(const string_view src, const string_view dst) noexcept
 {
     array<wchar_t> wsrc;
@@ -58,7 +70,17 @@ error_type file::replace(const string_view src, const string_view dst) noexcept
     if (!MoveFileExW(wsrc.data(), wdst.data(), 
         MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED | MOVEFILE_WRITE_THROUGH))
         return last_system_error();
-    return {};
+    return error_type();
+}
+error_type file::copy(const string_view src, const string_view dst) noexcept
+{
+    array<wchar_t> wsrc;
+    array<wchar_t> wdst;
+    ICY_ERROR(to_utf16(src, wsrc));
+    ICY_ERROR(to_utf16(dst, wdst));
+    if (!CopyFileW(wsrc.data(), wdst.data(), FALSE))
+        return last_system_error();
+    return error_type();
 }
 error_type file::tmpname(string& str) noexcept
 {
@@ -94,7 +116,7 @@ error_type file::open(const string_view path, const file_access access, const fi
 	close();
 	file_info_create(stat, m_info);
 	std::swap(m_handle, handle);
-	return {};
+	return error_type();
 }
 void file::close() noexcept
 {
@@ -111,7 +133,7 @@ error_type file::read(void* data, size_t& size) noexcept
 	if (!ReadFile(m_handle, data, uint32_t(size), &count, nullptr))
 		return last_system_error();
 	size = count;
-	return {};
+	return error_type();
 }
 error_type file::append(const void* data, size_t size) noexcept
 {
@@ -123,13 +145,13 @@ error_type file::append(const void* data, size_t size) noexcept
 	}
 	if (size)
 		return last_system_error();
-	return {};
+	return error_type();
 }
 error_type file::text(const size_t max, array<string>& lines) noexcept
 {
 	lines.clear();
 	if (!m_info.size)
-		return {};
+		return error_type();
 
 	const auto buffer_size = 4096;
 	struct buffer_type { char bytes[buffer_size]; };
@@ -141,7 +163,7 @@ error_type file::text(const size_t max, array<string>& lines) noexcept
 	const auto next_line = [this, &lines, max, &buffers, &beg, &cur, buffer_size]() -> error_type
 	{
 		if (beg >= m_info.size || lines.size() >= max)
-			return {};
+			return error_type();
 
 		string line;
 		const auto beg_index = beg / buffer_size;
@@ -177,7 +199,7 @@ error_type file::text(const size_t max, array<string>& lines) noexcept
 			cur += 1;
 		}
 		beg = cur;
-		return {};
+		return error_type();
 	};
 
 	while (cur < m_info.size && lines.size() < max)
@@ -210,7 +232,7 @@ error_type file::text(const size_t max, array<string>& lines) noexcept
 		if (chr == '\r' || chr == '\n')
 			lines.push_back(string{});
 	}
-	return {};
+	return error_type();
 }
 
 error_type file_const_map::initialize(const file& file, const bool readonly) noexcept
@@ -222,7 +244,7 @@ error_type file_const_map::initialize(const file& file, const bool readonly) noe
         return last_system_error();
     ICY_SCOPE_EXIT{ CloseHandle(handle); };
     std::swap(m_handle , handle);
-    return {};
+    return error_type();
 }
 file_const_map::~file_const_map() noexcept
 {
@@ -239,7 +261,7 @@ error_type file_const_view::initialize(const file_const_map& map, const size_t o
 
     ICY_SCOPE_EXIT{ UnmapViewOfFile(ptr); };
     std::swap(m_ptr, ptr);
-    return {};
+    return error_type();
 }
 file_const_view::~file_const_view() noexcept
 {
@@ -256,7 +278,7 @@ error_type file_view::initialize(const file_map& map, const size_t offset, const
 
     ICY_SCOPE_EXIT{ UnmapViewOfFile(ptr); };
     std::swap(m_ptr, ptr);
-    return {};
+    return error_type();
 }
 file_view::~file_view() noexcept
 {
@@ -328,7 +350,7 @@ static error_type enum_files(string_view path, const string_view name_prefix, co
 			return error;
 		}
 	}
-	return {};
+	return error_type();
 }
 error_type icy::enum_files(const string_view path, array<string>& files) noexcept
 {
@@ -395,7 +417,7 @@ static error_type file_dialog(string& str, const const_array_view<dialog_filter>
     
     const auto hr = dialog->Show(nullptr);
     if (uint32_t(hr) == make_system_error_code(ERROR_CANCELLED))
-        return {};
+        return error_type();
     ICY_COM_ERROR(hr);
 
     com_ptr<IShellItem> item;
@@ -404,7 +426,26 @@ static error_type file_dialog(string& str, const const_array_view<dialog_filter>
     wchar_t* ptr = nullptr;
     ICY_COM_ERROR(item->GetDisplayName(SIGDN_DESKTOPABSOLUTEPARSING, &ptr));
     ICY_ERROR(to_string(const_array_view<wchar_t>(ptr, ptr ? wcslen(ptr) : 0), str));
-    return {};
+    if (!str.empty())
+    {
+        auto type_index = 0u;
+        ICY_COM_ERROR(dialog->GetFileTypeIndex(&type_index));
+        if (type_index && type_index <= filters.size() && !(options & FOS_FILEMUSTEXIST))
+        {
+            auto& filter = filters[type_index - 1].spec;
+            auto it = filter.begin();
+            while (it != filter.end())
+            {
+                char32_t chr = 0;
+                ICY_ERROR(it.to_char(chr));
+                if (chr == '.')
+                    break;
+                ++it;
+            }
+            ICY_ERROR(str.append({ it, filter.end() }));
+        }
+    }
+    return error_type();
 }
 
 error_type icy::dialog_open_file(string& file_name,const const_array_view<dialog_filter> filters) noexcept
@@ -511,5 +552,5 @@ error_type icy::make_directory(const string_view path) noexcept
         else
             return make_stdlib_error(std::errc(errno));
     }
-    return {};
+    return error_type();
 }

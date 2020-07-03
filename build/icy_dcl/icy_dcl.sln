@@ -7,8 +7,14 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_dcl_core", "core\icy_dc
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_dcl_gui", "gui\icy_dcl_gui.vcxproj", "{54E40991-8DE6-44DD-A360-41E5FE0AA310}"
 	ProjectSection(ProjectDependencies) = postProject
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC} = {B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}
 		{D0243340-34D7-439D-8769-01DA17372727} = {D0243340-34D7-439D-8769-01DA17372727}
+		{4D337F45-E466-4650-9782-63FAEA81F1B1} = {4D337F45-E466-4650-9782-63FAEA81F1B1}
 	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_qtgui", "..\icy_qtgui\icy_qtgui.vcxproj", "{4D337F45-E466-4650-9782-63FAEA81F1B1}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_engine_core", "..\icy_engine\core\core.vcxproj", "{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -24,6 +30,14 @@ Global
 		{54E40991-8DE6-44DD-A360-41E5FE0AA310}.Debug|x64.Build.0 = Debug|x64
 		{54E40991-8DE6-44DD-A360-41E5FE0AA310}.Release|x64.ActiveCfg = Debug|x64
 		{54E40991-8DE6-44DD-A360-41E5FE0AA310}.Release|x64.Build.0 = Debug|x64
+		{4D337F45-E466-4650-9782-63FAEA81F1B1}.Debug|x64.ActiveCfg = Debug|x64
+		{4D337F45-E466-4650-9782-63FAEA81F1B1}.Debug|x64.Build.0 = Debug|x64
+		{4D337F45-E466-4650-9782-63FAEA81F1B1}.Release|x64.ActiveCfg = Release|x64
+		{4D337F45-E466-4650-9782-63FAEA81F1B1}.Release|x64.Build.0 = Release|x64
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}.Debug|x64.ActiveCfg = Debug|x64
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}.Debug|x64.Build.0 = Debug|x64
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}.Release|x64.ActiveCfg = Release|x64
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

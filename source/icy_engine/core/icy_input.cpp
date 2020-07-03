@@ -393,17 +393,17 @@ error_type icy::to_string(const icy::key_mod mod, string& str) noexcept
             ICY_ERROR(str.append(string));
             ICY_ERROR(str.append(" + "_s));
         }
-        return {};
+        return error_type();
     };
     ICY_ERROR(func(key_mod::lctrl, key_mod::rctrl, "Ctrl"_s));
     ICY_ERROR(func(key_mod::lalt, key_mod::ralt, "Alt"_s));
     ICY_ERROR(func(key_mod::lshift, key_mod::rshift, "Shift"_s));
-    return {};
+    return error_type();
 }
 error_type icy::to_string(const input_message& input, string& str) noexcept
 {
 	if (input.type == input_type::active || input.type == input_type::text || input.key == key::none)
-		return {};
+		return error_type();
 
     ICY_ERROR(to_string(key_mod(input.mods), str));
 	for (auto&& pair : key_array)

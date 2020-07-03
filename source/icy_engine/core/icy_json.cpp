@@ -44,7 +44,7 @@ static error_type json_to_integer(const json& json, T& value) noexcept
         value = min;
     else
         value = T(integer);
-    return {};
+    return error_type();
 }
 
 json::json(json&& rhs) noexcept : m_type(rhs.m_type)
@@ -161,7 +161,7 @@ error_type json::create(const string_view str, json& parent, const const_array_v
 		break;
 	}
 	}
-	return {};
+	return error_type();
 }
 error_type json::get(json_type_boolean& value) const noexcept
 {
@@ -180,7 +180,7 @@ error_type json::get(json_type_boolean& value) const noexcept
         value = false;
         return make_stdlib_error(std::errc::invalid_argument);
     }
-    return {};
+    return error_type();
 }
 error_type json::get(uint8_t& value) const noexcept
 {
@@ -202,7 +202,7 @@ error_type json::get(uint64_t& value) const noexcept
         value = 0;
     else
         value = uint64_t(integer);
-    return {};
+    return error_type();
 }
 error_type json::get(int8_t& value) const noexcept
 {
@@ -233,7 +233,7 @@ error_type json::get(int64_t& value) const noexcept
         value = 0;
         return make_stdlib_error(std::errc::invalid_argument);
     }
-    return {};
+    return error_type();
 }
 error_type json::get(float& value) const noexcept
 {
@@ -255,7 +255,7 @@ error_type json::get(float& value) const noexcept
     {
         value = float(ext_value);
     }
-    return {};
+    return error_type();
 }
 error_type json::get(double& value) const noexcept
 {
@@ -274,7 +274,7 @@ error_type json::get(double& value) const noexcept
         value = 0;
         return make_stdlib_error(std::errc::invalid_argument);
     }
-    return {};
+    return error_type();
 }
 string_view json::get() const noexcept
 {
@@ -339,7 +339,7 @@ error_type json::insert(const string_view key, json&& json) noexcept
         {
             *ptr = std::move(json);
         }
-        return {};
+        return error_type();
     }
     return make_stdlib_error(std::errc::invalid_argument);
 }
@@ -348,7 +348,7 @@ error_type json::insert(const string_view key, const string_view value) noexcept
     string str;
     ICY_ERROR(to_string(value, str));
     ICY_ERROR(insert(key, json(std::move(str))));
-    return {};
+    return error_type();
 }
 error_type json::push_back(json&& json) noexcept
 {
@@ -370,7 +370,7 @@ const_array_view<string> json::keys() const noexcept
 {
     if (m_type == json_type::object)
         return m_object.keys();
-    return {};
+    return const_array_view<string>();
 }
 const_array_view<json> json::vals() const noexcept
 {
@@ -378,7 +378,7 @@ const_array_view<json> json::vals() const noexcept
         return m_object.vals();
     else if (m_type == json_type::array)
         return m_array;
-    return {};
+    return const_array_view<json>();
 }
 
 static error_type to_string(const json& json, string& str, const string_view tab, const string_view prefix) noexcept
@@ -472,7 +472,7 @@ static error_type to_string(const json& json, string& str, const string_view tab
     default:
         break;
     }
-    return {};
+    return error_type();
 }
 error_type icy::to_string(const json& json, string& str, const string_view tab) noexcept
 {
@@ -493,7 +493,7 @@ error_type icy::to_value(const string_view str, json& root) noexcept
         else if (count < 0)
             return make_stdlib_error(std::errc::illegal_byte_sequence);
         else if (count == 0)
-            return {};
+            return error_type();
         else if (tokens.size() == size_t(count))
             break;
         ICY_ERROR(tokens.resize(size_t(count)));
@@ -555,5 +555,5 @@ error_type icy::copy(const json& src, json& dst) noexcept
         break;
     }
     }
-    return {};
+    return error_type();
 }

@@ -187,7 +187,7 @@ error_type render_svg_system::initialize() noexcept
 		return make_stdlib_error(std::errc::function_not_supported);
 	}
 #endif
-	return {};
+	return error_type();
 }
 float render_svg_system::dpi() const noexcept
 {
@@ -250,7 +250,7 @@ error_type render_svg_font::enumerate(array<string>& fonts) noexcept
 		}
 	}
 	fonts = std::move(new_fonts);
-	return {};
+	return error_type();
 }
 render_svg_font::render_svg_font(const render_svg_font& rhs) noexcept : data(rhs.data)
 {
@@ -267,7 +267,7 @@ error_type render_svg_font::initialize(const render_svg_font_data& base) noexcep
 	ICY_ERROR(any_system_initialize(new_data, base));
 	shutdown();
 	data = new_data;
-	return {};
+	return error_type();
 }
 error_type render_svg_font::data_type::initialize(const render_svg_font_data& font) noexcept
 {
@@ -291,7 +291,7 @@ error_type render_svg_font::data_type::initialize(const render_svg_font_data& fo
 		DWRITE_TRIMMING desc{ stack.trimming };
 		ICY_COM_ERROR(m_format->SetTrimming(&desc, nullptr));
 	}
-	return {};
+	return error_type();
 }
 render_svg_geometry::render_svg_geometry(const render_svg_geometry& rhs) noexcept : data(rhs.data)
 {
@@ -308,7 +308,7 @@ error_type render_svg_geometry::initialize(const render_d2d_matrix& transform, c
 	ICY_ERROR(any_system_initialize(new_data, transform, color, width, shape));
 	shutdown();
 	data = new_data;
-	return {};
+	return error_type();
 }
 error_type render_svg_geometry::initialize(const render_d2d_matrix& transform, const color color, const render_svg_font font, const string_view text) noexcept
 {
@@ -316,7 +316,7 @@ error_type render_svg_geometry::initialize(const render_d2d_matrix& transform, c
 	ICY_ERROR(any_system_initialize(new_data, transform, color, font, text));
 	shutdown();
 	data = new_data;
-	return {};
+	return error_type();
 }
 error_type render_svg_geometry::initialize(const render_d2d_matrix& transform, const string_view text) noexcept
 {
@@ -324,8 +324,18 @@ error_type render_svg_geometry::initialize(const render_d2d_matrix& transform, c
 	ICY_ERROR(any_system_initialize(new_data, transform, text));
 	shutdown();
 	data = new_data;
-	return {};
+	return error_type();
 }
+const_array_view<render_d2d_vertex> render_svg_geometry::vertices() const noexcept
+{
+    return data ? data->vertices() : const_array_view<render_d2d_vertex>();
+}
+array<render_d2d_vertex>& render_svg_geometry::take_vertices() noexcept
+{
+    static array<render_d2d_vertex> null;
+    return data ? data->take_vertices() : null;
+}
+
 error_type render_svg_geometry::data_type::initialize(const render_d2d_matrix& transform, const color color, const float width, const const_array_view<render_d2d_vector> shape) noexcept
 {
 	ICY_ERROR(m_render.initialize());
@@ -362,7 +372,7 @@ error_type render_svg_geometry::data_type::initialize(const render_d2d_matrix& t
 	paint.type = NSVGpaintType::NSVG_PAINT_COLOR;
 	paint.color = color.bgra;
 	ICY_ERROR(render_svg_rasterize(mesh, paint, 1, m_vertices));
-	return {};
+	return error_type();
 }
 error_type render_svg_geometry::data_type::initialize(const render_d2d_matrix& transform, const color color, render_svg_font font, const string_view text) noexcept
 {
@@ -380,7 +390,7 @@ error_type render_svg_geometry::data_type::initialize(const render_d2d_matrix& t
 	ICY_COM_ERROR(m_layout->Draw(nullptr, &text_render, 0, 0));
 	ICY_ERROR(text_render.error());
 	m_vertices = std::move(text_render.vertices());
-	return {};
+	return error_type();
 }
 error_type render_svg_geometry::data_type::initialize(const render_d2d_matrix& transform, const string_view text) noexcept
 {
@@ -486,7 +496,7 @@ error_type render_svg_geometry::data_type::initialize(const render_d2d_matrix& t
         shape = shape->next;
     }
 
-    return {};
+    return error_type();
 }
 
 error_type render_svg_text_stack::initialize(const render_svg_font_data& style) noexcept
@@ -494,8 +504,17 @@ error_type render_svg_text_stack::initialize(const render_svg_font_data& style) 
 	ICY_ERROR(m_render.initialize());
 	
 	auto ncm = NONCLIENTMETRICS{ sizeof(NONCLIENTMETRICS) };
-	if (!SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, ncm.cbSize, &ncm, 0))
-		return last_system_error();
+
+    auto lib = "user32"_lib;
+    ICY_ERROR(lib.initialize());
+    if (const auto func = ICY_FIND_FUNC(lib, SystemParametersInfoW))
+    {
+        if (!func(SPI_GETNONCLIENTMETRICS, ncm.cbSize, &ncm, 0))
+            return last_system_error();
+    }
+    else
+        return make_stdlib_error(std::errc::function_not_supported);
+    
 
 	auto gdi = com_ptr<IDWriteGdiInterop>{};
 	ICY_COM_ERROR(m_render->dwrite().GetGdiInterop(&gdi));
@@ -618,7 +637,7 @@ error_type render_svg_text_stack::push(const render_svg_font_data& data) noexcep
 			break;
 		}
 	}
-	return {};
+	return error_type();
 }
 void render_svg_text_stack::pop(const render_svg_font_data& data) noexcept
 {
@@ -688,7 +707,7 @@ error_type icy::render_svg_tesselate(const render_d2d_matrix& matrix, ID2D1Geome
 	ICY_COM_ERROR(geometry.Tessellate(reinterpret_cast<const D2D1_MATRIX_3X2_F*>(&matrix), &sink));
 	ICY_ERROR(sink.m_error);
 	mesh = std::move(sink.m_triangles);
-	return {};
+	return error_type();
 }
 error_type icy::render_svg_rasterize(const_array_view<render_d2d_triangle> mesh, const NSVGpaint& paint, const float, array<render_d2d_vertex>& vertices) noexcept
 {
@@ -710,7 +729,7 @@ error_type icy::render_svg_rasterize(const_array_view<render_d2d_triangle> mesh,
 			vertex.color = paint.color;
 		}
 	}
-	return {};
+	return error_type();
 }
 
 #define NANOSVG_IMPLEMENTATION 1

@@ -59,7 +59,7 @@ namespace icy
 			{
 				pop_back(m_size - size);
 			}
-			return {};
+			return error_type();
 		}
 		error_type reserve(const size_type capacity) noexcept
 		{
@@ -81,7 +81,7 @@ namespace icy
             ICY_ERROR(reserve(m_size + 1));
             allocator_type::construct(m_ptr + m_size, std::forward<arg_types>(args)...);
 			++m_size;
-			return {};
+			return error_type();
 		}
 
 		template<typename iter_type>
@@ -90,7 +90,7 @@ namespace icy
             ICY_ERROR(reserve(size() + std::distance(first, last)));
 			for (; first != last; ++first)
 				allocator_type::construct(m_ptr + (m_size++), std::move(*first));
-			return {};
+			return error_type();
 		}
         template<typename iter_type>
         error_type append(iter_type first, const iter_type last) noexcept
@@ -102,7 +102,7 @@ namespace icy
                 ICY_ERROR(copy(*first, tmp));
                 allocator_type::construct(m_ptr + (m_size++), std::move(tmp));
             }
-            return {};
+            return error_type();
         }
 		error_type append(const std::initializer_list<T> list)
 		{
@@ -121,14 +121,14 @@ namespace icy
 			array tmp;
             ICY_ERROR(tmp.append(first, last));
 			*this = std::move(tmp);
-			return {};
+			return error_type();
 		}
 		error_type assign(const std::initializer_list<T> list) noexcept
 		{
 			array tmp;
             ICY_ERROR(tmp.append(list));
 			*this = std::move(tmp);
-			return {};
+			return error_type();
 		}
 		template<typename rhs_type>
 		error_type assign(rhs_type&& rhs) noexcept
@@ -136,7 +136,7 @@ namespace icy
 			array tmp;
             ICY_ERROR(tmp.append(std::forward<rhs_type>(rhs)));
 			*this = std::move(tmp);
-			return {};
+			return error_type();
 		}
 
 		void clear() noexcept
@@ -181,7 +181,7 @@ namespace icy
 				m_ptr = ptr;
                 m_capacity = new_capacity;
 			}
-			return {};
+			return error_type();
 		}
     private:
         size_type m_capacity = 0_z;
@@ -193,7 +193,7 @@ namespace icy
         array<T> tmp;
         ICY_ERROR(tmp.assign(src));
         dst = std::move(tmp);
-        return {};
+        return error_type();
     }
 
     template<typename T>

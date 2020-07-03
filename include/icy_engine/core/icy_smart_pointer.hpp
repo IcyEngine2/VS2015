@@ -347,7 +347,7 @@ namespace icy
             new (reinterpret_cast<T*>(new_ptr->buffer)) T{ std::forward<arg_types>(args)... };
             ptr = {};
             ptr.m_ptr = new_ptr;
-            return {};
+            return error_type();
         }
     private:
         detail::shared_ptr_buffer* m_ptr = nullptr;
@@ -357,7 +357,7 @@ namespace icy
     shared_ptr<T> make_shared_from_this(T* ptr) noexcept
     {
         if (!ptr)
-            return {};
+            return shared_ptr<T>();
 
         shared_ptr<T> value;
         const auto offset = offsetof(detail::shared_ptr_buffer, buffer);
@@ -373,7 +373,7 @@ namespace icy
         value.m_ptr->add_strong_ref();
         return value;
     }
-
+    
     template<typename T, typename... arg_types>
     error_type make_shared(shared_ptr<T>& ptr, arg_types&& ... args) noexcept
     {
@@ -397,7 +397,7 @@ namespace icy
         dst = make_unique<T>(std::move(tmp));
         if (!dst)
             return make_stdlib_error(std::errc::not_enough_memory);
-        return {};
+        return error_type();
     }
 }
 #pragma pop_macro("small")

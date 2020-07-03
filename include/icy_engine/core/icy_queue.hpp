@@ -55,7 +55,7 @@ namespace icy
             allocator_type::construct(&new_pair->value, std::forward<arg_types>(args)...);
             m_queue.push(new_pair);
             m_size.fetch_add(1, std::memory_order_release);
-            return {};
+            return error_type();
         }
         bool pop(T& value) noexcept
         {

@@ -29,7 +29,7 @@ static error_type system_error_to_string(const unsigned code, const string_view 
     while (length && (buffer[length - 1] == '\r' || buffer[length - 1] == '\n'))
         --length;
     ICY_ERROR(icy::to_string(const_array_view<wchar_t>(buffer, length), str));
-    return {};
+    return error_type();
 }
 static error_type stdlib_error_to_string(const unsigned code, const string_view, string& str) noexcept
 {
@@ -217,7 +217,7 @@ error_type library::initialize() noexcept
         return last_system_error();
     shutdown();
     m_module = new_module;
-    return {};
+    return error_type();
 }
 void library::shutdown() noexcept
 {
@@ -240,7 +240,7 @@ error_type mutex::initialize() noexcept
 {
 	if (!InitializeCriticalSectionAndSpinCount(reinterpret_cast<CRITICAL_SECTION*>(this), 1 | RTL_CRITICAL_SECTION_FLAG_NO_DEBUG_INFO))
 		return last_system_error();
-	return {};
+	return error_type();
 }
 bool mutex::try_lock() noexcept
 {
@@ -279,7 +279,7 @@ error_type cvar::wait(mutex& mutex, const duration_type timeout) noexcept
                 return error;
         }
     }
-    return {};
+    return error_type();
 }
 
 EXTERN_C IMAGE_DOS_HEADER __ImageBase;
@@ -341,7 +341,7 @@ error_type timer::initialize(const size_t count, const duration_type timeout) no
     integer.QuadPart = -std::chrono::duration_cast<std::chrono::nanoseconds>(timeout).count() / 100;
     SetThreadpoolTimer(new_timer, &time, 0, 0);
 
-    return {};
+    return error_type();
 }
 
 error_type icy::win32_message(const string_view text, const string_view header, bool* const yesno) noexcept
@@ -362,7 +362,7 @@ error_type icy::win32_message(const string_view text, const string_view header, 
     {
         return make_stdlib_error(std::errc::function_not_supported);
     }
-    return {};
+    return error_type();
 }
 error_type icy::win32_parse_cargs(array<string>& args) noexcept
 {
@@ -381,7 +381,7 @@ error_type icy::win32_parse_cargs(array<string>& args) noexcept
 
         ICY_ERROR(args.push_back(std::move(str)));
     }
-    return {};
+    return error_type();
 }
 guid icy::guid::create() noexcept
 {

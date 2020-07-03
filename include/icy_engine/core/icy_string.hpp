@@ -144,7 +144,7 @@ namespace icy
 		std::reverse_copy(buffer, buffer + length, rbuffer);
 		memcpy(str.m_ptr, rbuffer, length - 1);
 		str.m_size = length - 1;
-		return {};
+		return error_type();
 	}
 	error_type to_string(const double value, const float_type type, size_t prec, string& str) noexcept;
 	inline error_type to_string(const double value, const float_type type, string& str) noexcept
@@ -253,14 +253,14 @@ namespace icy
 				ICY_ERROR(append(string_view{ &ptr[k], 1 }));
 			}
 		}
-		return {};
+		return error_type();
 	}
     template<typename... arg_types>
     inline error_type to_string(const string_view format, string& str, arg_types&& ... args) noexcept
     {
         str.clear();
         ICY_ERROR(str.appendf(format, std::forward<arg_types>(args)...));
-        return {};
+        return error_type();
     }
 	error_type to_utf16(const string_view value, array<wchar_t>& wide) noexcept;
 
@@ -326,10 +326,24 @@ namespace icy
             }
             ICY_ERROR(output.append(string_view(c)));
         }
-        return {};
+        return error_type();
     }
     error_type to_lower(const string_view str, string& output) noexcept;
     error_type to_upper(const string_view str, string& output) noexcept;
     error_type copy(const string_view src, string& dst) noexcept;
     error_type copy(const string& src, string& dst) noexcept;
+
+    template<typename key_type, typename value_type> class map;
+    struct locale
+    {
+        static error_type enumerate(array<locale>& locales) noexcept;
+        string display_lang;    //  UI language name
+        string display_ctry;    //  UI country
+        string global_lang;     //  international language name
+        string global_ctry;     //  international country
+        string local_lang;      //  localized language name
+        string local_ctry;      //  localized country
+        string short_name;      //  short name (en-US)
+        uint32_t code = 0;      //  lcid
+    };    
  }

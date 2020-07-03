@@ -193,7 +193,7 @@ error_type thread::error() const noexcept
         ICY_LOCK_GUARD(m_data->lock);
         return m_data->error;
     }
-    return {};
+    return error_type();
 }
 void thread::exit(const error_type error) noexcept
 {
@@ -256,14 +256,14 @@ error_type thread::launch() noexcept
     
     while (true)
     {
-        ICY_ERROR(m_data->cvar.wait(m_data->lock));
+        ICY_ERROR(m_data->cvar.wait(m_data->lock, std::chrono::milliseconds(200)));
         ICY_LOCK_GUARD(m_data->lock);
         ICY_ERROR(m_data->error);
         if (m_data->state != thread_state::none)
             break;
     }
     success = true;
-    return {};
+    return error_type();
 }
 error_type thread::rename(const string_view name) noexcept
 {
@@ -273,7 +273,7 @@ error_type thread::rename(const string_view name) noexcept
     const auto hr = SetThreadDescription(m_data->handle, wide);
     if (FAILED(hr))
         return make_system_error(hr);
-    return {};
+    return error_type();
 }
 
 thread::~thread() noexcept
@@ -313,5 +313,5 @@ error_type icy::create_event_thread(shared_ptr<thread>& thread, const shared_ptr
     ICY_ERROR(make_shared(ptr));
     ptr->system = system;
     thread = std::move(ptr);
-    return {};
+    return error_type();
 }

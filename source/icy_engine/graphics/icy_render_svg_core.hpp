@@ -57,6 +57,10 @@ namespace icy
 		{
 			return m_vertices;
 		}
+        array<render_d2d_vertex>& take_vertices() noexcept
+        {
+            return m_vertices;
+        }
 		std::atomic<uint32_t> ref = 1;
 	private:
 		any_system_acqrel_pointer<render_svg_system> m_render;

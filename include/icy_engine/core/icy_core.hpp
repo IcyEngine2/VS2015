@@ -452,6 +452,12 @@ namespace icy
     public:
         rel_ops(guid);
         static guid create() noexcept;
+        static error_type create(guid& index) noexcept 
+        {
+            index = create();
+            if (!index) return last_system_error();
+            return error_type();
+        }
         guid() noexcept
         {
             memset(this, 0, sizeof(*this));
@@ -555,6 +561,7 @@ namespace icy
         void* m_ptr = nullptr;
     };
 
+ 
     error_type win32_parse_cargs(array<string>& args) noexcept;
     error_type computer_name(string& str) noexcept;
     error_type process_name(HINSTANCE__* module, string& str) noexcept;
@@ -602,7 +609,7 @@ namespace icy
         static_assert(std::is_trivially_destructible<T>::value, "CAN ONLY COPY TRIVIAL TYPES");
         static_assert(std::is_rvalue_reference<decltype(dst)>::value == false, "COPY != MOVE");
         dst = src;
-        return {};
+        return error_type();
     }
 
 }

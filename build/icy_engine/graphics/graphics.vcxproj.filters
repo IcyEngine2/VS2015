@@ -16,6 +16,9 @@
     <Filter Include="Private Header Files">
       <UniqueIdentifier>{400c4242-5e4c-4066-86f2-9166472824c0}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Shaders">
+      <UniqueIdentifier>{7abab056-782c-423f-8450-0d1af841f079}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_render_svg_core.cpp">
@@ -59,5 +62,16 @@
     <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_graphics.hpp">
       <Filter>Private Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\include\icy_engine\graphics\icy_render.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="..\..\..\source\icy_engine\graphics\shaders\svg_ps.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="..\..\..\source\icy_engine\graphics\shaders\svg_vs.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
   </ItemGroup>
 </Project>

@@ -298,7 +298,7 @@ namespace icy
         if (integer < std::numeric_limits<T>::min() || integer > std::numeric_limits<T>::max())
             return make_stdlib_error(std::errc::illegal_byte_sequence);
         value = T(integer);
-        return {};
+        return error_type();
     }
     template<typename T>
     error_type to_value_uint(const string_view str, T& value) noexcept
@@ -308,7 +308,7 @@ namespace icy
         if (integer > std::numeric_limits<T>::max())
             return make_stdlib_error(std::errc::illegal_byte_sequence);
         value = T(integer);
-        return {};
+        return error_type();
     }
     error_type to_value(const string_view str, float& value) noexcept;
     error_type to_value(const string_view str, double& value) noexcept;

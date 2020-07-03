@@ -16,7 +16,7 @@ namespace icy
             bitcnt_fileio   =   0x02,
             bitcnt_network  =   0x05,
             bitcnt_console  =   0x03,
-            bitcnt_window   =   0x06,
+            bitcnt_window   =   0x07,
             bitcnt_gui      =   0x04,
 
             bitcnt_user     =   0x20,
@@ -75,6 +75,7 @@ namespace icy
             window_internal         =   1ui64   <<  (offset_window + 0x04),
             window_active           =   1ui64   <<  (offset_window + 0x05),
             window_minimized        =   1ui64   <<  (offset_window + 0x06),
+            window_repaint          =   1ui64   <<  (offset_window + 0x07),
             window_any              =   mask_window,
 
             gui_action              =   1ui64   <<  (offset_gui + 0x00),    //  action index
@@ -132,6 +133,9 @@ namespace icy
         static detail::rw_spin_lock g_lock;
         static event_system* g_list;
     };
+    class event_queue;
+    error_type create_event_queue(shared_ptr<event_queue>& queue, const uint64_t mask) noexcept;
+
     class event_queue final : public event_system
     {
         struct tag {};
@@ -151,7 +155,7 @@ namespace icy
         error_type signal(const event_data& event) noexcept override
         {
             m_cvar.wake();
-            return {};
+            return error_type();
         }
     private:
         mutex m_mutex;

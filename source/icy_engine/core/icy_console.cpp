@@ -41,7 +41,7 @@ error_type icy::create_console(shared_ptr<console_system>& system) noexcept
     new_system->filter(event_type::console_any);
     system = std::move(new_system);
     new_console = false;
-    return {};
+    return error_type();
 }
 console_system::~console_system() noexcept
 {
@@ -55,7 +55,7 @@ error_type console_system::exec() noexcept
         while (auto event = event_system::pop())
         {
             if (event->type == event_type::global_quit)
-                return {};
+                return error_type();
 
             const auto& event_data = event->data<console_event>();
             if (!event_data.internal)
@@ -110,7 +110,7 @@ error_type console_system::exec() noexcept
                     for (auto k = 0u; k < count; ++k)
                     {
                         if (buffer[k].EventType == 0)
-                            return {};
+                            return error_type();
                         if (buffer[k].EventType != KEY_EVENT)
                             continue;
                         if (!buffer[k].Event.KeyEvent.bKeyDown)
@@ -147,7 +147,7 @@ error_type console_system::exec() noexcept
         }
         ICY_ERROR(m_cvar.wait(m_mutex));
     }
-    return {};
+    return error_type();
 }
 error_type console_system::signal(const event_data& event) noexcept
 {
@@ -161,7 +161,7 @@ error_type console_system::signal(const event_data& event) noexcept
             return last_system_error();
     }
     m_cvar.wake();
-    return {};
+    return error_type();
 }
 /*error_type console_system::read_line(string& str) noexcept
 {
@@ -172,7 +172,7 @@ error_type console_system::signal(const event_data& event) noexcept
     ICY_ERROR(loop->pop(event));
     if (event->type == event_type::console_read_line)
         ICY_ERROR(copy(event->data<string>(), str));
-    return {};
+    return error_type();
 }
 error_type console_system::read_key(key& key) noexcept
 {
@@ -183,5 +183,5 @@ error_type console_system::read_key(key& key) noexcept
     ICY_ERROR(loop->pop(event));
     if (event->type == event_type::console_read_key)
         key = event->data<icy::key>();
-    return {};
+    return error_type();
 }*/

@@ -23,6 +23,7 @@ namespace icy
 		last,
 		next,
 		prev,
+        range,
 	};
 	enum class database_oper_write : uint32_t
 	{
@@ -49,6 +50,8 @@ namespace icy
         ICY_DEFAULT_MOVE_ASSIGN(database_system_read);
         ~database_system_read() noexcept;
         error_type initialize(const string_view path, const size_t size) noexcept;
+        error_type path(string& str) const noexcept;
+        size_t size() const noexcept;
         explicit operator bool() const noexcept
         {
             return !!m_env;
@@ -237,5 +240,14 @@ namespace icy
 		{
 			return put_str_by_str(string_view(reinterpret_cast<const char*>(&key), sizeof(key)), val, flags);
 		}
+        error_type del_by_var(const const_array_view<uint8_t> key) noexcept;
+        template<typename K> error_type del_by_type(const K& key) noexcept
+        {
+            return del_by_var({ reinterpret_cast<const uint8_t*>(&key), sizeof(key) });
+        }
+        error_type del_by_str(const string_view key) noexcept
+        {
+            return del_by_var(key.ubytes());
+        }
 	};	
 }

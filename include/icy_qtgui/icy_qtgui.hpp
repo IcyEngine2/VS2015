@@ -10,7 +10,7 @@
 #include <icy_engine/core/icy_matrix.hpp>
 #include <icy_engine/core/icy_input.hpp>
 
-#define ICY_GUI_ERROR(X) if (const auto error = (X)) return make_stdlib_error(static_cast<std::errc>(error)); return {};
+#define ICY_GUI_ERROR(X) if (const auto error = (X)) return make_stdlib_error(static_cast<std::errc>(error)); return error_type();
 
 #ifndef ICY_QTGUI_STATIC
 #define ICY_QTGUI_STATIC 1
@@ -308,7 +308,7 @@ namespace icy
             else if (type() == gui_variant_type::lstring && m_buffer)
                 return string_view(reinterpret_cast<const char*>(m_buffer + 1), m_buffer->size);
             else
-                return {};
+                return string_view();
         }
         boolean_type as_boolean() const noexcept
         {
@@ -397,21 +397,21 @@ namespace icy
             if (type() == gui_variant_type::guid)
                 return m_guid;
             else
-                return {};
+                return guid();
         }
         gui_node as_node() const noexcept
         {
             if (type() == gui_variant_type::node)
                 return m_node;
             else
-                return {};            
+                return gui_node();            
         }
         input_message as_input() const noexcept
         {
             if (type() == gui_variant_type::input)
                 return m_input;
             else
-                return {};
+                return input_message();
         }
         template<typename T> const T* as_user() const noexcept
         {
@@ -481,7 +481,7 @@ namespace icy
             memcpy(bytes + sizeof(buffer_type), data, size);
             m_type = static_cast<char>(type);
             m_size = 0;
-            return {};
+            return 0;
         }
     private:
         union
@@ -522,7 +522,7 @@ namespace icy
         {
             var = str;
         }
-        return {};
+        return error_type();
     }
     template<typename T, typename = std::enable_if_t<std::is_trivially_destructible<T>::value>>
     inline uint32_t make_variant(gui_variant& var, const realloc_func alloc, void* const user, const T& data) noexcept
@@ -672,7 +672,7 @@ namespace icy
             ICY_ERROR(to_string(key, str));
             ICY_ERROR(map.insert(std::move(str), gui_widget_args(), &it));
             val = &it->value;
-            return {};
+            return error_type();
         }
         error_type insert(const string_view key, const string_view value) noexcept
         {
@@ -681,7 +681,7 @@ namespace icy
             ICY_ERROR(to_string(key, str));
             ICY_ERROR(to_string(value, val.value));
             ICY_ERROR(map.insert(std::move(str), std::move(val)));
-            return {};
+            return error_type();
         }
         string value;
         map<string, gui_widget_args> map;
@@ -705,7 +705,7 @@ namespace icy
             }
             ICY_ERROR(str.append("}"_s));
         }
-        return {};
+        return error_type();
     }*/
 
     class gui_queue;
@@ -743,7 +743,7 @@ namespace icy
                 while (auto event = pop())
                 {
                     if (event->type == event_type::global_quit)
-                        return {};
+                        return error_type();
                 }
 
                 auto type = event_type::none;
@@ -907,7 +907,7 @@ namespace icy
                     }
                 }
             }
-            return {};
+            return error_type();
         }
         error_type destroy(const gui_widget widget) noexcept
         {
@@ -961,7 +961,7 @@ namespace icy
             queue = nullptr;
             return error;
         }
-        return {};
+        return error_type();
     }
 }
 #endif

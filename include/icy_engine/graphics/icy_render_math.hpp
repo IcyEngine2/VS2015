@@ -178,7 +178,7 @@ namespace icy
 	struct render_d2d_vertex
 	{
 		render_vector coord;	//	x,y (screen), z(layer 0..1)
-		unsigned color;				//	bgra
+		unsigned color;			//	bgra
 	};
 
 }

@@ -26,10 +26,10 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\..\source\icy_dcl\include\icy_dcl.hpp">
+    <ClInclude Include="..\..\..\source\icy_dcl\core\icy_dcl.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\source\icy_dcl\include\icy_dcl_system.hpp">
+    <ClInclude Include="..\..\..\source\icy_dcl\core\icy_dcl_system.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

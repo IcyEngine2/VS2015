@@ -254,7 +254,7 @@ error_type heap::initialize(const heap_init init) noexcept
     }
     std::swap(mem, m_ptr);
     m_init = init;
-    return {};
+    return error_type();
 }
 void* heap::realloc(const void* const old_ptr, const size_t new_size) noexcept
 {
@@ -399,7 +399,7 @@ error_type heap_base::initialize(void* base) noexcept
         detail::global_heap.realloc =
             [](const void* const ptr, const size_t size, void* const heap) { return static_cast<heap_base*>(heap)->realloc(ptr, size); };
     }
-    return {};
+    return error_type();
 }
 size_t heap_base::memsize(const void* const ptr) const noexcept
 {

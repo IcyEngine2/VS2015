@@ -16,7 +16,7 @@ namespace icy
             ICY_ERROR(copy(src.m_vals, vals));
             dst.m_keys = std::move(keys);
             dst.m_vals = std::move(vals);
-            return {};
+            return error_type();
         }
 	public:
 		using type = map;
@@ -263,7 +263,7 @@ namespace icy
 			const auto errorK = m_keys.reserve(capacity);
 			if (errorV) return errorV;
 			if (errorK) return errorK;
-			return {};
+			return error_type();
 		}
 		iterator erase(const const_iterator first, const const_iterator last) noexcept
 		{
@@ -317,7 +317,8 @@ namespace icy
                 return insert(std::move(key), std::move(val), it);
 			if (it)
 				*it = jt;
-            return {};
+            jt->value = std::move(val);
+            return error_type();
 		}
         error_type find_or_insert(const key_type& new_key, value_type&& new_val, iterator* it = nullptr) noexcept
         {
@@ -598,7 +599,7 @@ namespace icy
         }
         if (it)
             *it = iterator{ *this, index };
-        return {};
+        return error_type();
     }
 
     template<typename T>

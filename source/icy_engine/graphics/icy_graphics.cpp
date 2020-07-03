@@ -1,4 +1,5 @@
 #include <icy_engine/core/icy_array.hpp>
+#include <icy_engine/graphics/icy_render.hpp>
 #include "icy_graphics.hpp"
 #include "icy_system.hpp"
 #include <dxgi1_6.h>
@@ -17,7 +18,7 @@ error_type adapter::data_type::initialize(const com_ptr<IDXGIAdapter> adapter, c
     DXGI_ADAPTER_DESC desc = {};
     ICY_COM_ERROR(adapter->GetDesc(&desc));
     ICY_ERROR(to_string(desc.Description, m_name));
-    return {};
+    return error_type();
 }
 error_type adapter::enumerate(const adapter_flag filter, array<adapter>& array) noexcept
 {
@@ -58,9 +59,9 @@ error_type adapter::enumerate(const adapter_flag filter, array<adapter>& array) 
         d3d11_func = ICY_FIND_FUNC(lib_d3d11, D3D11CreateDevice);
 
     if ((filter & adapter_flag::d3d12) && !d3d12_func)
-        return {};
+        return error_type();
     if ((filter & adapter_flag::d3d11) && !d3d11_func)
-        return {};
+        return error_type();
 
     com_ptr<IDXGIFactory1> dxgi_factory;
     if (const auto func = ICY_FIND_FUNC(lib_dxgi, CreateDXGIFactory1))
@@ -106,7 +107,7 @@ error_type adapter::enumerate(const adapter_flag filter, array<adapter>& array) 
                 new_adapter.flags = new_adapter.flags | adapter_flag::hardware;
             ICY_ERROR(any_system_initialize(new_adapter.data, com_adapter, new_adapter.flags));
             ICY_ERROR(array.push_back(std::move(new_adapter)));
-            return {};
+            return error_type();
         };
 
         if (has_d3d12 && (has_api_mask ? (filter & adapter_flag::d3d12) : true))
@@ -125,7 +126,7 @@ string_view adapter::name() const noexcept
 {
     if (data)
         return data->name();
-    return {};
+    return string_view();
 }
 void* adapter::handle() const noexcept
 {
@@ -167,7 +168,7 @@ error_type adapter::msaa(window_flags& quality) const noexcept
             break;
         }
     }
-    return {};
+    return error_type();
 }
 adapter::adapter(const adapter& rhs) noexcept
 {
@@ -212,7 +213,7 @@ error_type adapter::data_type::msaa_d3d12(array<uint32_t>& quality) noexcept
     {
         return make_stdlib_error(std::errc::function_not_supported);
     }
-    return {};
+    return error_type();
 }
 error_type adapter::data_type::msaa_d3d11(array<uint32_t>& quality) noexcept
 {
@@ -243,5 +244,25 @@ error_type adapter::data_type::msaa_d3d11(array<uint32_t>& quality) noexcept
     {
         return make_stdlib_error(std::errc::function_not_supported);
     }
-    return {};
+    return error_type();
+}
+
+error_type render_list::clear(const color color) noexcept
+{
+    ICY_ERROR(data.push_back(render_element_type::clear));
+    auto& elem = data.back().clear;
+    elem = color;
+    return error_type();
+}
+error_type render_list::draw(const render_svg_geometry geometry, const render_d2d_vector offset, const float layer) noexcept
+{
+    if (geometry.vertices().empty())
+        return make_stdlib_error(std::errc::invalid_argument);
+
+    ICY_ERROR(data.push_back(render_element_type::svg));
+    auto& elem = data.back().svg;
+    elem.geometry = geometry;
+    elem.layer = layer;
+    elem.offset = offset;
+    return error_type();
 }

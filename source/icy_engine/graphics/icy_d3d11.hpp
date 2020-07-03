@@ -1,6 +1,9 @@
 #pragma once
 
 #include <icy_engine/core/icy_array.hpp>
+#include <icy_engine/core/icy_map.hpp>
+#include <icy_engine/graphics/icy_render_svg.hpp>
+#include <icy_engine/graphics/icy_render.hpp>
 #include "icy_graphics.hpp"
 
 struct IDXGIFactory;
@@ -9,6 +12,11 @@ struct ID3D11RenderTargetView;
 struct ID3D11Device;
 struct ID3D11DeviceContext;
 struct ID3D11CommandList;
+struct ID3D11VertexShader;
+struct ID3D11InputLayout;
+struct ID3D11PixelShader;
+struct ID3D11Buffer;
+struct ID3D11Texture2D;
 
 namespace icy
 {
@@ -28,20 +36,37 @@ namespace icy
         com_ptr<IDXGISwapChain> m_chain;
         com_ptr<ID3D11RenderTargetView> m_view;
     };
+    class d3d11_render_svg
+    {
+    public:
+        error_type initialize(ID3D11Device& device) noexcept;
+        void operator()(ID3D11DeviceContext& context) const noexcept;
+    private:
+        com_ptr<ID3D11VertexShader> m_vshader;
+        com_ptr<ID3D11InputLayout> m_layout;
+        com_ptr<ID3D11PixelShader> m_pshader;
+    };
+    struct d3d11_render
+    {
+        d3d11_render_svg svg;
+    };
+
     class d3d11_back_buffer
     {
     public:
         error_type initialize(ID3D11Device& device) noexcept;
-        ID3D11RenderTargetView& view() const noexcept
-        {
-            return *m_view;
-        }
         error_type resize(const window_size size, const window_flags flags) noexcept;
+        error_type update(const render_list& list, const d3d11_render& render) noexcept;
+        error_type draw(ID3D11RenderTargetView& rtv) noexcept;
     private:
         com_ptr<ID3D11DeviceContext> m_context;
         com_ptr<ID3D11CommandList> m_commands;
+        com_ptr<ID3D11Texture2D> m_texture;
         com_ptr<ID3D11RenderTargetView> m_view;
+        com_ptr<ID3D11Buffer> m_svg_mem_buffer;
+        com_ptr<ID3D11Buffer> m_svg_gpu_buffer;
     };
+
     class d3d11_display : public display
     {
     public:
@@ -49,6 +74,7 @@ namespace icy
         error_type initialize(const adapter& adapter, const window_flags flags) noexcept;
         error_type bind(HWND__* const window) noexcept;
         error_type draw(const size_t frame) noexcept override;
+        error_type resize(const window_flags flags) noexcept;
         ID3D11Device& device() const noexcept
         {
             return *m_device;
@@ -57,6 +83,7 @@ namespace icy
         {
             return nullptr;
         }
+        error_type update(const render_list& list) noexcept override;
     private:
         adapter m_adapter;
         window_flags m_flags = window_flags::none;
@@ -64,5 +91,7 @@ namespace icy
         com_ptr<ID3D11Device> m_device;
         d3d11_swap_chain m_chain;
         array<d3d11_back_buffer> m_buffers;
+        d3d11_render m_render;
+        size_t m_frame = 0;
     };
 }

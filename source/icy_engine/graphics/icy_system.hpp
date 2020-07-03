@@ -38,7 +38,7 @@ namespace icy
             allocator_type::deallocate(data);
             return error;
         }
-        return {};
+        return error_type();
     }
     template<typename T>
     class any_system_acqrel_pointer
@@ -129,7 +129,7 @@ namespace icy
                     }
                 }
             }
-            return {};
+            return error_type();
         }
         T* operator->() const noexcept
         {

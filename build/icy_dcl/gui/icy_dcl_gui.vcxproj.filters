@@ -15,8 +15,30 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\..\source\icy_dcl\gui\icy_dcl_gui_main.cpp">
+    <ClInclude Include="..\..\..\source\icy_dcl\gui\icy_dcl_gui.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\..\source\icy_dcl\gui\icy_dcl_application.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_dcl\gui\icy_dcl_directory.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_dcl\gui\icy_dcl_text.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_dcl\gui\icy_dcl_gui.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_dcl\gui\icy_dcl_class_type.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="..\..\..\icy_types.natvis">
+      <Filter>Resource Files</Filter>
+    </Natvis>
   </ItemGroup>
 </Project>

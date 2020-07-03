@@ -60,7 +60,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>HTTP_ONLY;CURL_STATICLIB;BUILDING_LIBCURL;USE_WINDOWS_SSPI;USE_SCHANNEL;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>CURL_DISABLE_TFTP;CURL_DISABLE_LDAP;CURL_DISABLE_TELNET;CURL_DISABLE_DICT;CURL_DISABLE_RTSP;CURL_DISABLE_POP3;CURL_DISABLE_IMAP;CURL_DISABLE_GOPHER;CURL_DISABLE_SMB;CURL_STATICLIB;BUILDING_LIBCURL;USE_WINDOWS_SSPI;USE_SCHANNEL;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
@@ -75,7 +75,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>HTTP_ONLY;CURL_STATICLIB;BUILDING_LIBCURL;USE_WINDOWS_SSPI;USE_SCHANNEL;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>CURL_DISABLE_TFTP;CURL_DISABLE_LDAP;CURL_DISABLE_TELNET;CURL_DISABLE_DICT;CURL_DISABLE_RTSP;CURL_DISABLE_POP3;CURL_DISABLE_IMAP;CURL_DISABLE_GOPHER;CURL_DISABLE_SMB;CURL_STATICLIB;BUILDING_LIBCURL;USE_WINDOWS_SSPI;USE_SCHANNEL;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>

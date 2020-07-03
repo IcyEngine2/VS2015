@@ -8,6 +8,9 @@ struct HWND__;
 
 namespace icy
 {
+    class render_list;
+    class adapter;
+
     enum class adapter_flag : uint32_t
     {
         none = 0x00,
@@ -47,7 +50,7 @@ namespace icy
 #if _DEBUG
         window_flags::debug_layer;
 #else
-        display_flag::none;
+        window_flags::none;
 #endif
 
     inline constexpr bool operator&(const adapter_flag lhs, const adapter_flag rhs) noexcept
@@ -58,7 +61,33 @@ namespace icy
     {
         return adapter_flag(uint32_t(lhs) | uint32_t(rhs));
     }
+    
+    struct window_size
+    {
+        window_size() noexcept : x(0), y(0)
+        {
+
+        }
+        window_size(const uint32_t x, const uint32_t y) noexcept : x(x), y(y)
+        {
+
+        }
+        uint32_t x;
+        uint32_t y;
+    };
    
+    class window : public event_system
+    {
+    public:
+        virtual error_type initialize() noexcept = 0;
+        virtual error_type restyle(const window_style style) noexcept = 0;
+        virtual error_type rename(const string_view name) noexcept = 0;
+        //virtual error_type render() noexcept;
+        virtual HWND__* handle() const noexcept = 0;
+        virtual size_t frame() const noexcept = 0;
+        virtual window_flags flags() const noexcept = 0;
+        virtual error_type render(render_list&& list) noexcept = 0;
+    };
     class adapter
     {
     public:
@@ -84,30 +113,6 @@ namespace icy
         class data_type;
         data_type* data = nullptr;
     };
-    class window : public event_system
-    {
-    public:
-        virtual error_type initialize() noexcept = 0;
-        virtual error_type restyle(const window_style style) noexcept = 0;
-        virtual error_type rename(const string_view name) noexcept = 0;
-        //virtual error_type render() noexcept;
-        virtual HWND__* handle() const noexcept = 0;
-        virtual size_t frame() const noexcept = 0;
-        virtual window_flags flags() const noexcept = 0;
-    };
-    struct window_size
-    {
-        window_size() noexcept : x(0), y(0)
-        {
-
-        }
-        window_size(const uint32_t x, const uint32_t y) noexcept : x(x), y(y)
-        {
-
-        }
-        uint32_t x;
-        uint32_t y;
-    };
     error_type create_window_system(shared_ptr<window>& window, const adapter& adapter, const window_flags flags = default_window_flags) noexcept;
     
 
@@ -131,5 +136,18 @@ namespace icy
     inline constexpr uint32_t buffer_count(const window_flags flag) noexcept
     {
         return (flag & window_flags::triple_buffer) ? 3 : 2;
+    }
+    inline uint32_t sample_count(const window_flags flag) noexcept
+    {
+        if (flag & window_flags::msaa_x16)
+            return 16;
+        else if (flag & window_flags::msaa_x8)
+            return 8;
+        else if (flag & window_flags::msaa_x4)
+            return 4;
+        else if (flag & window_flags::msaa_x2)
+            return 2;
+        else
+            return 1;
     }
 }

@@ -40,6 +40,8 @@ namespace icy
     public:
         virtual ~display() noexcept = default;
         virtual error_type draw(const size_t frame) noexcept = 0;
+        virtual error_type resize(const window_flags flags) noexcept = 0;
+        virtual error_type update(const render_list& vec) noexcept = 0;
         virtual void* event() noexcept = 0;
     };
     error_type make_d3d11_display(unique_ptr<display>& display, const adapter& adapter, const window_flags flags, HWND__* const window) noexcept;

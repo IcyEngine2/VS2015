@@ -112,7 +112,7 @@ error_type string_iterator::to_char(char32_t& chr) const noexcept
     {
         return make_stdlib_error(std::errc::illegal_byte_sequence);
     }
-    return {};
+    return error_type();
 }
 string_view::const_iterator string_view::find(const string_view& rhs) const noexcept
 {
@@ -141,7 +141,7 @@ error_type string_view::to_utf16(wchar_t* const data, size_t* const size) const 
         return last_system_error();
 
     *size = size_t(length);
-    return {};
+    return error_type();
 }
 error_type icy::to_value(const string_view str, float& value) noexcept
 {
@@ -159,7 +159,7 @@ error_type icy::to_value(const string_view str, bool& value)  noexcept
         value = false;
     else
         return make_stdlib_error(std::errc::illegal_byte_sequence);
-    return {};
+    return error_type();
 }
 error_type icy::to_value(const string_view str, int64_t& value) noexcept
 {
@@ -185,7 +185,7 @@ error_type icy::to_value(const string_view str, std::chrono::system_clock::time_
         return make_stdlib_error(std::errc::illegal_byte_sequence);
 
     time = std::chrono::system_clock::from_time_t(t);
-    return {};
+    return error_type();
 }
 error_type icy::to_value(const string_view str, clock_type::time_point& time, const bool local)  noexcept
 {
@@ -196,7 +196,7 @@ error_type icy::to_value(const string_view str, clock_type::time_point& time, co
     const auto now_steady = std::chrono::steady_clock::now();
     const auto delta = std::chrono::duration_cast<std::chrono::system_clock::duration>(now_system - sys_time);
     time = now_steady - delta;
-    return {};
+    return error_type();
 }
 error_type icy::to_value(const string_view str, guid& guid) noexcept
 {
@@ -210,7 +210,7 @@ error_type icy::to_value(const string_view str, guid& guid) noexcept
         &rguid.Data4[4], &rguid.Data4[5], &rguid.Data4[6], &rguid.Data4[7]) : 0;
     if (count != 11)
         return make_stdlib_error(std::errc::illegal_byte_sequence);
-    return {};
+    return error_type();
 }
 
 string::string(string&& rhs) noexcept
@@ -240,7 +240,7 @@ error_type icy::to_string(const_array_view<wchar_t> src, string& str) noexcept
 	if (src.empty())
 	{
 		str.clear();
-		return {};
+		return error_type();
 	}
 
 	array<wchar_t> dst;
@@ -282,7 +282,7 @@ error_type icy::to_string(const_array_view<wchar_t> src, string& str) noexcept
 
 	ICY_ERROR(str.resize(size_t(size)));
 	WideCharToMultiByte(CP_UTF8, 0, src.data(), int(src.size()), const_cast<char*>(str.bytes().data()), size, nullptr, nullptr);
-	return {};
+	return error_type();
 }
 error_type icy::to_string(int64_t value, string& str) noexcept
 {
@@ -312,7 +312,7 @@ error_type icy::to_string(int64_t value, string& str) noexcept
 		rbuffer[length - 2] = '8';
 	
 	memcpy(str.m_ptr, rbuffer, str.m_size = length - 1);
-	return {};
+	return error_type();
 }
 error_type icy::to_string(const guid& value, string& str) noexcept
 {
@@ -395,7 +395,7 @@ error_type string::reserve(const size_type capacity) noexcept
         m_capacity = new_capacity;
 		m_ptr = new_ptr;
 	}
-	return {};
+	return error_type();
 }
 error_type string::resize(const size_type size, const char symb) noexcept
 {
@@ -405,7 +405,7 @@ error_type string::resize(const size_type size, const char symb) noexcept
 	ICY_ERROR(reserve(size + 1));
 	memset(m_ptr, symb, size);
 	m_ptr[m_size = size] = '\0';
-	return {};
+	return error_type();
 }
 error_type icy::split(const string_view str, array<string_view>& substr) noexcept
 {
@@ -433,7 +433,7 @@ error_type icy::split(const string_view str, array<string_view>& substr) noexcep
     }
     if (beg)
         ICY_ERROR(substr.push_back(string_view(beg, ptr + str.bytes().size())));
-    return {};
+    return error_type();
 }
 error_type icy::split(const string_view str, array<string_view>& substr, const char delim) noexcept
 {
@@ -451,7 +451,7 @@ error_type icy::split(const string_view str, array<string_view>& substr, const c
         }
     }
     ICY_ERROR(substr.push_back(string_view(ptr, str.bytes().data() + str.bytes().size())));
-    return {};
+    return error_type();
 }
 error_type string::append(const string_view rhs) noexcept
 {
@@ -470,7 +470,7 @@ error_type string::append(const string_view rhs) noexcept
 		memcpy(m_ptr + m_size, rhs.m_ptr, rhs.m_size);
 		m_ptr[m_size += rhs.m_size] = '\0';
 	}
-	return {};
+	return error_type();
 }
 error_type string::insert(const iterator where, const string_view rhs) noexcept
 {
@@ -481,7 +481,7 @@ error_type string::insert(const iterator where, const string_view rhs) noexcept
 	ICY_ERROR(str.append(string_view{ where.m_ptr, m_ptr + m_size }));
 	const auto index = where.m_ptr - m_ptr;
 	*this = std::move(str);
-	return {};
+	return error_type();
 }
 void string::pop_back(const size_type count) noexcept
 {
@@ -558,7 +558,7 @@ error_type string::replace(const string_view find, const string_view replace) no
 		str.append({ offset, m_ptr + m_size });
 		*this = std::move(str);
 	}
-	return {};
+	return error_type();
 }
 /*error_type icy::emplace(map<string, string>& map, const string_view key, const string_view val) noexcept
 {
@@ -567,7 +567,7 @@ error_type string::replace(const string_view find, const string_view replace) no
 	ICY_ERROR(to_string(key, new_key));
 	ICY_ERROR(to_string(val, new_val));
 	ICY_ERROR(map.find_or_insert(std::move(new_key), std::move(new_val)));
-	return {};
+	return error_type();
 }
 */
 error_type icy::to_utf16(const string_view value, array<wchar_t>& wide) noexcept
@@ -576,7 +576,7 @@ error_type icy::to_utf16(const string_view value, array<wchar_t>& wide) noexcept
 	ICY_ERROR(value.to_utf16(nullptr, &size));
 	ICY_ERROR(wide.resize(size + 1));
 	ICY_ERROR(value.to_utf16(wide.data(), &size));
-	return {};
+	return error_type();
 }
 uint32_t icy::hash(const string_view string) noexcept
 {
@@ -620,7 +620,7 @@ error_type icy::base64_encode(const const_array_view<uint8_t> input, array_view<
     while (k % 4)
         output[k++] = '=';
 
-    return {};
+    return error_type();
 }
 error_type icy::base64_decode(const const_array_view<char> input, array_view<uint8_t> output) noexcept
 {
@@ -641,7 +641,7 @@ error_type icy::base64_decode(const const_array_view<char> input, array_view<uin
         {
             if (c != '=')
                 return make_stdlib_error(std::errc::illegal_byte_sequence);
-            return {};
+            return error_type();
         }
         t0 = (t0 << 6) + array[c];
         t1 += 6;
@@ -651,7 +651,7 @@ error_type icy::base64_decode(const const_array_view<char> input, array_view<uin
             t1 -= 8;
         }
     }
-    return {};
+    return error_type();
 }
 error_type icy::base64_decode(const string_view input, array_view<uint8_t> output) noexcept
 {
@@ -702,26 +702,89 @@ error_type icy::copy(const string_view src, string& dst) noexcept
     string tmp;
     ICY_ERROR(tmp.insert(tmp.begin(), src));
     dst = std::move(tmp);
-    return {};
+    return error_type();
 }
 error_type icy::copy(const string& src, string& dst) noexcept
 {
     return copy(string_view(src), dst);
 }
+
+error_type icy::locale::enumerate(array<locale>& vec) noexcept
+{
+    struct data_type
+    {
+        array<locale>* vec = nullptr;
+        error_type error;
+    };
+    data_type data;
+    data.vec = &vec;
+    const auto proc = [](wchar_t* str, DWORD, LPARAM ptr) -> BOOL
+    {
+        if (!str || *str == L'\0' || wcsstr(str, L"-") == nullptr)
+            return TRUE;
+
+        locale new_locale;
+        const auto data = reinterpret_cast<data_type*>(ptr);
+        const auto func = [str, data](const LCTYPE type, string& ref)
+        {
+            wchar_t buf[256] = {};
+            auto len = GetLocaleInfoEx(str, type, buf, _countof(buf));
+            if (len <= 0)
+                return last_system_error();
+            ICY_ERROR(to_string(const_array_view<wchar_t>(buf, len), ref));
+            return error_type();
+        };
+#define LOCALE_ERROR(X) if (data->error = (X)) return FALSE;
+        new_locale.code = LocaleNameToLCID(str, LOCALE_ALLOW_NEUTRAL_NAMES);
+        if (new_locale.code == 0x1000) return TRUE;
+        if (new_locale.code == 0)
+        {
+            data->error == last_system_error();
+            return FALSE;
+        }
+
+        LOCALE_ERROR(to_string(const_array_view<wchar_t>(str, wcslen(str)), new_locale.short_name));
+        LOCALE_ERROR(func(LOCALE_SLOCALIZEDLANGUAGENAME, new_locale.display_lang));
+        LOCALE_ERROR(func(LOCALE_SENGLISHLANGUAGENAME, new_locale.global_lang));
+        LOCALE_ERROR(func(LOCALE_SNATIVELANGUAGENAME, new_locale.local_lang));
+        LOCALE_ERROR(func(LOCALE_SLOCALIZEDCOUNTRYNAME, new_locale.display_ctry));
+        LOCALE_ERROR(func(LOCALE_SENGLISHCOUNTRYNAME, new_locale.global_ctry));
+        LOCALE_ERROR(func(LOCALE_SNATIVECOUNTRYNAME, new_locale.local_ctry));
+        LOCALE_ERROR(data->vec->push_back(std::move(new_locale)));
+#undef LOCALE_ERROR
+        return TRUE;
+    };
+    auto success = EnumSystemLocalesEx(proc, LOCALE_ALL, reinterpret_cast<LPARAM>(&data), nullptr);
+    ICY_ERROR(data.error);
+    if (!success)
+        return last_system_error();
+    std::sort(vec.begin(), vec.end(), [](const locale& lhs, const locale& rhs) { return lhs.short_name < rhs.short_name; });
+    
+    const auto it = std::unique(vec.begin(), vec.end(),
+        [](const locale& lhs, const locale& rhs) { return lhs.short_name == rhs.short_name; });
+    vec.pop_back(std::distance(it, vec.end()));
+    
+    const auto jt = std::unique(vec.begin(), vec.end(), 
+        [](const locale& lhs, const locale& rhs) { return lhs.global_ctry == rhs.global_ctry && lhs.global_lang == rhs.global_lang; });
+    vec.pop_back(std::distance(jt, vec.end()));
+
+    return error_type();
+}
+
 /*error_type icy::jaro_winkler_distance(const string_view utf8lhs, const string_view utf8rhs, double& distance) noexcept
 {
     // Exit early if either are empty
     if (utf8lhs.empty() || utf8rhs.empty())
     {
         distance = 0;
-        return {};
+        return error_type();
     }
 
     // Exit early if they're an exact match.
     if (utf8lhs == utf8rhs) 
     {
         distance = 1;
-        return {};
+        return error_type();
     }
 
     array<char32_t> lhs;
@@ -761,7 +824,7 @@ error_type icy::copy(const string& src, string& dst) noexcept
     if (num_match == 0) 
     {
         distance = 0;
-        return {};
+        return error_type();
     }
     
     for (auto i = 0, j = 0; i < lhs_size; ++i)
@@ -786,5 +849,5 @@ error_type icy::copy(const string& src, string& dst) noexcept
     distance += num_match / rhs_size;
     distance += (num_match - num_trans) / num_match;
     distance /= 3;
-    return {};
+    return error_type();
 }*/

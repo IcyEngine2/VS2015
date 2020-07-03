@@ -404,11 +404,11 @@ string_view icy::to_string(const colors value) noexcept
 	const auto index = size_t(value);
 	if (index < std::size(colors_array))
 		return colors_array[index].first;
-	return {};
+	return string_view();
 }
 error_type icy::to_string(const color value, string& str) noexcept
 {
 	ICY_ERROR(icy::to_string(value.bgra, 0x10, str));
 	ICY_ERROR(str.replace("0x"_s, "#"_s));
-	return {};
+	return error_type();
 }

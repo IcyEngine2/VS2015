@@ -14,7 +14,7 @@ static error_type make_database_error(const unsigned code) noexcept
     return error_type(code, error_source_database);
 }
 
-error_type database_error_to_string(const unsigned code, const string_view, string& str) noexcept
+static error_type database_error_to_string(const unsigned code, const string_view, string& str) noexcept
 {
     switch (code)
     {
@@ -84,6 +84,27 @@ error_type database_system_read::initialize(const string_view path, const size_t
 		m_env = nullptr;
 	}
 	return database_system_initialize(path, size, MDB_RDONLY, m_env);
+}
+error_type database_system_read::path(string& str) const noexcept
+{
+    str.clear();
+    if (m_env)
+    {
+        const char* ptr = nullptr;
+        ICY_ERROR(database_make_error(mdb_env_get_path(m_env, &ptr)));
+        ICY_ERROR(copy(string_view(ptr, strlen(ptr)), str));
+    }
+    return {};
+}
+size_t database_system_read::size() const noexcept
+{
+    if (m_env)
+    {
+        MDB_envinfo info;
+        mdb_env_info(m_env, &info);
+        return info.me_mapsize;
+    }
+    return 0;
 }
 error_type database_system_write::initialize(const string_view path, const size_t size) noexcept
 {
@@ -194,6 +215,9 @@ error_type database_cursor_read::get_var_by_var(const_array_view<uint8_t>& key, 
     case database_oper_read::prev:
         mdb_oper = MDB_PREV;
         break;
+    case database_oper_read::range:
+        mdb_oper = MDB_SET_RANGE;
+        break;
     default:
         return make_stdlib_error(std::errc::invalid_argument);
     }
@@ -202,7 +226,7 @@ error_type database_cursor_read::get_var_by_var(const_array_view<uint8_t>& key, 
     auto mdb_val = MDB_val{ val.size(), const_cast<uint8_t*>(val.data()) };
     if (const auto error = mdb_cursor_get(m_cur, &mdb_key, &mdb_val, mdb_oper))
         return database_make_error(error);
-
+    
     key = { static_cast<const uint8_t*>(mdb_key.mv_data), mdb_key.mv_size };
     val = { static_cast<const uint8_t*>(mdb_val.mv_data), mdb_val.mv_size };
     return{};
@@ -225,6 +249,16 @@ error_type database_cursor_write::put_var_by_var(const const_array_view<uint8_t>
         return database_make_error(error);
 
     val = { static_cast<uint8_t*>(mdb_val.mv_data), mdb_val.mv_size };
+    return {};
+}
+error_type database_cursor_write::del_by_var(const const_array_view<uint8_t> key) noexcept
+{
+    auto mdb_key = MDB_val{ key.size(), const_cast<uint8_t*>(key.data()) };
+    auto mdb_val = MDB_val{ };
+    if (const auto error = mdb_cursor_get(m_cur, &mdb_key, &mdb_val, MDB_cursor_op::MDB_SET))
+        return database_make_error(error);
+    if (const auto error = mdb_cursor_del(m_cur, 0))
+        return database_make_error(error);
     return {};
 }
 

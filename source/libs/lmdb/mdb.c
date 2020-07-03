@@ -4521,6 +4521,8 @@ mdb_fopen(const MDB_env *env, MDB_name *fname,
 		break;
 	default: break;	/* silence gcc -Wswitch (not all enum values handled) */
 	}
+    if (which == MDB_O_LOCKS)
+        attrs |= FILE_ATTRIBUTE_HIDDEN;
 	fd = CreateFileW(fname->mn_val, acc, share, NULL, disp, attrs, NULL);
 #else
 	fd = open(fname->mn_val, which & MDB_O_MASK, mode);

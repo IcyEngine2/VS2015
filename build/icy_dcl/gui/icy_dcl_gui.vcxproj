@@ -82,7 +82,17 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\..\source\icy_dcl\gui\icy_dcl_gui_main.cpp" />
+    <ClInclude Include="..\..\..\source\icy_dcl\gui\icy_dcl_gui.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\..\source\icy_dcl\gui\icy_dcl_application.cpp" />
+    <ClCompile Include="..\..\..\source\icy_dcl\gui\icy_dcl_directory.cpp" />
+    <ClCompile Include="..\..\..\source\icy_dcl\gui\icy_dcl_gui.cpp" />
+    <ClCompile Include="..\..\..\source\icy_dcl\gui\icy_dcl_text.cpp" />
+    <ClCompile Include="..\..\..\source\icy_dcl\gui\icy_dcl_class_type.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="..\..\..\icy_types.natvis" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

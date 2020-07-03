@@ -55,21 +55,6 @@ namespace icy
 		array<render_svg_text_flag> flags;
 		string name;
 	};
-    struct render_svg_properties
-    {
-        render_svg_properties() noexcept : offset({}), layer(0), enabled(true)
-        {
-
-        }
-        render_svg_properties(const render_d2d_vector offset, const float layer, const bool enabled) noexcept :
-            offset(offset), layer(layer), enabled(enabled)
-        {
-
-        }
-        render_d2d_vector offset;
-        float layer;
-        bool enabled;
-    };
 
     class render_svg_font
 	{
@@ -121,7 +106,9 @@ namespace icy
         }
         error_type initialize(const render_d2d_matrix& transform, const color color, const float width, const const_array_view<render_d2d_vector> shape) noexcept;
         error_type initialize(const render_d2d_matrix& transform, const color color, const render_svg_font font, const string_view text) noexcept;
-	public:
+        const_array_view<render_d2d_vertex> vertices() const noexcept;
+        array<render_d2d_vertex>& take_vertices() noexcept;
+    public:
 		class data_type;
 		data_type* data = nullptr;
 	};

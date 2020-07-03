@@ -119,6 +119,9 @@
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_string_view.hpp" />
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_thread.hpp" />
   </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="..\..\..\icy_types.natvis" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
