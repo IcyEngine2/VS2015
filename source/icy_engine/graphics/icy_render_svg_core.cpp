@@ -318,7 +318,7 @@ error_type render_svg_geometry::initialize(const render_d2d_matrix& transform, c
 	data = new_data;
 	return error_type();
 }
-error_type render_svg_geometry::initialize(const render_d2d_matrix& transform, const string_view text) noexcept
+error_type render_svg_geometry::initialize(const render_d2d_matrix& transform, const const_array_view<char> text) noexcept
 {
 	data_type* new_data = nullptr;
 	ICY_ERROR(any_system_initialize(new_data, transform, text));
@@ -392,13 +392,13 @@ error_type render_svg_geometry::data_type::initialize(const render_d2d_matrix& t
 	m_vertices = std::move(text_render.vertices());
 	return error_type();
 }
-error_type render_svg_geometry::data_type::initialize(const render_d2d_matrix& transform, const string_view text) noexcept
+error_type render_svg_geometry::data_type::initialize(const render_d2d_matrix& transform, const const_array_view<char> text) noexcept
 {
     any_system_acqrel_pointer<render_svg_system> render;
     ICY_ERROR(render.initialize());
 
     string str;
-    ICY_ERROR(to_string(text, str));
+    ICY_ERROR(to_string(string_view(text.data(), text.size()), str));
 
     NSVGimage* image = nullptr;
     if (const auto error = nsvgParse(const_cast<char*>(str.bytes().data()), &image))

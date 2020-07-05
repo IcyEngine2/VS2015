@@ -62,6 +62,7 @@ namespace icy
 		static error_type enumerate(array<string>& fonts) noexcept;
 		render_svg_font() noexcept = default;
 		render_svg_font(const render_svg_font& rhs) noexcept;
+        ICY_DEFAULT_COPY_ASSIGN(render_svg_font);
 		~render_svg_font() noexcept
 		{
 			shutdown();
@@ -77,12 +78,13 @@ namespace icy
 	public:
 		render_svg_geometry() noexcept = default;
 		render_svg_geometry(const render_svg_geometry& rhs) noexcept;
+        ICY_DEFAULT_COPY_ASSIGN(render_svg_geometry);
 		~render_svg_geometry() noexcept
 		{
 			shutdown();
 		}
 		void shutdown() noexcept;
-		error_type initialize(const render_d2d_matrix& transform, const string_view text) noexcept;
+		error_type initialize(const render_d2d_matrix& transform, const const_array_view<char> text) noexcept;
         error_type initialize(const render_d2d_matrix& transform, const color color, const float width, const render_d2d_line& shape) noexcept
         {
             const render_d2d_vector points[] = { shape.v0, shape.v1 };

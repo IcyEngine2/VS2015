@@ -33,6 +33,9 @@
     <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_d3d11.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_d3d12.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\include\icy_engine\graphics\icy_render_svg.hpp">

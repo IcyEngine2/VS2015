@@ -50,7 +50,7 @@ namespace icy
 	class render_svg_geometry::data_type
 	{
 	public:
-        error_type initialize(const render_d2d_matrix& transform, const string_view text) noexcept;
+        error_type initialize(const render_d2d_matrix& transform, const const_array_view<char> text) noexcept;
         error_type initialize(const render_d2d_matrix& transform, const color color, const float width, const const_array_view<render_d2d_vector> shape) noexcept;
         error_type initialize(const render_d2d_matrix& transform, const color color, const render_svg_font font, const string_view text) noexcept;
 		const_array_view<render_d2d_vertex> vertices() const noexcept

@@ -17,6 +17,7 @@ struct ID3D11InputLayout;
 struct ID3D11PixelShader;
 struct ID3D11Buffer;
 struct ID3D11Texture2D;
+struct ID3D11RasterizerState;
 
 namespace icy
 {
@@ -45,6 +46,7 @@ namespace icy
         com_ptr<ID3D11VertexShader> m_vshader;
         com_ptr<ID3D11InputLayout> m_layout;
         com_ptr<ID3D11PixelShader> m_pshader;
+        com_ptr<ID3D11RasterizerState> m_rasterizer;
     };
     struct d3d11_render
     {
@@ -61,10 +63,11 @@ namespace icy
     private:
         com_ptr<ID3D11DeviceContext> m_context;
         com_ptr<ID3D11CommandList> m_commands;
+        window_size m_size;
         com_ptr<ID3D11Texture2D> m_texture;
         com_ptr<ID3D11RenderTargetView> m_view;
-        com_ptr<ID3D11Buffer> m_svg_mem_buffer;
-        com_ptr<ID3D11Buffer> m_svg_gpu_buffer;
+        com_ptr<ID3D11Buffer> m_svg_vertices;
+        com_ptr<ID3D11Buffer> m_svg_buffer;
     };
 
     class d3d11_display : public display
@@ -73,12 +76,8 @@ namespace icy
         ~d3d11_display() noexcept;
         error_type initialize(const adapter& adapter, const window_flags flags) noexcept;
         error_type bind(HWND__* const window) noexcept;
-        error_type draw(const size_t frame) noexcept override;
-        error_type resize(const window_flags flags) noexcept;
-        ID3D11Device& device() const noexcept
-        {
-            return *m_device;
-        }
+        error_type draw(const size_t frame, const bool vsync) noexcept override;
+        error_type resize() noexcept override;
         void* event() noexcept override
         {
             return nullptr;

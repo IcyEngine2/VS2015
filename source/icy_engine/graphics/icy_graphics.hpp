@@ -39,8 +39,8 @@ namespace icy
     {
     public:
         virtual ~display() noexcept = default;
-        virtual error_type draw(const size_t frame) noexcept = 0;
-        virtual error_type resize(const window_flags flags) noexcept = 0;
+        virtual error_type draw(const size_t frame, const bool vsync) noexcept = 0;
+        virtual error_type resize() noexcept = 0;
         virtual error_type update(const render_list& vec) noexcept = 0;
         virtual void* event() noexcept = 0;
     };

@@ -1,33 +1,24 @@
 #pragma once
 
 #include <icy_engine/core/icy_array.hpp>
+#include <icy_engine/core/icy_map.hpp>
+#include <icy_engine/graphics/icy_render_svg.hpp>
+#include <icy_engine/graphics/icy_render.hpp>
 #include "icy_graphics.hpp"
-#include <array>
 
 struct ID3D12Device;
 struct ID3D12CommandQueue;
-struct ID3D12CommandAllocator;
-struct ID3D12Resource;
-struct IDXGISwapChain3;
 struct ID3D12Fence;
-struct IDXGIFactory2;
+struct ID3D12CommandAllocator;
 struct ID3D12GraphicsCommandList;
+struct IDXGIFactory;
+struct IDXGISwapChain3;
+struct ID3D12RootSignature;
+struct ID3D12Resource;
 struct ID3D12DescriptorHeap;
-enum D3D12_COMMAND_LIST_TYPE;
-enum DXGI_FORMAT;
-enum D3D12_RESOURCE_FLAGS;
-enum D3D12_DESCRIPTOR_HEAP_TYPE;
 
 namespace icy
 {
-    class d3d12_event;
-    class d3d12_fence;
-    class d3d12_command_list;
-    class d3d12_view_heap;
-    class d3d12_texture;
-    class d3d12_swap_chain;
-    class d3d12_display;
-  
     class d3d12_event
     {
     public:
@@ -67,113 +58,85 @@ namespace icy
         d3d12_event m_event;
         com_ptr<ID3D12Fence> m_handle;
     };
-    class d3d12_command_list
-    {
-    public:
-        error_type initialize(ID3D12Device& device, const D3D12_COMMAND_LIST_TYPE type) noexcept;
-        error_type reset() noexcept;
-        ID3D12GraphicsCommandList* operator->() const noexcept
-        {
-            return m_commands;
-        }
-        ID3D12GraphicsCommandList* get() const noexcept
-        {
-            return m_commands;
-        }
-    private:
-        com_ptr<ID3D12CommandAllocator> m_alloc;
-        com_ptr<ID3D12GraphicsCommandList> m_commands;
-    };
-    class d3d12_view_heap
-    {
-    public:
-        using size_type = std::array<uint32_t, 4>;
-        error_type initialize(com_ptr<ID3D12Device> device, const size_type& capacity) noexcept;
-        error_type push(const D3D12_DESCRIPTOR_HEAP_TYPE type, size_t& view) noexcept;
-        void clear() noexcept
-        {
-            m_size = {};
-        }
-        ID3D12Device& device() const noexcept
-        {
-            return *m_device;
-        }
-    private:
-        com_ptr<ID3D12Device> m_device;
-        std::array<com_ptr<ID3D12DescriptorHeap>, 4> m_heaps;
-        size_type m_capacity = {};
-        size_type m_size = {};
-    };
-    class d3d12_texture
-    {
-    public:
-        error_type initialize(d3d12_view_heap& heap, const D3D12_RESOURCE_FLAGS flags) noexcept;
-        error_type resize(const window_size size, const DXGI_FORMAT format) noexcept;
-        ID3D12Resource& resource() const noexcept { return *m_buffer; }
-        size_t dsv() const noexcept { return m_dsv; }
-        size_t rtv() const noexcept { return m_rtv; }
-        size_t srv() const noexcept { return m_srv; }
-    private:
-        com_ptr<ID3D12Device> m_device;
-        D3D12_RESOURCE_FLAGS m_flags = D3D12_RESOURCE_FLAGS(0);
-        com_ptr<ID3D12Resource> m_buffer;
-        size_t m_dsv = {};
-        size_t m_rtv = {};
-        size_t m_srv = {};
-    };
     class d3d12_swap_chain
     {
     public:
-        error_type initialize(IDXGIFactory2& factory, ID3D12CommandQueue& queue, HWND__* const hwnd, d3d12_view_heap& heap, const window_flags flags) noexcept;
+        error_type initialize(IDXGIFactory& factory, ID3D12CommandQueue& queue, HWND__* const hwnd, const window_flags flags) noexcept;
         error_type resize() noexcept;
-        uint32_t buffer() const noexcept
-        {
-            return m_buffer;
-        }
+        error_type window(HWND__*& hwnd) const noexcept;
+        error_type present(const uint32_t vsync = 1) noexcept;
+        error_type size(window_size& output) const noexcept;
         void* event() const noexcept
         {
             return m_chain_wait;
         }
-        error_type window(HWND__*& hwnd) const noexcept;
-        error_type present(const uint32_t vsync = 1) noexcept;
-        size_t view() const noexcept
-        {
-            return m_views[buffer()];
-        }
-        com_ptr<ID3D12Resource> resource() const noexcept
-        {
-            return m_buffers[buffer()];
-        }
-        error_type size(window_size& output) const noexcept;
+        error_type buffer(const size_t index, com_ptr<ID3D12Resource>& texture) const noexcept;
+        size_t index() const noexcept;
     private:
         com_ptr<IDXGISwapChain3> m_chain;
         void* m_chain_wait = nullptr;
-        uint32_t m_buffer = 0;
-        array<com_ptr<ID3D12Resource>> m_buffers;
-        array<size_t> m_views = {};
     };
+
+    class d3d12_render_svg
+    {
+    public:
+        error_type initialize(ID3D12Device& device) noexcept;
+        //void operator()(ID3D11DeviceContext& context) const noexcept;
+    private:
+        com_ptr<ID3D12RootSignature> m_root;
+    };
+    struct d3d12_render
+    {
+        com_ptr<ID3D12CommandQueue> queue;
+        d3d12_render_svg svg;
+    };
+
+    class d3d12_back_buffer
+    {
+    public:
+        error_type initialize(ID3D12Device& device) noexcept;
+        error_type resize(const com_ptr<ID3D12Resource> swap_buffer, const window_size size, const window_flags flags) noexcept;
+        error_type update(const render_list& list, const d3d12_render& render) noexcept;
+        void draw(ID3D12GraphicsCommandList& commands) noexcept;
+        //error_type draw(ID3D12RenderTargetView& rtv) noexcept;
+    private:
+        struct data_type
+        {
+            d3d12_fence fence;
+            com_ptr<ID3D12CommandAllocator> alloc;
+            com_ptr<ID3D12GraphicsCommandList> commands;
+            com_ptr<ID3D12Resource> buffer;
+            size_t view = 0;
+        };
+        window_size m_size;
+        com_ptr<ID3D12DescriptorHeap> m_heap;
+        data_type m_chain;
+        data_type m_render;
+    };
+    
     class d3d12_display : public display
     {
     public:
         ~d3d12_display() noexcept;
         error_type initialize(const adapter& adapter, const window_flags flags) noexcept;
         error_type bind(HWND__* const window) noexcept;
-        error_type draw() noexcept override;
-        ID3D12Device& device() const noexcept
+        error_type draw(const size_t frame, const bool vsync) noexcept override;
+        error_type resize() noexcept override;
+        void* event() noexcept override
         {
-            return *m_device;
+            return m_chain.event();
         }
+        error_type update(const render_list& list) noexcept override;
     private:
         adapter m_adapter;
         window_flags m_flags = window_flags::none;
-        d3d12_event m_event_wait;
         library m_d3d12_lib = "d3d12"_lib;
         com_ptr<ID3D12Device> m_device;
         com_ptr<ID3D12CommandQueue> m_queue;
-        d3d12_fence m_fence;
-        d3d12_view_heap m_heap;
+        //d3d12_event m_event;
         d3d12_swap_chain m_chain;
-        array<d3d12_command_list> m_commands;
-        bool m_ready = false; //  can call swap chain 'Present'
+        array<d3d12_back_buffer> m_buffers;
+        d3d12_render m_render;
+        size_t m_frame = 0;
     };
 }

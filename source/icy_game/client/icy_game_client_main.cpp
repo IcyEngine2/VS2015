@@ -1,7 +1,7 @@
 #include <icy_engine/core/icy_thread.hpp>
 #include <icy_engine/graphics/icy_graphics.hpp>
 #include <icy_engine/graphics/icy_render.hpp>
-
+#include <icy_engine/core/icy_file.hpp>
 #if _DEBUG
 #pragma comment(lib, "icy_engine_cored")
 #pragma comment(lib, "icy_engine_graphicsd")
@@ -30,7 +30,7 @@ error_type application::exec(const uint64_t luid) noexcept
     };
     ICY_SCOPE_EXIT{ shutdown(); };
     array<adapter> adapters;
-    ICY_ERROR(adapter::enumerate(!luid ? (adapter_flag::hardware | adapter_flag::d3d11) : adapter_flag::none, adapters));
+    ICY_ERROR(adapter::enumerate(!luid ? (adapter_flag::hardware | adapter_flag::d3d12) : adapter_flag::none, adapters));
     adapter adapter;
     if (luid)
     {
@@ -50,7 +50,7 @@ error_type application::exec(const uint64_t luid) noexcept
     if (!adapter)
         return last_system_error();
 
-    ICY_ERROR(create_window_system(m_window, adapter, default_window_flags));
+    ICY_ERROR(create_window_system(m_window, adapter, default_window_flags | window_flags::msaa_x4));
     ICY_ERROR(m_window->initialize());
     ICY_ERROR(m_window->restyle(window_style::maximized));
     ICY_ERROR(launch());
@@ -61,7 +61,7 @@ error_type application::run() noexcept
 {
     ICY_SCOPE_EXIT{ event::post(nullptr, event_type::global_quit); };
     shared_ptr<event_queue> queue;
-    ICY_ERROR(create_event_queue(queue, event_type::window_close | event_type::window_repaint));
+    ICY_ERROR(create_event_queue(queue, event_type::window_any));
 
     {
         /*
@@ -97,6 +97,37 @@ error_type application::run() noexcept
         list->exec();*/
     }
 
+    render_svg_geometry svg;
+    render_svg_font font;
+    render_svg_font_data font_data;
+    copy("Arial"_s, font_data.name);
+    font_data.flags.push_back(render_svg_text_flag(render_svg_text_flag::font_size, 72));
+    font.initialize(font_data);
+    svg.initialize(render_d2d_matrix(), colors::white, font, "Hello"_s);
+
+   /* icy::file file;
+    file.open("D:/Downloads/tiger.svg"_s, file_access::read, file_open::open_existing, file_share::read);
+    array<char> svg_data;
+    svg_data.resize(file.info().size);
+    auto size = svg_data.size();
+    file.read(svg_data.data(), size);
+
+    render_svg_geometry svg2;
+    svg2.initialize(render_d2d_matrix(), svg_data);*/
+
+    const auto r = [&]
+    {
+
+        render_list list;
+        color c;
+        c.r = 1 % 255;
+        list.clear(c);
+        list.draw(svg, render_d2d_vector(0, 0));
+        //list.draw(svg2, render_d2d_vector(100, 0));
+
+        m_window->render(std::move(list));
+    };
+    r();
 
     auto now_0 = icy::clock_type::now();
     auto frame_0 = 0_z;
@@ -123,17 +154,10 @@ error_type application::run() noexcept
                 to_string("FPS [%1], Frame #%2"_s, name, fps, frame_1);
                 m_window->rename(name);
             }
-
-            render_list list;
-            color c;
-            c.r = frame_1 % 255;
-            list.clear(c);
-
-            render_svg_geometry svg;
-            svg.initialize(render_d2d_matrix(), "Hello"_s);
-            list.draw(svg, render_d2d_vector(0, 0));
-
-            m_window->render(std::move(list));
+        }
+        else if (event->type == event_type::window_resize)
+        {
+            r();
         }
     }
     return error_type();

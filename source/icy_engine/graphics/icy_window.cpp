@@ -194,7 +194,12 @@ error_type window_data::initialize() noexcept
     win32_set_window_longptr(m_hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
     win32_set_window_longptr(m_hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(proc));
     
-    if (m_adapter.flags & adapter_flag::d3d11)
+    error_type error;
+    if (m_adapter.flags & adapter_flag::d3d12)
+    {
+        ICY_ERROR(make_d3d12_display(m_display, m_adapter, m_flags, m_hwnd));
+    }
+    else if (m_adapter.flags & adapter_flag::d3d11)
     {
         ICY_ERROR(make_d3d11_display(m_display, m_adapter, m_flags, m_hwnd));
     }
@@ -217,7 +222,7 @@ LRESULT WINAPI window_data::proc(const HWND hwnd, const UINT msg, const WPARAM w
             return last_system_error();
 
         auto size = window_size{ uint32_t(rect.right - rect.left), uint32_t(rect.bottom - rect.top) };
-        ICY_ERROR(window->m_display->resize(window->m_flags));
+        ICY_ERROR(window->m_display->resize());
         return event::post(window, event_type::window_resize, size);
     };
     
@@ -356,7 +361,7 @@ error_type window_data::exec(event& event, const duration_type timeout) noexcept
         if (m_win32_flags & win32_flag::repaint)
         {
             ICY_ERROR(event::post(this, event_type::window_repaint, m_frame_index));
-            ICY_ERROR(m_display->draw(m_frame_index++));
+            ICY_ERROR(m_display->draw(m_frame_index++, false));
             m_win32_flags &= ~win32_flag::repaint;
             if (m_frame_time.count())
             {
