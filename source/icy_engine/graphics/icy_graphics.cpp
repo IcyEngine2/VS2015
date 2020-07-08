@@ -247,6 +247,7 @@ error_type adapter::data_type::msaa_d3d11(array<uint32_t>& quality) noexcept
     return error_type();
 }
 
+
 error_type render_list::clear(const color color) noexcept
 {
     ICY_ERROR(data.push_back(render_element_type::clear));
@@ -266,3 +267,4 @@ error_type render_list::draw(const render_svg_geometry geometry, const render_d2
     elem.offset = offset;
     return error_type();
 }
+

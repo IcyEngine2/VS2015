@@ -104,6 +104,7 @@
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_console.hpp" />
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_core.hpp" />
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_event.hpp" />
+    <ClInclude Include="..\..\..\include\icy_engine\core\icy_event_thread.hpp" />
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_file.hpp" />
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_function.hpp" />
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_json.hpp" />

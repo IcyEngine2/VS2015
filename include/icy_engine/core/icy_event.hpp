@@ -18,6 +18,7 @@ namespace icy
             bitcnt_console  =   0x03,
             bitcnt_window   =   0x07,
             bitcnt_gui      =   0x04,
+            bitcnt_render   =   0x02,
 
             bitcnt_user     =   0x20,
         };
@@ -29,6 +30,7 @@ namespace icy
             offset_console  =   offset_network + bitcnt_network,
             offset_window   =   offset_console + bitcnt_console,
             offset_gui      =   offset_window + bitcnt_window,
+            offset_render   =   offset_gui + bitcnt_gui,
 
             offset_user     =   0x20,
         };
@@ -40,6 +42,7 @@ namespace icy
             mask_console    =   ((1ui64 << bitcnt_console)  - 1)    <<  offset_console,
             mask_window     =   ((1ui64 << bitcnt_window)   - 1)    <<  offset_window,
             mask_gui        =   ((1ui64 << bitcnt_gui)      - 1)    <<  offset_gui,
+            mask_render     =   ((1ui64 << bitcnt_render)   - 1)    <<  offset_render,
             mask_user       =   ((1ui64 << bitcnt_user)     - 1)    <<  offset_user,
         };
         enum : uint64_t
@@ -84,10 +87,14 @@ namespace icy
             gui_select              =   1ui64   <<  (offset_gui + 0x03),    //  widget(view) + node
             gui_any                 =   mask_gui,
 
+            render_update           =   1ui64   <<  (offset_render + 0x00),
+            render_frame            =   1ui64   <<  (offset_render + 0x01),
+            render_any              =   mask_render,
+
             user                    =   1ui64   <<  (offset_user + 0x00),
             user_any                =   mask_user,
         };
-        static_assert(offset_user >= offset_gui + bitcnt_gui, "INVALID USER MESSAGE OFFSET");
+        static_assert(offset_user >= offset_render + bitcnt_render, "INVALID USER MESSAGE OFFSET");
     }
     
     using event_type = decltype(event_type_enum::none);
@@ -133,14 +140,12 @@ namespace icy
         static detail::rw_spin_lock g_lock;
         static event_system* g_list;
     };
-    class event_queue;
-    error_type create_event_queue(shared_ptr<event_queue>& queue, const uint64_t mask) noexcept;
 
     class event_queue final : public event_system
     {
         struct tag {};
     public:
-        friend error_type create_event_queue(shared_ptr<event_queue>& queue, const uint64_t mask) noexcept;
+        friend error_type create_event_system(shared_ptr<event_queue>& queue, const uint64_t mask) noexcept;
     public:
         event_queue(tag) noexcept { }
         ~event_queue() noexcept
@@ -161,9 +166,7 @@ namespace icy
         mutex m_mutex;
         cvar m_cvar;
     };
-    class thread;
-
-    error_type create_event_thread(shared_ptr<thread>& thread, const shared_ptr<event_system> system) noexcept;
+    //error_type create_event_system(shared_ptr<event_queue>& queue, const uint64_t mask) noexcept;
 
     class event_data
     {      

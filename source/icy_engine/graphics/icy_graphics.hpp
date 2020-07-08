@@ -5,6 +5,8 @@
 #include <icy_engine/utility/icy_com.hpp>
 
 struct IDXGIAdapter;
+struct ID3D11CommandList;
+struct ID3D11Texture2D;
 
 class icy::adapter::data_type
 {
@@ -35,14 +37,27 @@ private:
 
 namespace icy
 {
+    class render_system;
+    struct render_frame
+    {
+        size_t index = 0;
+        HWND__* window = nullptr;
+        struct
+        {
+            com_ptr<ID3D11CommandList> commands;
+            com_ptr<ID3D11Texture2D> texture;
+        } d3d11;
+    };
+
     class display
     {
     public:
         virtual ~display() noexcept = default;
-        virtual error_type draw(const size_t frame, const bool vsync) noexcept = 0;
+        virtual error_type draw(const bool vsync) noexcept = 0;
         virtual error_type resize() noexcept = 0;
-        virtual error_type update(const render_list& vec) noexcept = 0;
-        virtual void* event() noexcept = 0;
+        virtual error_type create(shared_ptr<render_system>& render) const noexcept = 0;
+        virtual error_type update(const render_frame& frame) noexcept;
+        virtual void* event() const noexcept = 0;
     };
     error_type make_d3d11_display(unique_ptr<display>& display, const adapter& adapter, const window_flags flags, HWND__* const window) noexcept;
     error_type make_d3d12_display(unique_ptr<display>& display, const adapter& adapter, const window_flags flags, HWND__* const window) noexcept;

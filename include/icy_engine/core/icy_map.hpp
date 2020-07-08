@@ -323,18 +323,22 @@ namespace icy
         error_type find_or_insert(const key_type& new_key, value_type&& new_val, iterator* it = nullptr) noexcept
         {
             static_assert(std::is_trivially_destructible<key_type>::value, "KEY MUST BE TRIVIAL");
-            return find_or_insert(key_type(new_key), std::move(new_val), it);
+            key_type tmp_key = new_key;
+            return find_or_insert(std::move(tmp_key), std::move(new_val), it);
         }
         error_type find_or_insert(key_type&& new_key, const value_type& new_val, iterator* it = nullptr) noexcept
         {
             static_assert(std::is_trivially_destructible<value_type>::value, "VALUE MUST BE TRIVIAL");
-            return find_or_insert(std::move(new_key), value_type(new_val), it);
+            value_type tmp_val = new_val;
+            return find_or_insert(std::move(new_key), std::move(tmp_val), it);
         }
         error_type find_or_insert(const key_type& new_key, const value_type& new_val, iterator* it = nullptr) noexcept
         {
             static_assert(std::is_trivially_destructible<key_type>::value, "KEY MUST BE TRIVIAL");
             static_assert(std::is_trivially_destructible<value_type>::value, "VALUE MUST BE TRIVIAL");
-            return find_or_insert(key_type(new_key), value_type(new_val), it);
+            key_type tmp_key = new_key;
+            value_type tmp_val = new_val;
+            return find_or_insert(std::move(tmp_key), std::move(tmp_val), it);
         }
 	private:
 		array<T> m_vals;

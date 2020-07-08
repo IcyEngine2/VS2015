@@ -87,17 +87,19 @@ namespace icy
     };
     struct d3d12_render
     {
-        com_ptr<ID3D12CommandQueue> queue;
         d3d12_render_svg svg;
     };
 
     class d3d12_back_buffer
     {
     public:
-        error_type initialize(ID3D12Device& device) noexcept;
-        error_type resize(const com_ptr<ID3D12Resource> swap_buffer, const window_size size, const window_flags flags) noexcept;
+        d3d12_back_buffer() noexcept = default;
+        ~d3d12_back_buffer() noexcept;
+        d3d12_back_buffer(d3d12_back_buffer&&) noexcept;
+        ICY_DEFAULT_MOVE_ASSIGN(d3d12_back_buffer);
+        error_type initialize(const com_ptr<ID3D12CommandQueue> queue, const com_ptr<ID3D12Resource> chain_buffer, const window_flags flags) noexcept;
         error_type update(const render_list& list, const d3d12_render& render) noexcept;
-        void draw(ID3D12GraphicsCommandList& commands) noexcept;
+        error_type draw() noexcept;
         //error_type draw(ID3D12RenderTargetView& rtv) noexcept;
     private:
         struct data_type
@@ -109,6 +111,7 @@ namespace icy
             size_t view = 0;
         };
         window_size m_size;
+        com_ptr<ID3D12CommandQueue> m_queue;
         com_ptr<ID3D12DescriptorHeap> m_heap;
         data_type m_chain;
         data_type m_render;
@@ -133,10 +136,10 @@ namespace icy
         library m_d3d12_lib = "d3d12"_lib;
         com_ptr<ID3D12Device> m_device;
         com_ptr<ID3D12CommandQueue> m_queue;
-        //d3d12_event m_event;
+        d3d12_render m_render;
+        d3d12_fence m_fence;
         d3d12_swap_chain m_chain;
         array<d3d12_back_buffer> m_buffers;
-        d3d12_render m_render;
         size_t m_frame = 0;
     };
 }

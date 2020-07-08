@@ -22,7 +22,7 @@ namespace icy
     {
         struct tag { };
     public:
-        friend error_type create_console(shared_ptr<console_system>& system) noexcept;
+        friend error_type create_event_system(shared_ptr<console_system>& system) noexcept;
     public:
         console_system(tag) noexcept { }
         ~console_system() noexcept;

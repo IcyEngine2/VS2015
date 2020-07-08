@@ -8,7 +8,7 @@ namespace icy
     {
         template<typename F> class function;
         template<typename R, typename... T>
-        class function<R(T...)> : public detail::rel_ops<function<R(T...)>>
+        class function<R(T...)>
         {
             static constexpr size_t dynamic_flag = SIZE_MAX / 2 + 1;
             class data_base
@@ -53,14 +53,14 @@ namespace icy
 			private:
 				auto destroy() noexcept -> void
 				{
-					A::destroy(this);
-					A::deallocate(this);
+					allocator_type::destroy(this);
+                    allocator_type::deallocate(this);
 				}
             private:
                 U call;
             };
         public:
-            using allocator_type = A;
+            rel_ops(function);
             using return_type = R;
             using function_type = R(*)(T...);
             struct arg_types
@@ -91,7 +91,7 @@ namespace icy
             {
 
             }
-            function(const function_type ptr) noexcept : m_ptr{ reinterpret_cast<size_t>(ptr) }
+            function(const function_type ptr) noexcept : m_ptr(reinterpret_cast<size_t>(ptr))
             {
 
             }
@@ -101,12 +101,12 @@ namespace icy
 				using data_type = type::data_type<remove_cvr<U>>;
 				auto ptr = allocator_type::allocate<data_type>(1);
 				if (!ptr)
-					return make_error(std::errc::not_enough_memory);
+					return make_stdlib_error(std::errc::not_enough_memory);
 
 				ICY_SCOPE_FAIL{ allocator_type::deallocate(ptr); };
                 allocator_type::construct(ptr, std::forward<U>(func));
 				m_ptr = reinterpret_cast<size_t>(ptr) + dynamic_flag;
-				return 0;
+                return error_type();
 			}
         public:
             explicit operator bool() const noexcept

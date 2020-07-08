@@ -713,7 +713,7 @@ namespace icy
 
     class gui_queue : public event_system
     {
-        friend error_type create_gui(shared_ptr<gui_queue>& queue) noexcept;
+        friend error_type create_event_system(shared_ptr<gui_queue>& queue) noexcept;
         enum { tag };
         error_type initialize() noexcept;
     public:
@@ -877,7 +877,7 @@ namespace icy
             ICY_ERROR(show(widget, true));
 
             shared_ptr<event_queue> loop;
-            ICY_ERROR(create_event_queue(loop, event_type::gui_action));
+            ICY_ERROR(create_event_system(loop, event_type::gui_action));
 
             auto timeout = max_timeout;
             while (true)
@@ -953,7 +953,7 @@ namespace icy
 #endif
         gui_system* m_system = nullptr;
     };
-    static error_type create_gui(shared_ptr<gui_queue>& queue) noexcept
+    static error_type create_event_system(shared_ptr<gui_queue>& queue) noexcept
     {
         ICY_ERROR(make_shared(queue, gui_queue::tag));
         if (const auto error = queue->initialize())

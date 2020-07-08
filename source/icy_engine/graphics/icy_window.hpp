@@ -3,9 +3,9 @@
 #include "icy_graphics.hpp"
 #include <icy_engine/graphics/icy_render.hpp>
 
-class window_data : public icy::window
+class window_data : public icy::window_system
 {
-    friend icy::error_type icy::create_window_system(icy::shared_ptr<icy::window>& window, const icy::adapter& adapter, const icy::window_flags flags) noexcept;
+    friend icy::error_type icy::create_event_system(icy::shared_ptr<icy::window_system>& window, const icy::adapter& adapter, const icy::window_flags flags) noexcept;
 public:
     window_data(const icy::adapter& adapter, const icy::window_flags flags, void* const event, void* const timer) noexcept : 
         m_adapter(adapter), m_flags(flags), m_event(event), m_timer(timer)
@@ -14,13 +14,16 @@ public:
     }
     ~window_data() noexcept override;
     void shutdown() noexcept;
+    const icy::display& display() const noexcept
+    {
+        return *m_display;
+    }
 private:
     icy::error_type initialize() noexcept override;
     icy::error_type restyle(const icy::window_style style) noexcept override;
     icy::error_type rename(const icy::string_view name) noexcept override;
     icy::error_type exec() noexcept override;
     icy::error_type exec(icy::event& event, const icy::duration_type timeout) noexcept;
-    icy::error_type render(icy::render_list&& list) noexcept override;
     HWND__* handle() const noexcept
     {
         return m_hwnd;

@@ -288,7 +288,7 @@ namespace icy
             ICY_ERROR(window.text(msg));
             ICY_ERROR(window.show(true));
             shared_ptr<event_queue> loop;
-            ICY_ERROR(create_event_queue(loop, event_type::window_close));
+            ICY_ERROR(create_event_system(loop, event_type::window_close));
             while (global_gui.load())
             {
                 event event;

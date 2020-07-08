@@ -16,7 +16,6 @@ enum class window_message_type : uint32_t
     none,
     restyle,
     rename,
-    render,
     close,
 };
 struct window_message
@@ -25,7 +24,6 @@ struct window_message
     wchar_t name[64] = {};
     input_message input;
     window_style style = window_style::windowed;
-    render_list render;
 };
 static decltype(&::TranslateMessage) win32_translate_message;
 static decltype(&::DispatchMessageW) win32_dispatch_message;
@@ -207,7 +205,7 @@ error_type window_data::initialize() noexcept
     {
         return make_stdlib_error(std::errc::function_not_supported);
     }
-    filter(event_type::window_internal);
+    filter(event_type::window_internal | event_type::render_frame);
     m_win32_flags |= win32_flag::initialized | win32_flag::repaint;
     m_frame_time = std::chrono::microseconds(1000 * 1000 / 240);
     return error_type();
@@ -360,8 +358,8 @@ error_type window_data::exec(event& event, const duration_type timeout) noexcept
 	{
         if (m_win32_flags & win32_flag::repaint)
         {
-            ICY_ERROR(event::post(this, event_type::window_repaint, m_frame_index));
-            ICY_ERROR(m_display->draw(m_frame_index++, false));
+            ICY_ERROR(event::post(this, event_type::window_repaint, m_frame_index++));
+            ICY_ERROR(m_display->draw(false));
             m_win32_flags &= ~win32_flag::repaint;
             if (m_frame_time.count())
             {
@@ -384,7 +382,14 @@ error_type window_data::exec(event& event, const duration_type timeout) noexcept
 
         if (event = pop())
         {
-            if (event->type != event_type::window_internal)
+            if (event->type == event_type::render_frame)
+            {
+                const auto& frame = event->data<render_frame>();
+                if (frame.window == m_hwnd)
+                    ICY_ERROR(m_display->update(frame));
+                continue;
+            }
+            else if (event->type != event_type::window_internal)
                 break;
 
             auto& event_data = event->data<window_message>();
@@ -423,10 +428,10 @@ error_type window_data::exec(event& event, const duration_type timeout) noexcept
                     if (!win32_set_window_placement(m_hwnd, &place))
                         return last_system_error();
                 }
-                else if (event_data.type == window_message_type::render)
+                /*else if (event_data.type == window_message_type::render)
                 {
                     ICY_ERROR(m_display->update(event_data.render));
-                }
+                }*/
             }
             continue;
         }
@@ -494,17 +499,7 @@ error_type window_data::rename(const string_view name) noexcept
     ICY_ERROR(name.to_utf16(msg.name, &size));
     return event::post(this, event_type::window_internal, std::move(msg));
 }
-error_type window_data::render(render_list&& list) noexcept
-{
-    if (list.data.empty())
-        return make_stdlib_error(std::errc::invalid_argument);
-
-    window_message msg;
-    msg.type = window_message_type::render;
-    msg.render = std::move(list);
-    return event::post(this, event_type::window_internal, std::move(msg));
-}
-error_type icy::create_window_system(shared_ptr<window>& window, const adapter& adapter, const window_flags flags) noexcept
+error_type icy::create_event_system(shared_ptr<window_system>& window, const adapter& adapter, const window_flags flags) noexcept
 {
     auto event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!event)
@@ -596,22 +591,3 @@ error_type icy::enum_windows(array<window_info>& vec) noexcept
         return last_system_error();
     return error_type();
 }
-
-
-/*error_type window::timer(const duration_type frequency) noexcept
-{
-    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(frequency).count();
-    if (!data || ms >= USER_TIMER_MAXIMUM)
-        return make_stdlib_error(std::errc::invalid_argument);
-
-    if (ms == 0)
-    {
-        KillTimer(data->hwnd, 0);
-    }
-    else
-    {
-        if (!SetTimer(data->hwnd, 0, uint32_t(ms), nullptr))
-            return last_system_error();
-    }
-    return error_type();
-}*/

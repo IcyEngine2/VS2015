@@ -6,7 +6,7 @@
 using namespace icy;
 
 
-error_type icy::create_console(shared_ptr<console_system>& system) noexcept
+error_type icy::create_event_system(shared_ptr<console_system>& system) noexcept
 {
     auto new_console = false;
     if (!AllocConsole())

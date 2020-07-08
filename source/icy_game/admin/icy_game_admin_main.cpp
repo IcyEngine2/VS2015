@@ -24,7 +24,7 @@ private:
 };
 error_type application::exec() noexcept
 {
-    ICY_ERROR(create_gui(m_gui_system));
+    ICY_ERROR(create_event_system(m_gui_system));
     const auto shutdown = [this]
     {
         global_gui = nullptr;
@@ -44,7 +44,7 @@ error_type application::run() noexcept
     ICY_ERROR(m_gui_system->show(m_window, true));
     xgui_widget splitter;
     shared_ptr<event_queue> queue;
-    ICY_ERROR(create_event_queue(queue, event_type::gui_any | event_type::window_close));
+    ICY_ERROR(create_event_system(queue, event_type::gui_any | event_type::window_close));
     while (true)
     {
         event event;

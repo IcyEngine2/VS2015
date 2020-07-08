@@ -117,7 +117,7 @@ error_type d3d12_swap_chain::size(window_size& output) const noexcept
 }
 error_type d3d12_swap_chain::buffer(const size_t index, com_ptr<ID3D12Resource>& texture) const noexcept
 {
-    ICY_COM_ERROR(m_chain->GetBuffer(index, IID_PPV_ARGS(&texture)));
+    ICY_COM_ERROR(m_chain->GetBuffer(uint32_t(index), IID_PPV_ARGS(&texture)));
     return error_type();
 }
 size_t d3d12_swap_chain::index() const noexcept
@@ -125,48 +125,62 @@ size_t d3d12_swap_chain::index() const noexcept
     return m_chain->GetCurrentBackBufferIndex();
 }
 
-error_type d3d12_back_buffer::initialize(ID3D12Device& device) noexcept
+error_type d3d12_back_buffer::initialize(const com_ptr<ID3D12CommandQueue> queue, const com_ptr<ID3D12Resource> chain_buffer, const window_flags flags) noexcept
 {
+    m_queue = queue;
+    m_chain.buffer = chain_buffer;
+
+    com_ptr<ID3D12Device> device;
+    queue->GetDevice(IID_PPV_ARGS(&device));
+
+    ICY_ERROR(m_chain.fence.initialize(*device));
+    ICY_ERROR(m_render.fence.initialize(*device));
+
     const auto type = D3D12_COMMAND_LIST_TYPE_DIRECT;
-    ICY_COM_ERROR(device.CreateCommandAllocator(type, IID_PPV_ARGS(&m_alloc)));
-    ICY_COM_ERROR(device.CreateCommandList(0, type, m_alloc, nullptr, IID_PPV_ARGS(&m_commands)));
-    ICY_COM_ERROR(m_commands->Close());
-    
+    ICY_COM_ERROR(device->CreateCommandAllocator(type, IID_PPV_ARGS(&m_chain.alloc)));
+    ICY_COM_ERROR(device->CreateCommandAllocator(type, IID_PPV_ARGS(&m_render.alloc)));
+    ICY_COM_ERROR(device->CreateCommandList(0, type, m_chain.alloc, nullptr, IID_PPV_ARGS(&m_chain.commands)));
+    ICY_COM_ERROR(device->CreateCommandList(0, type, m_render.alloc, nullptr, IID_PPV_ARGS(&m_render.commands)));
+    ICY_COM_ERROR(m_chain.commands->Close());
+    ICY_COM_ERROR(m_render.commands->Close());
+
     D3D12_DESCRIPTOR_HEAP_DESC heap_desc = {};
     heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
     heap_desc.NumDescriptors = 2;
-    ICY_COM_ERROR(device.CreateDescriptorHeap(&heap_desc, IID_PPV_ARGS(&m_heap)));
+    ICY_COM_ERROR(device->CreateDescriptorHeap(&heap_desc, IID_PPV_ARGS(&m_heap)));
     
-    const auto rtv_desc_size = device.GetDescriptorHandleIncrementSize(heap_desc.Type);
-    m_chain_view = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_heap->GetCPUDescriptorHandleForHeapStart(), 0, rtv_desc_size).ptr;
-    m_render_view = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_heap->GetCPUDescriptorHandleForHeapStart(), 1, rtv_desc_size).ptr;
-    return error_type();
-}
-error_type d3d12_back_buffer::resize(const com_ptr<ID3D12Resource> chain_buffer, const window_size size, const window_flags flags) noexcept
-{
-    m_chain_buffer = chain_buffer;
-    if (!chain_buffer)
-        return error_type();
+    const auto rtv_desc_size = device->GetDescriptorHandleIncrementSize(heap_desc.Type);
+    m_chain.view = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_heap->GetCPUDescriptorHandleForHeapStart(), 0, rtv_desc_size).ptr;
+    m_render.view = CD3DX12_CPU_DESCRIPTOR_HANDLE(m_heap->GetCPUDescriptorHandleForHeapStart(), 1, rtv_desc_size).ptr;
 
-    com_ptr<ID3D12Device> device;
-    ICY_COM_ERROR(chain_buffer->GetDevice(IID_PPV_ARGS(&device)));
+    m_chain.commands->SetName(L"[BackBuffer]: SwapChain CommandList");
+    m_render.commands->SetName(L"[BackBuffer]: Render CommandList");
+    
     const auto rtv_chain_desc = D3D12_RENDER_TARGET_VIEW_DESC{ DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_RTV_DIMENSION_TEXTURE2D };
     const auto rtv_render_desc = D3D12_RENDER_TARGET_VIEW_DESC{ DXGI_FORMAT_R8G8B8A8_UNORM, sample_count(flags) > 1 ? D3D12_RTV_DIMENSION_TEXTURE2DMS : D3D12_RTV_DIMENSION_TEXTURE2D };
-    const auto tex_render_desc = CD3DX12_RESOURCE_DESC::Tex2D(rtv_render_desc.Format, 
-        size.x, size.y, 1, 1, sample_count(flags));
+    auto tex_render_desc = chain_buffer->GetDesc();
+    tex_render_desc.SampleDesc.Count = sample_count(flags);
+    tex_render_desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
 
+    CD3DX12_HEAP_PROPERTIES heap(D3D12_HEAP_TYPE_DEFAULT);
     com_ptr<ID3D12Resource> render;
-    ICY_COM_ERROR(device->CreateCommittedResource(nullptr, D3D12_HEAP_FLAG_NONE, &tex_render_desc, 
+    ICY_COM_ERROR(device->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &tex_render_desc, 
         D3D12_RESOURCE_STATE_RESOLVE_SOURCE, nullptr, IID_PPV_ARGS(&render)));
     
-    m_render_buffer = render;
-    device->CreateRenderTargetView(chain_buffer, &rtv_chain_desc, d3d12_cpu_handle(m_chain_view));
-    device->CreateRenderTargetView(m_render_buffer, &rtv_render_desc, d3d12_cpu_handle(m_render_view));
+    m_render.buffer = render;
+    device->CreateRenderTargetView(chain_buffer, &rtv_chain_desc, d3d12_cpu_handle(m_chain.view));
+    device->CreateRenderTargetView(m_render.buffer, &rtv_render_desc, d3d12_cpu_handle(m_render.view));
+
+    m_chain.buffer->SetName(L"[BackBuffer]: SwapChain Texture");
+    m_render.buffer->SetName(L"[BackBuffer]: Render Texture");
+    m_size = { uint32_t(tex_render_desc.Width), uint32_t(tex_render_desc.Height) };
+
     return error_type();
 }
 error_type d3d12_back_buffer::update(const render_list& list, const d3d12_render& render) noexcept
 {
-    ICY_COM_ERROR(m_commands->Reset(m_alloc, nullptr));
+    ICY_ERROR(m_render.fence.wait());
+    ICY_COM_ERROR(m_render.commands->Reset(m_render.alloc, nullptr));
 
     array<render_d2d_vertex> d2d_vertices;
     auto d2d_capacity = 0_z;
@@ -177,7 +191,7 @@ error_type d3d12_back_buffer::update(const render_list& list, const d3d12_render
     }
     ICY_ERROR(d2d_vertices.reserve(d2d_capacity));
 
-    float clear[4] = { 0, 0, 0, 1 };
+    float clear[4] = { 1, 0, 0, 1 };
     for (auto&& elem : list.data)
     {
         switch (elem.type)
@@ -204,30 +218,56 @@ error_type d3d12_back_buffer::update(const render_list& list, const d3d12_render
         }
     }
 
-    const auto barrier_beg = CD3DX12_RESOURCE_BARRIER::Transition(m_render_buffer,
+    const auto barrier_beg = CD3DX12_RESOURCE_BARRIER::Transition(m_render.buffer,
         D3D12_RESOURCE_STATE_RESOLVE_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
-    m_commands->ResourceBarrier(1, &barrier_beg);
-
-    m_commands->ClearRenderTargetView(d3d12_cpu_handle(m_render_view), clear, 0, nullptr);
-
-    const auto barrier_end = CD3DX12_RESOURCE_BARRIER::Transition(m_render_buffer,
+    const auto barrier_end = CD3DX12_RESOURCE_BARRIER::Transition(m_render.buffer,
         D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
-    m_commands->ResourceBarrier(1, &barrier_end);
-    ICY_COM_ERROR(m_commands->Close());
+    
+    m_render.commands->ResourceBarrier(1, &barrier_beg);
+    m_render.commands->ClearRenderTargetView(d3d12_cpu_handle(m_render.view), clear, 0, nullptr);
+    m_render.commands->ResourceBarrier(1, &barrier_end);
+    ICY_COM_ERROR(m_render.commands->Close());
 
-    ID3D12CommandList* const commands[] = { m_commands };
-    render.queue->ExecuteCommandLists(_countof(commands), commands);
+    ID3D12CommandList* const commands[] = { m_render.commands };
+    m_queue->ExecuteCommandLists(_countof(commands), commands);
+    ICY_ERROR(m_render.fence.signal(*m_queue));
     return error_type();
 }
-void d3d12_back_buffer::draw(ID3D12GraphicsCommandList& commands) noexcept
+error_type d3d12_back_buffer::draw() noexcept
 {
-    const auto barrier_beg = CD3DX12_RESOURCE_BARRIER::Transition(m_chain_buffer,
-        D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_RESOLVE_DEST);
-    const auto barrier_end = CD3DX12_RESOURCE_BARRIER::Transition(m_chain_buffer,
-        D3D12_RESOURCE_STATE_RESOLVE_DEST, D3D12_RESOURCE_STATE_RENDER_TARGET);
-    commands.ResourceBarrier(1, &barrier_beg);
-    commands.ResolveSubresource(m_chain_buffer, 0, m_render_buffer, 0, DXGI_FORMAT_R8G8B8A8_UNORM);
-    commands.ResourceBarrier(1, &barrier_end);
+    ICY_ERROR(m_chain.fence.wait());
+    ICY_ERROR(m_render.fence.wait());
+
+    const auto barrier_beg = CD3DX12_RESOURCE_BARRIER::Transition(m_chain.buffer,
+        D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RESOLVE_DEST);
+    const auto barrier_end = CD3DX12_RESOURCE_BARRIER::Transition(m_chain.buffer,
+        D3D12_RESOURCE_STATE_RESOLVE_DEST, D3D12_RESOURCE_STATE_PRESENT);
+
+    ICY_COM_ERROR(m_chain.commands->Reset(m_chain.alloc, nullptr));
+    m_chain.commands->ResourceBarrier(1, &barrier_beg);
+    m_chain.commands->ResolveSubresource(m_chain.buffer, 0, m_render.buffer, 0, DXGI_FORMAT_R8G8B8A8_UNORM);
+    m_chain.commands->ResourceBarrier(1, &barrier_end);
+    ICY_COM_ERROR(m_chain.commands->Close());
+
+    ID3D12CommandList* const commands[] = { m_chain.commands };
+    m_queue->ExecuteCommandLists(_countof(commands), commands);
+    ICY_ERROR(m_chain.fence.signal(*m_queue));
+    ICY_ERROR(m_render.fence.signal(*m_queue));
+    return error_type();
+}
+d3d12_back_buffer::~d3d12_back_buffer() noexcept
+{
+    if (m_queue)
+    {
+        const auto e0 = m_chain.fence.signal(*m_queue);
+        const auto e1 = m_render.fence.signal(*m_queue);
+        const auto e2 = m_chain.fence.wait();
+        const auto e3 = m_render.fence.wait();
+    }
+}
+d3d12_back_buffer::d3d12_back_buffer(d3d12_back_buffer&& rhs) noexcept
+{
+    ICY_ASSERT(!rhs.m_queue, "BAD MOVE");
 }
 
 d3d12_display::~d3d12_display() noexcept
@@ -239,7 +279,6 @@ error_type d3d12_display::initialize(const adapter& adapter, const window_flags 
 {
     m_adapter = adapter;
     m_flags = flags;
-    ICY_ERROR(m_event.initialize());
     ICY_ERROR(m_d3d12_lib.initialize());
 
     if (flags & window_flags::debug_layer)
@@ -285,13 +324,11 @@ error_type d3d12_display::initialize(const adapter& adapter, const window_flags 
             ICY_COM_ERROR(debug->PushStorageFilter(&filter));
         }
     }
-    D3D12_COMMAND_QUEUE_DESC queue_desc{ D3D12_COMMAND_LIST_TYPE::D3D12_COMMAND_LIST_TYPE_DIRECT };
-    ICY_COM_ERROR(m_device->CreateCommandQueue(&queue_desc, IID_PPV_ARGS(&m_queue)));
     ICY_ERROR(m_fence.initialize(*m_device));
 
-    ICY_ERROR(m_buffers.resize(buffer_count(flags)));
-    for (auto&& buffer : m_buffers)
-        ICY_ERROR(buffer.initialize(*m_device));
+    D3D12_COMMAND_QUEUE_DESC queue_desc{ D3D12_COMMAND_LIST_TYPE::D3D12_COMMAND_LIST_TYPE_DIRECT };
+    ICY_COM_ERROR(m_device->CreateCommandQueue(&queue_desc, IID_PPV_ARGS(&m_queue)));
+    m_queue->SetName(L"[D3D12]: Command Queue");
     
     return error_type();
 }
@@ -301,28 +338,17 @@ error_type d3d12_display::bind(HWND__* const window) noexcept
     ICY_COM_ERROR(static_cast<IDXGIAdapter*>(m_adapter.handle())->GetParent(IID_PPV_ARGS(&factory)));
     ICY_COM_ERROR(factory->MakeWindowAssociation(window, DXGI_MWA_NO_ALT_ENTER | DXGI_MWA_NO_WINDOW_CHANGES | DXGI_MWA_NO_PRINT_SCREEN));
     ICY_ERROR(m_chain.initialize(*factory, *m_queue, window, m_flags));
-
-    window_size size;
-    ICY_ERROR(m_chain.size(size));
-    for (auto k = 0u; k < m_buffers.size(); ++k)
-    {
-        com_ptr<ID3D12Resource> chain_buffer;
-        ICY_ERROR(m_chain.buffer(k, chain_buffer));
-        ICY_ERROR(m_buffers[k].resize(chain_buffer, size, m_flags));
-        ICY_ERROR(m_buffers[k].update(render_list(), m_render));
-    }
+    ICY_ERROR(resize());
     return error_type();
 }
 error_type d3d12_display::draw(const size_t frame, const bool vsync) noexcept
 {
+    if (m_buffers.empty())
+        return make_stdlib_error(std::errc::invalid_argument);
+
     const auto index = m_chain.index();
-    m_buffers[index].draw(m_render.queue);
-
-    ICY_COM_ERROR(m_commands->Reset(m_alloc, nullptr));
-    ICY_COM_ERROR(m_commands->Close());
-    ID3D12CommandList* const commands[] = { m_commands };
-    m_queue->ExecuteCommandLists(_countof(commands), commands);
-
+    ICY_ERROR(m_buffers[index].draw());
+    ICY_ERROR(m_fence.wait());
     const auto error = m_chain.present(vsync);
     ICY_ERROR(m_fence.signal(*m_queue));
     if (error)
@@ -339,24 +365,24 @@ error_type d3d12_display::resize() noexcept
 {
     ICY_ERROR(m_fence.signal(*m_queue));
     ICY_ERROR(m_fence.wait());
+    m_buffers.clear();
+    
     window_size size;
-    for (auto&& buffer : m_buffers)
-    {
-        ICY_ERROR(buffer.resize(nullptr, window_size(), m_flags));
-    }
     ICY_ERROR(m_chain.resize());
-    ICY_ERROR(m_chain.size(size));
-    for (auto k = 0u; k < m_buffers.size(); ++k)
+    ICY_ERROR(m_buffers.reserve(buffer_count(m_flags)));
+    for (auto k = 0u; k < m_buffers.capacity(); ++k)
     {
         com_ptr<ID3D12Resource> chain_buffer;
         ICY_ERROR(m_chain.buffer(k, chain_buffer));
-        ICY_ERROR(m_buffers[k].resize(chain_buffer, size, m_flags));
+        ICY_ERROR(m_buffers.emplace_back());
+        ICY_ERROR(m_buffers.back().initialize(m_queue, chain_buffer, m_flags));
+        ICY_ERROR(m_buffers.back().update(render_list(), m_render));
     }
     return error_type();
 }
 error_type d3d12_display::update(const render_list& list) noexcept
 {
-    return m_buffers[((m_frame++) % m_buffers.size())].update(list, m_render);
+    return m_buffers.empty() ? error_type() : m_buffers[((m_frame++) % m_buffers.size())].update(list, m_render);
 }
 
 error_type icy::make_d3d12_display(unique_ptr<display>& display, const adapter& adapter, const window_flags flags, HWND__* const window) noexcept

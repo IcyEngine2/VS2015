@@ -120,7 +120,7 @@ error_type event_system::post(event_data& event) noexcept
 detail::rw_spin_lock event_system::g_lock;
 event_system* event_system::g_list;
 
-error_type icy::create_event_queue(shared_ptr<event_queue>& queue, const uint64_t mask) noexcept
+error_type icy::create_event_system(shared_ptr<event_queue>& queue, const uint64_t mask) noexcept
 {
     shared_ptr<event_queue> new_queue;
     ICY_ERROR(make_shared(new_queue, event_queue::tag()));

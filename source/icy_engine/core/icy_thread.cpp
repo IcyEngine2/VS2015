@@ -7,7 +7,7 @@
 #include <cstdio>
 #include <process.h>
 #include <thread>
-
+#include <thr/threads.h>
 using namespace icy;
 
 #define LDRP_IMAGE_DLL                          0x00000004
@@ -166,7 +166,19 @@ const thread* icy::this_thread() noexcept
 }
 void icy::sleep(const clock_type::duration duration) noexcept
 {
-    SleepEx(ms_timeout(duration), TRUE);
+    const auto ms = ms_timeout(duration);
+    if (!ms)
+    {
+        thrd_yield();
+    }
+    else
+    {
+        xtime tm;
+        tm.sec = time_t(std::chrono::duration_cast<std::chrono::seconds>(duration).count());
+        tm.nsec = long(std::chrono::duration_cast<std::chrono::nanoseconds>(duration - std::chrono::seconds(tm.sec)).count());
+        thrd_sleep(&tm);
+    }
+    //SleepEx(ms, TRUE);
 }
 
 uint32_t thread::this_index() noexcept
@@ -289,29 +301,4 @@ thread::~thread() noexcept
 size_t thread::cores() noexcept
 {
     return std::thread::hardware_concurrency();
-}
-
-error_type icy::create_event_thread(shared_ptr<thread>& thread, const shared_ptr<event_system> system) noexcept
-{
-    class event_thread : public icy::thread
-    {
-    public:
-        error_type run() noexcept override
-        {
-            auto sys = std::move(system);
-            if (const auto error = sys->exec())
-            {
-                event::post(nullptr, event_type::global_quit);
-                return error;
-            }
-            return error_type();
-        }
-    public:
-        shared_ptr<event_system> system;
-    };
-    shared_ptr<event_thread> ptr;
-    ICY_ERROR(make_shared(ptr));
-    ptr->system = system;
-    thread = std::move(ptr);
-    return error_type();
 }
