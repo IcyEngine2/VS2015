@@ -1,7 +1,7 @@
 #include <icy_engine/core/icy_file.hpp>
 #include <icy_engine/core/icy_event_thread.hpp>
 #include <icy_engine/graphics/icy_graphics.hpp>
-#include <icy_engine/graphics/icy_render.hpp>
+#include <icy_engine/graphics/icy_render_svg.hpp>
 #if _DEBUG
 #pragma comment(lib, "icy_engine_cored")
 #pragma comment(lib, "icy_engine_graphicsd")
@@ -20,7 +20,7 @@ class game_system : public event_system
 public:
     game_system() noexcept
     {
-        filter(event_type::window_any);
+        filter(event_type::window_any | event_type::render_frame);
     }
     ~game_system() noexcept
     {
@@ -45,12 +45,13 @@ struct application
     {
         event::post(nullptr, event_type::global_quit);
         if (game) game->wait();
-        if (render) render->wait();
+        if (display) display->wait();
         if (window) window->wait();
     }
     shared_ptr<event_thread<window_system>> window;
-    shared_ptr<event_thread<render_system>> render;
+    shared_ptr<event_thread<display_system>> display;
     shared_ptr<event_thread<game_system>> game;
+    shared_ptr<render_factory> render[1];
 };
 
 
@@ -58,14 +59,30 @@ error_type game_system::exec() noexcept
 {
     ICY_SCOPE_EXIT{ event::post(nullptr, event_type::global_quit); };
 
-    render_svg_geometry svg;
     render_svg_font font;
     render_svg_font_data font_data;
     ICY_ERROR(copy("Arial"_s, font_data.name));
     ICY_ERROR(font_data.flags.push_back(render_svg_text_flag(render_svg_text_flag::font_size, 72)));
     ICY_ERROR(font.initialize(font_data));
-    ICY_ERROR(svg.initialize(render_d2d_matrix(), colors::white, font, "Hello"_s));
+    
+    const auto func = [font, this](size_t index, color clr)
+    {
+        string str;
+        render_svg_geometry svg;
+        ICY_ERROR(to_string("Frame %1"_s, str, index));
+        ICY_ERROR(svg.initialize(render_d2d_matrix(), colors::white, font, str));
 
+        shared_ptr<render_list> list;
+        ICY_ERROR(create_render_list(list));
+        ICY_ERROR(list->clear(clr));
+        ICY_ERROR(list->draw(svg, render_d2d_matrix()));
+        render_frame frame;
+        ICY_ERROR(app->render[0]->exec(*list, frame));
+        ICY_ERROR(app->display->system->render(frame));
+        return error_type();
+    };
+    ICY_ERROR(func(0, colors::red));
+   
     auto now_0 = clock_type::now();
     auto frame_0 = 0_z;
     
@@ -79,30 +96,30 @@ error_type game_system::exec() noexcept
         }
         if (event->type == event_type::global_quit)
             break;
-        if (event->type == event_type::window_close)
-            break;
-
-        if (event->type == event_type::window_repaint)
+        if (event->type == event_type::window_resize)
         {
-            const auto frame_1 = event->data<size_t>();
-            render_list list(frame_1);
-            color c;
-            c.r = 100 % 255;
-            ICY_ERROR(list.clear(c));
-            ICY_ERROR(list.draw(svg, render_d2d_vector(0, 0)));
-            ICY_ERROR(app->render->system->update(std::move(list)));
+            app->display->system->resize(event->data<window_size>());
+        }
+        if (event->type == event_type::render_frame)
+        {
+            auto frame = event->data<render_frame>();
+
+            color color;
+            color.b = frame.index() % 255;
+            func(frame.index() + 1, color);
 
             const auto now_1 = clock_type::now();
             const auto delta = std::chrono::duration_cast<std::chrono::milliseconds>(now_1 - now_0);
-
             if (delta.count() >= 1000)
             {
-                auto fps = (frame_1 - frame_0) * 1000 / delta.count();
-                frame_0 = frame_1;
+                auto fps = (frame.index() - frame_0) * 1000 / delta.count();
+                frame_0 = frame.index();
                 now_0 = now_1;
                 string name;
-                ICY_ERROR(to_string("FPS [%1], Frame #%2"_s, name, fps, frame_1));
-                ICY_ERROR(app->window->rename(name));
+                auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(frame.time_cpu());
+
+                ICY_ERROR(to_string("FPS [%1], Frame #%2, Time = %3 ms"_s, name, fps, frame.index(), ms.count()));
+                ICY_ERROR(app->window->system->rename(name));
             }
         }
     }
@@ -119,6 +136,70 @@ namespace icy
         system = std::move(ptr);
         return error_type();
     }
+}
+
+error_type main_func(const uint64_t luid) noexcept
+{
+    win32_message("Hi"_s, "Hi"_s);
+    array<adapter> adapters;
+    auto adapter_flags = adapter_flags::debug;
+    if (!luid)
+        adapter_flags = adapter_flags | adapter_flags::d3d12;
+    
+    ICY_ERROR(adapter::enumerate(adapter_flags, adapters));
+    adapter adapter;
+    if (luid)
+    {
+        for (auto&& gpu : adapters)
+        {
+            if (gpu.luid == luid)
+            {
+                adapter = gpu;
+                break;
+            }
+        }
+    }
+    else if (!adapters.empty())
+    {
+        adapter = adapters.front();
+    }
+    if (!adapter)
+        return last_system_error();
+
+    application app;
+    ICY_ERROR(create_event_thread(app.window, default_window_flags));
+    ICY_ERROR(app.window->launch());
+
+    ICY_ERROR(create_event_thread(app.display, adapter, app.window->system->handle(), display_flags::none));
+    ICY_ERROR(app.display->launch());
+    ICY_ERROR(app.display->system->vsync(display_frame_vsync));
+    
+    for (auto&& system : app.render)
+    {
+        ICY_ERROR(create_render_factory(system, adapter, render_flags::none));
+        ICY_ERROR(system->resize(window_size(720, 480)));
+    }
+    ICY_ERROR(create_event_thread(app.game, &app));
+    ICY_ERROR(app.game->launch());
+    ICY_ERROR(app.game->wait());
+    ICY_ERROR(app.window->wait());
+    return error_type();
+}
+
+int main()
+{
+    heap gheap;
+    if (const auto error = gheap.initialize(heap_init::global(16_gb)))
+        return error.code;
+
+    if (const auto error = main_func(0))
+    {
+        string str;
+        to_string(error, str);
+        win32_message(str, "App exec");
+        return error.code;
+    }
+    return 0;
 }
 
 /*
@@ -162,55 +243,3 @@ icy::file file;
 
  render_svg_geometry svg2;
  svg2.initialize(render_d2d_matrix(), svg_data);*/
-
-error_type main_func(const uint64_t luid) noexcept
-{
-    array<adapter> adapters;
-    ICY_ERROR(adapter::enumerate(!luid ? (adapter_flag::d3d12) : adapter_flag::none, adapters));
-    adapter adapter;
-    if (luid)
-    {
-        for (auto&& gpu : adapters)
-        {
-            if (gpu.luid == luid)
-            {
-                adapter = gpu;
-                break;
-            }
-        }
-    }
-    else if (!adapters.empty())
-    {
-        adapter = adapters.front();
-    }
-    if (!adapter)
-        return last_system_error();
-
-    application app;
-    ICY_ERROR(create_event_thread(app.window, adapter, default_window_flags | window_flags::msaa_x4));
-    ICY_ERROR(app.window->launch());
-    ICY_ERROR(create_event_thread(app.render, std::ref(*app.window->system)));
-    ICY_ERROR(app.render->launch());
-    ICY_ERROR(create_event_thread(app.game, &app));
-    ICY_ERROR(app.game->launch());
-    ICY_ERROR(app.game->wait());
-    ICY_ERROR(app.render->wait());
-    ICY_ERROR(app.window->wait());
-    return error_type();
-}
-
-int main()
-{
-    heap gheap;
-    if (const auto error = gheap.initialize(heap_init::global(16_gb)))
-        return error.code;
-
-    if (const auto error = main_func(0))
-    {
-        string str;
-        to_string(error, str);
-        win32_message(str, "App exec");
-        return error.code;
-    }
-    return 0;
-}

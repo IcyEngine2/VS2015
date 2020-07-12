@@ -13,19 +13,21 @@ namespace icy
         enum : uint64_t
         {            
             bitcnt_global   =   0x04,
+            bitcnt_system   =   0x01,
             bitcnt_fileio   =   0x02,
             bitcnt_network  =   0x05,
             bitcnt_console  =   0x03,
-            bitcnt_window   =   0x07,
+            bitcnt_window   =   0x05,
             bitcnt_gui      =   0x04,
-            bitcnt_render   =   0x02,
+            bitcnt_render   =   0x01,
 
             bitcnt_user     =   0x20,
         };
         enum : uint64_t
         {
             offset_global   =   0x00,
-            offset_fileio   =   offset_global + bitcnt_global,
+            offset_system   =   offset_global + bitcnt_global,
+            offset_fileio   =   offset_system + bitcnt_system,
             offset_network  =   offset_fileio + bitcnt_fileio,
             offset_console  =   offset_network + bitcnt_network,
             offset_window   =   offset_console + bitcnt_console,
@@ -37,6 +39,7 @@ namespace icy
         enum : uint64_t
         {
             mask_global     =   ((1ui64 << bitcnt_global)   - 1)    <<  offset_global,
+            mask_system     =   ((1ui64 << bitcnt_system)   - 1)    <<  offset_system,
             mask_fileio     =   ((1ui64 << bitcnt_fileio)   - 1)    <<  offset_fileio,
             mask_network    =   ((1ui64 << bitcnt_network)  - 1)    <<  offset_network,
             mask_console    =   ((1ui64 << bitcnt_console)  - 1)    <<  offset_console,
@@ -54,6 +57,9 @@ namespace icy
             global_task             =   1ui64   <<  (offset_global + 0x02),
             global_timeout          =   1ui64   <<  (offset_global + 0x03),
             global_any              =   mask_global,
+
+            system_internal         =   1ui64   <<  (offset_system + 0x00),
+            system_any              =   mask_system,
 
             file_read               =   1ui64   <<  (offset_fileio + 0x00),
             file_write              =   1ui64   <<  (offset_fileio + 0x01),
@@ -73,12 +79,11 @@ namespace icy
             console_any             =   mask_console,
             
             window_close            =   1ui64   <<  (offset_window + 0x00),
-            window_resize           =   1ui64   <<  (offset_window + 0x02),
-            window_input            =   1ui64   <<  (offset_window + 0x03),
-            window_internal         =   1ui64   <<  (offset_window + 0x04),
-            window_active           =   1ui64   <<  (offset_window + 0x05),
-            window_minimized        =   1ui64   <<  (offset_window + 0x06),
-            window_repaint          =   1ui64   <<  (offset_window + 0x07),
+            window_resize           =   1ui64   <<  (offset_window + 0x01),
+            window_input            =   1ui64   <<  (offset_window + 0x02),
+            window_active           =   1ui64   <<  (offset_window + 0x03),
+            window_minimized        =   1ui64   <<  (offset_window + 0x04),
+            //window_repaint          =   1ui64   <<  (offset_window + 0x05),
             window_any              =   mask_window,
 
             gui_action              =   1ui64   <<  (offset_gui + 0x00),    //  action index
@@ -87,8 +92,7 @@ namespace icy
             gui_select              =   1ui64   <<  (offset_gui + 0x03),    //  widget(view) + node
             gui_any                 =   mask_gui,
 
-            render_update           =   1ui64   <<  (offset_render + 0x00),
-            render_frame            =   1ui64   <<  (offset_render + 0x01),
+            render_frame            =   1ui64   <<  (offset_render + 0x00),
             render_any              =   mask_render,
 
             user                    =   1ui64   <<  (offset_user + 0x00),
@@ -285,8 +289,8 @@ namespace icy
         template<typename T> static error_type post(event_system* const source, const event_type type, T&& arg) noexcept
         {
             event_data* new_event = nullptr;
-            ICY_ERROR(event_data::create(type, source, sizeof(T), new_event));
-            event_data::initialize(*new_event, std::is_trivially_destructible<T>{}, std::move(arg));
+            ICY_ERROR(event_data::create(type, source, sizeof(std::decay_t<T>), new_event));
+            event_data::initialize(*new_event, std::is_trivially_destructible<std::decay_t<T>>{}, std::move(arg));
             const auto error = event_data::post(*new_event);
             new_event->release();
             return error;

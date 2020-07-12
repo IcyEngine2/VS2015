@@ -247,10 +247,21 @@ namespace icy
         detail::shared_ptr_buffer* m_ptr = nullptr;
     };
 
+
+    template<typename T>
+    class shared_ptr;
+
+
+    template<typename T>
+    inline int compare(const shared_ptr<T>& lhs, const shared_ptr<T>& rhs) noexcept
+    {
+        return icy::compare(lhs.get(), rhs.get());
+    }
+
+    
     template<typename T>
     class shared_ptr
     {
-        friend int compare(const shared_ptr<T>& lhs, const shared_ptr<T>& rhs) noexcept;
         template<typename U> friend class shared_ptr;
         template<typename U> friend class weak_ptr;
         template<typename T>

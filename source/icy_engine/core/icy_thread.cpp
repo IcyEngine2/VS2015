@@ -268,7 +268,13 @@ error_type thread::launch() noexcept
     
     while (true)
     {
-        ICY_ERROR(m_data->cvar.wait(m_data->lock, std::chrono::milliseconds(200)));
+        if (const auto error = m_data->cvar.wait(m_data->lock, std::chrono::milliseconds(200)))
+        {
+            if (error == make_stdlib_error(std::errc::timed_out))
+                ;
+            else
+                return error;
+        }
         ICY_LOCK_GUARD(m_data->lock);
         ICY_ERROR(m_data->error);
         if (m_data->state != thread_state::none)

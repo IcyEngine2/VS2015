@@ -24,6 +24,7 @@ struct window_message
     wchar_t name[64] = {};
     input_message input;
     window_style style = window_style::windowed;
+    duration_type frame;
 };
 static decltype(&::TranslateMessage) win32_translate_message;
 static decltype(&::DispatchMessageW) win32_dispatch_message;
@@ -57,7 +58,6 @@ struct win32_flag_enum
         //fullscreen  =   0x02,
         minimized   =   0x08,
         initialized =   0x10,
-        repaint     =   0x20,
         //closing     =   0x10,
         //resized     =   0x10,
     };
@@ -105,14 +105,7 @@ window_data::~window_data() noexcept
     filter(0);
     shutdown();
     if (m_event)
-    {
         CloseHandle(m_event);
-    }
-    if (m_timer)
-    {
-        CancelWaitableTimer(m_timer);
-        CloseHandle(m_timer);
-    }
 }
 icy::error_type window_data::signal(const icy::event_data& event) noexcept
 {
@@ -192,22 +185,8 @@ error_type window_data::initialize() noexcept
     win32_set_window_longptr(m_hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
     win32_set_window_longptr(m_hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(proc));
     
-    error_type error;
-    if (m_adapter.flags & adapter_flag::d3d12)
-    {
-        ICY_ERROR(make_d3d12_display(m_display, m_adapter, m_flags, m_hwnd));
-    }
-    else if (m_adapter.flags & adapter_flag::d3d11)
-    {
-        ICY_ERROR(make_d3d11_display(m_display, m_adapter, m_flags, m_hwnd));
-    }
-    else
-    {
-        return make_stdlib_error(std::errc::function_not_supported);
-    }
-    filter(event_type::window_internal | event_type::render_frame);
-    m_win32_flags |= win32_flag::initialized | win32_flag::repaint;
-    m_frame_time = std::chrono::microseconds(1000 * 1000 / 240);
+    filter(event_type::system_internal);
+    m_win32_flags |= win32_flag::initialized;
     return error_type();
 }
 LRESULT WINAPI window_data::proc(const HWND hwnd, const UINT msg, const WPARAM wparam, const LPARAM lparam) noexcept
@@ -220,7 +199,6 @@ LRESULT WINAPI window_data::proc(const HWND hwnd, const UINT msg, const WPARAM w
             return last_system_error();
 
         auto size = window_size{ uint32_t(rect.right - rect.left), uint32_t(rect.bottom - rect.top) };
-        ICY_ERROR(window->m_display->resize());
         return event::post(window, event_type::window_resize, size);
     };
     
@@ -246,8 +224,11 @@ LRESULT WINAPI window_data::proc(const HWND hwnd, const UINT msg, const WPARAM w
     case WM_CLOSE:
         //  internal
         window->m_error = event::post(window, event_type::window_close, false);
-        if (window->m_flags == window_flags::quit_on_close)
-            win32_post_quit_message(0);
+        if (window->m_flags & window_flags::quit_on_close)
+        {
+            event::post(nullptr, event_type::global_quit);
+            //win32_post_quit_message(0);
+        }
         return 0;
 
     case WM_ENTERSIZEMOVE:
@@ -328,17 +309,19 @@ LRESULT WINAPI window_data::proc(const HWND hwnd, const UINT msg, const WPARAM w
         break;
     }
     }
-	return win32_def_window_proc(hwnd, msg, wparam, lparam);
+    return win32_def_window_proc(hwnd, msg, wparam, lparam);
 };
 error_type window_data::exec() noexcept
 {
+    ICY_ERROR(restyle(window_style::windowed));
+
     while (true)
     {
         event event;
         ICY_ERROR(exec(event, max_timeout));
         if (event->type == event_type::global_quit)
             break;
-        
+
         if (event->type == event_type::window_close &&
             shared_ptr<event_system>(event->source).get() == this)
             break;
@@ -347,49 +330,18 @@ error_type window_data::exec() noexcept
 }
 error_type window_data::exec(event& event, const duration_type timeout) noexcept
 {
-	if (timeout.count() < 0)
-		return make_stdlib_error(std::errc::invalid_argument);
-    
+    if (timeout.count() < 0)
+        return make_stdlib_error(std::errc::invalid_argument);
+
     if (!(m_win32_flags & win32_flag::initialized))
         return make_stdlib_error(std::errc::invalid_argument);
 
     const auto ms = ms_timeout(timeout);
     while (true)
-	{
-        if (m_win32_flags & win32_flag::repaint)
-        {
-            ICY_ERROR(event::post(this, event_type::window_repaint, m_frame_index++));
-            ICY_ERROR(m_display->draw(false));
-            m_win32_flags &= ~win32_flag::repaint;
-            if (m_frame_time.count())
-            {
-                auto now = clock_type::now();
-                auto delta = m_frame_next - now;
-                LARGE_INTEGER offset = {};
-                if (delta.count() > 0)
-                {
-                    m_frame_next = m_frame_next + m_frame_time;
-                }
-                else
-                {
-                    m_frame_next = now + m_frame_time;
-                    delta = m_frame_time;
-                }
-                offset.QuadPart = -std::chrono::duration_cast<std::chrono::nanoseconds>(delta).count() / 100;
-                SetWaitableTimer(m_timer, &offset, 0, nullptr, nullptr, FALSE);
-            }
-        }
-
+    {
         if (event = pop())
         {
-            if (event->type == event_type::render_frame)
-            {
-                const auto& frame = event->data<render_frame>();
-                if (frame.window == m_hwnd)
-                    ICY_ERROR(m_display->update(frame));
-                continue;
-            }
-            else if (event->type != event_type::window_internal)
+            if (event->type != event_type::system_internal)
                 break;
 
             auto& event_data = event->data<window_message>();
@@ -428,42 +380,19 @@ error_type window_data::exec(event& event, const duration_type timeout) noexcept
                     if (!win32_set_window_placement(m_hwnd, &place))
                         return last_system_error();
                 }
-                /*else if (event_data.type == window_message_type::render)
-                {
-                    ICY_ERROR(m_display->update(event_data.render));
-                }*/
             }
             continue;
         }
 
-        HANDLE handles[3] = { };
-        auto count = 0u;
+        const auto index = win32_msg_wait_for_multiple_objects_ex(1, &m_event, ms, QS_ALLINPUT, MWMO_ALERTABLE);
 
-        handles[count++] = m_event;
-        handles[count++] = m_timer;
-        if (auto event = m_display->event())
-            handles[count++] = event;
-
-        const auto index = win32_msg_wait_for_multiple_objects_ex(count, handles, 
-            ms, QS_ALLINPUT, MWMO_ALERTABLE);
-
-        void* handle = nullptr;
-        if (index >= WAIT_OBJECT_0 && index < WAIT_OBJECT_0 + count)
-            handle = handles[index - WAIT_OBJECT_0];
+        void* handle = index == WAIT_OBJECT_0 ? m_event : nullptr;
 
         if (handle == m_event)
         {
             continue;
         }
-        else if (handle && handle == m_display->event())
-        {
-            m_win32_flags |= win32_flag::repaint;
-        }
-        else if (handle && handle == m_timer)
-        {
-            m_win32_flags |= win32_flag::repaint;
-        }
-        else if (index == WAIT_OBJECT_0 + count)
+        else if (index == WAIT_OBJECT_0 + 1)
         {
             MSG win32_msg = {};
             while (win32_peek_message(&win32_msg, m_hwnd, 0, 0, PM_REMOVE))
@@ -477,7 +406,7 @@ error_type window_data::exec(event& event, const duration_type timeout) noexcept
         {
             return make_stdlib_error(std::errc::timed_out);
         }
-        else if (index == WAIT_FAILED)
+        else //if (index == WAIT_FAILED)
         {
             return last_system_error();
         }
@@ -489,7 +418,7 @@ error_type window_data::restyle(const window_style style) noexcept
     window_message msg;
     msg.type = window_message_type::restyle;
     new (&msg.style) window_style(style);
-    return event::post(this, event_type::window_internal, std::move(msg));
+    return event_system::post(this, event_type::system_internal, std::move(msg));
 }
 error_type window_data::rename(const string_view name) noexcept
 {
@@ -497,24 +426,19 @@ error_type window_data::rename(const string_view name) noexcept
     msg.type = window_message_type::rename;
     auto size = _countof(msg.name);
     ICY_ERROR(name.to_utf16(msg.name, &size));
-    return event::post(this, event_type::window_internal, std::move(msg));
+    return event_system::post(this, event_type::system_internal, std::move(msg));
 }
-error_type icy::create_event_system(shared_ptr<window_system>& window, const adapter& adapter, const window_flags flags) noexcept
+error_type icy::create_event_system(shared_ptr<window_system>& window, const window_flags flags) noexcept
 {
     auto event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!event)
         return last_system_error();
     ICY_SCOPE_EXIT{ if (event) CloseHandle(event); };
 
-    auto timer = CreateWaitableTimerW(nullptr, FALSE, nullptr);
-    if (!timer)
-        return last_system_error();
-    ICY_SCOPE_EXIT{ if (timer) CloseHandle(timer); };
-
     shared_ptr<window_data> new_ptr;
-    ICY_ERROR(make_shared(new_ptr, adapter, flags, event, timer));
+    ICY_ERROR(make_shared(new_ptr, flags, event));
     event = nullptr;
-    timer = nullptr;
+    ICY_ERROR(new_ptr->initialize());
     window = new_ptr;
     return error_type();
 }
@@ -556,7 +480,6 @@ error_type icy::enum_windows(array<window_info>& vec) noexcept
                 || (rect.right - rect.left) == 0 
                 || (rect.bottom - rect.top) == 0)
                 return 1;
-
 
             window_info info; 
             info.handle = hwnd;
