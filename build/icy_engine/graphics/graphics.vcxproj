@@ -15,22 +15,22 @@
     <ProjectGuid>{2529D4F5-C845-4B41-B789-4FCFFF27B9BA}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>graphics</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.17763.0</WindowsTargetPlatformVersion>
     <ProjectName>icy_engine_graphics</ProjectName>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v142</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v142</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -109,9 +109,10 @@
     <ClInclude Include="..\..\..\include\icy_engine\graphics\icy_render_svg.hpp" />
     <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_render.hpp" />
     <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_render_svg_core.hpp" />
+    <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_shader.hpp" />
     <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_system.hpp" />
     <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_window.hpp" />
-    <FxCompile Include="..\..\..\source\icy_engine\graphics\shaders\screen_ps1.hlsl">
+    <FxCompile Include="..\..\..\source\icy_engine\graphics\shaders\screen_ps.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
     </FxCompile>

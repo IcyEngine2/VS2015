@@ -1,14 +1,7 @@
 #include "icy_render.hpp"
+#include "icy_shader.hpp"
 #include <dxgi1_6.h>
 #include "d3dx12.h"
-#include "shaders/svg_ps.hpp"
-#include "shaders/svg_vs.hpp"
-#include "shaders/screen_ps1.hpp"
-#include "shaders/screen_ps2.hpp"
-#include "shaders/screen_ps4.hpp"
-#include "shaders/screen_ps8.hpp"
-#include "shaders/screen_ps16.hpp"
-#include "shaders/screen_vs.hpp"
 
 using namespace icy;
 
@@ -76,11 +69,13 @@ public:
     ~d3d12_render_frame() noexcept;
     d3d12_render_frame(d3d12_render_frame&& rhs) noexcept = default;
     ICY_DEFAULT_MOVE_ASSIGN(d3d12_render_frame);
+public:
     icy::error_type initialize(icy::shared_ptr<d3d12_render_factory> system) noexcept;
     icy::error_type exec(icy::render_list& list) noexcept;
     icy::error_type wait(com_ptr<ID3D12Resource>& texture, com_ptr<ID3D12DescriptorHeap>& heap) noexcept;
     icy::render_flags flags() const noexcept;
     void destroy(const bool clear) noexcept;
+    window_size size() const noexcept;
 private:
     void* _unused = nullptr;
     icy::weak_ptr<d3d12_render_factory> m_system;
@@ -138,8 +133,8 @@ private:
         size_t view = 0;
     };
 private:
-    error_type resize(IDXGISwapChain& chain, const window_size size, const display_flags flags) noexcept override;
-    error_type repaint(IDXGISwapChain& chain, const bool vsync, render_frame& frame) noexcept override;
+    error_type resize(IDXGISwapChain& chain, const window_size size) noexcept override;
+    error_type repaint(IDXGISwapChain& chain, const bool vsync, void* const handle) noexcept override;
 private:
     shared_ptr<d3d12_system> m_global;
     d3d12_fence m_fence;
@@ -252,7 +247,7 @@ error_type d3d12_system::initialize(const adapter::data_type& adapter) noexcept
 
     if (const auto func = ICY_FIND_FUNC(m_lib, D3D12CreateDevice))
     {
-        ICY_COM_ERROR(func(&adapter.adapter(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&m_device)));
+        ICY_COM_ERROR(func(adapter.adapter(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&m_device)));
         if (debug)
             m_device->SetName(L"D3D12 Device");
     }
@@ -569,7 +564,7 @@ error_type d3d12_display_system::initialize(const adapter::data_type& adapter, H
             m_global->device().GetDescriptorHandleIncrementSize(heap_desc.Type)).ptr;
     }
     com_ptr<IDXGIFactory> factory;
-    ICY_COM_ERROR(adapter.adapter().GetParent(IID_PPV_ARGS(&factory)));
+    ICY_COM_ERROR(adapter.adapter()->GetParent(IID_PPV_ARGS(&factory)));
     ICY_ERROR(display_data::initialize(*m_queue, *factory, window, flags));
     ICY_COM_ERROR(factory->MakeWindowAssociation(window, DXGI_MWA_NO_ALT_ENTER | DXGI_MWA_NO_WINDOW_CHANGES | DXGI_MWA_NO_PRINT_SCREEN));
     
@@ -629,7 +624,7 @@ error_type d3d12_display_system::initialize(const adapter::data_type& adapter, H
         ICY_ERROR(m_global->rename(*pipe, str));
         return error_type();
     };
-    ICY_ERROR(make_pipe(m_pipe1, g_shader_bytes_screen_ps1, 1));
+    ICY_ERROR(make_pipe(m_pipe1, g_shader_bytes_screen_ps, 1));
     ICY_ERROR(make_pipe(m_pipe2, g_shader_bytes_screen_ps2, 2));
     ICY_ERROR(make_pipe(m_pipe4, g_shader_bytes_screen_ps4, 4));
     ICY_ERROR(make_pipe(m_pipe8, g_shader_bytes_screen_ps8, 8));
@@ -638,9 +633,14 @@ error_type d3d12_display_system::initialize(const adapter::data_type& adapter, H
     filter(event_type::system_internal);
     return error_type();
 }
-error_type d3d12_display_system::resize(IDXGISwapChain& chain, const window_size size, const display_flags flags) noexcept
+error_type d3d12_display_system::resize(IDXGISwapChain& chain, const window_size size) noexcept
 {
-    DXGI_SWAP_CHAIN_DESC desc;
+    return error_type();
+}
+error_type d3d12_display_system::repaint(IDXGISwapChain& chain, const bool vsync, void* const handle) noexcept
+{
+    /*
+      DXGI_SWAP_CHAIN_DESC desc;
     ICY_COM_ERROR(chain.GetDesc(&desc));
     for (auto k = 0u; k < buffer_count(flags); ++k)
     {
@@ -659,18 +659,13 @@ error_type d3d12_display_system::resize(IDXGISwapChain& chain, const window_size
         ICY_ERROR(to_string("D3D12 Display BackBuffer %1", str, k));
         ICY_ERROR(m_global->rename(*buffer.texture, str));
     }
-    m_size = size;
-    return error_type();
-}
-error_type d3d12_display_system::repaint(IDXGISwapChain& chain, const bool vsync, render_frame& frame) noexcept
-{
+    */
     com_ptr<IDXGISwapChain3> chain3;
     ICY_COM_ERROR(chain.QueryInterface(&chain3));
     com_ptr<ID3D12Resource> texture;
     com_ptr<ID3D12DescriptorHeap> heap;
-    ICY_ERROR(frame.data->d3d12->wait(texture, heap));
+   // ICY_ERROR(frame.data->d3d12->wait(texture, heap));
 
-    const auto now = clock_type::now();
     const auto index = chain3->GetCurrentBackBufferIndex();
     auto& buffer = m_buffers[index];
     const auto barrier_beg = CD3DX12_RESOURCE_BARRIER::Transition(buffer.texture, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
@@ -678,8 +673,8 @@ error_type d3d12_display_system::repaint(IDXGISwapChain& chain, const bool vsync
     
     ICY_COM_ERROR(m_commands->Reset(m_alloc, nullptr));
 
-    const auto flags = frame.data->d3d12->flags();
     ID3D12PipelineState* pipe = nullptr;
+    /*const auto flags = frame.data->d3d12->flags();
     if (flags & render_flags::msaa_x16)
         pipe = m_pipe16;
     else if (flags & render_flags::msaa_x8)
@@ -689,29 +684,35 @@ error_type d3d12_display_system::repaint(IDXGISwapChain& chain, const bool vsync
     else if (flags & render_flags::msaa_x2)
         pipe = m_pipe2;
     else
-        pipe = m_pipe1;
+        pipe = m_pipe1;*/
 
     const D3D12_CPU_DESCRIPTOR_HANDLE rtv[1] = { d3d12_cpu_handle(buffer.view) };
-    const D3D12_RECT rect = { 0, 0, m_size.x, m_size.y };
-    const D3D12_VIEWPORT view = { 0, 0, m_size.x, m_size.y, 0, 1 };
+    const D3D12_RECT rect = { 0, 0, LONG(m_size.x), LONG(m_size.y) };
+    const D3D12_VIEWPORT view = { 0, 0, float(m_size.x), float(m_size.y), 0, 1 };
 
     m_commands->ResourceBarrier(1, &barrier_beg);
-    m_commands->SetPipelineState(pipe);
+   /* m_commands->SetPipelineState(pipe);
     m_commands->SetGraphicsRootSignature(m_root);
     m_commands->SetDescriptorHeaps(1, &heap);
     m_commands->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     m_commands->OMSetRenderTargets(_countof(rtv), rtv, FALSE, nullptr);
     m_commands->RSSetScissorRects(1, &rect);
     m_commands->RSSetViewports(1, &view);
-    m_commands->DrawInstanced(3, 1, 0, 0);
+    m_commands->DrawInstanced(3, 1, 0, 0);*/
+   // float rgba[4];
+   // color(colors::red).to_rgbaf(rgba);
+    //m_commands->ClearRenderTargetView(rtv[0], rgba, 0, nullptr);
     m_commands->ResourceBarrier(1, &barrier_end);
+    
     ICY_COM_ERROR(m_commands->Close());
     {
         ID3D12CommandList* const commands[] = { m_commands };
         m_queue->ExecuteCommandLists(_countof(commands), commands);
     }
     DXGI_PRESENT_PARAMETERS params = {};
-    if (const auto error = chain3->Present1(vsync, (vsync ? 0 : DXGI_PRESENT_ALLOW_TEARING), &params))
+    //if (const auto error = chain3->Present1(vsync, (vsync ? 0 : DXGI_PRESENT_ALLOW_TEARING), &params))
+    if (const auto error = chain3->Present(vsync, 0))
+
     {
         if (error == DXGI_STATUS_OCCLUDED)
             ;
@@ -720,15 +721,15 @@ error_type d3d12_display_system::repaint(IDXGISwapChain& chain, const bool vsync
     }
     ICY_ERROR(m_fence.signal(*m_queue));
     ICY_ERROR(m_fence.wait_cpu());
-    frame.data->time_cpu = clock_type::now() - now;
+    //frame.data->time_cpu = clock_type::now() - now;
     return error_type();
 }
 
-error_type create_d3d12(shared_ptr<render_factory>& system, const adapter::data_type& adapter, const render_flags flags) noexcept
+error_type create_d3d12(shared_ptr<render_factory>& system, const adapter& adapter, const render_flags flags) noexcept
 {
     shared_ptr<d3d12_render_factory> new_ptr;
     ICY_ERROR(make_shared(new_ptr));
-    ICY_ERROR(new_ptr->initialize(adapter, flags));
+    ICY_ERROR(new_ptr->initialize(*adapter.data, flags));
     system = std::move(new_ptr);
     return error_type();
 }
@@ -750,13 +751,17 @@ icy::error_type create_d3d12(d3d12_render_frame*& frame, shared_ptr<d3d12_render
     frame = new_frame;
     return error_type();
 }
-error_type create_d3d12(shared_ptr<display_system>& system, const adapter::data_type& adapter, HWND__* const hwnd, const display_flags flags) noexcept
+error_type create_d3d12(shared_ptr<display_system>& system, const adapter& adapter, HWND__* const hwnd, const display_flags flags) noexcept
 {
     shared_ptr<d3d12_display_system> new_ptr;
     ICY_ERROR(make_shared(new_ptr));
-    ICY_ERROR(new_ptr->initialize(adapter, hwnd, flags));
+    ICY_ERROR(new_ptr->initialize(*adapter.data, hwnd, flags));
     system = std::move(new_ptr);
     return error_type();
+}
+error_type wait_frame(d3d12_render_frame& frame, void*& handle) noexcept
+{
+    return make_stdlib_error(std::errc::function_not_supported);
 }
 void destroy_frame(d3d12_render_frame& frame) noexcept
 {

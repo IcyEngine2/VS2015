@@ -336,7 +336,7 @@ namespace icy
             for (auto row = 0; row < rhs.rows(); ++row)
             {
                 for (auto col = 0; col < rhs.cols(); ++col)
-                    at(row, col) = rhs.at(row, col);
+                    base::at(row, col) = rhs.at(row, col);
             }
         }
         matrix(const matrix<T>& rhs) : matrix(static_cast<const_matrix_view<T>>(rhs))
@@ -351,20 +351,20 @@ namespace icy
         ICY_DEFAULT_MOVE_ASSIGN(matrix);
         ~matrix() noexcept
         {
-            for (auto k = size(); k--;)
-                allocator_type::destroy(m_data + k);
+            for (auto k = base::size(); k--;)
+                allocator_type::destroy(base::m_data + k);
 
-            if (m_data)
-                allocator_type::deallocate(const_cast<pointer>(m_data));
+            if (base::m_data)
+                allocator_type::deallocate(const_cast<pointer>(base::m_data));
         }
     public:
         const_pointer data() const noexcept
         {
-            return m_data;
+            return base::m_data;
         }
         pointer data() noexcept
         {
-            return const_cast<pointer>(m_data);
+            return const_cast<pointer>(base::m_data);
         }
     };
 }

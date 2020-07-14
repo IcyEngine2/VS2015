@@ -17,9 +17,10 @@ namespace icy
     {
         none        =   0x00,
         hardware    =   0x01,
-        d3d11       =   0x02,
-        d3d12       =   0x04,
-        debug       =   0x08,
+        d3d10       =   0x02,
+        d3d11       =   0x04,
+        d3d12       =   0x08,
+        debug       =   0x10,
     };
     enum class window_style : uint32_t
     {
@@ -45,6 +46,7 @@ namespace icy
         msaa_x4         =   0x02,
         msaa_x8         =   0x04,
         msaa_x16        =   0x08,
+        msaa_hardware   =   0x10,
     };
 
 
@@ -178,6 +180,7 @@ namespace icy
         size_t index() const noexcept;
         duration_type time_cpu() const noexcept;
         duration_type time_gpu() const noexcept;
+        window_size size() const noexcept;
     public:
         class data_type;
         data_type* data = nullptr;
@@ -191,12 +194,16 @@ namespace icy
         virtual HWND__* handle() const noexcept = 0;
         virtual window_flags flags() const noexcept = 0;
     };
+    struct display_options
+    {
+        duration_type vsync = std::chrono::seconds(-1);
+        window_size size;
+    };
     class display_system : public event_system
     {
     public:
         virtual ~display_system() noexcept = 0 { }
-        virtual error_type vsync(const duration_type delta) noexcept = 0;
-        virtual error_type resize(const window_size size) noexcept = 0;
+        virtual error_type options(display_options data) noexcept = 0;
         virtual error_type render(const render_frame frame) noexcept = 0;
     };
     class render_list

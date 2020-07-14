@@ -1,5 +1,6 @@
 #include <icy_engine/core/icy_json.hpp>
 #include "jsmn.h"
+#include <cmath>
 
 using namespace icy;
 
@@ -446,7 +447,7 @@ static error_type to_string(const json& json, string& str, const string_view tab
 
     case json_type::object:
     {
-        ICY_ERROR(str.appendf("%1%2", prefix, "{"_s));
+        ICY_ERROR(str.appendf("%1%2"_s, prefix, string_view("{"_s)));
         string new_prefix;
         ICY_ERROR(new_prefix.appendf("%1%2"_s, prefix, tab));
 

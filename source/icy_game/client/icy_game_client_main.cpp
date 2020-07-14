@@ -51,7 +51,8 @@ struct application
     shared_ptr<event_thread<window_system>> window;
     shared_ptr<event_thread<display_system>> display;
     shared_ptr<event_thread<game_system>> game;
-    shared_ptr<render_factory> render[1];
+    shared_ptr<render_factory> render_10;
+    shared_ptr<render_factory> render_11;
 };
 
 
@@ -65,7 +66,20 @@ error_type game_system::exec() noexcept
     ICY_ERROR(font_data.flags.push_back(render_svg_text_flag(render_svg_text_flag::font_size, 72)));
     ICY_ERROR(font.initialize(font_data));
     
-    const auto func = [font, this](size_t index, color clr)
+    array<char> bytes;
+    {
+        file f;
+        ICY_ERROR(f.open("G:/VS2015/dat/tiger.svg"_s, file_access::read, file_open::open_existing, file_share::none));
+        auto size = f.info().size;
+        ICY_ERROR(bytes.resize(size));
+        ICY_ERROR(f.read(bytes.data(), size));
+    }
+
+    render_svg_geometry geo;
+    ICY_ERROR(geo.initialize(render_d2d_matrix(), bytes));
+
+    window_size size;
+    const auto func = [font, geo, &size, this](size_t index, color clr)
     {
         string str;
         render_svg_geometry svg;
@@ -75,9 +89,11 @@ error_type game_system::exec() noexcept
         shared_ptr<render_list> list;
         ICY_ERROR(create_render_list(list));
         ICY_ERROR(list->clear(clr));
+        ICY_ERROR(list->draw(geo, render_d2d_matrix::scale(size.x / 1800.0f, size.y / 1800.0f)));
         ICY_ERROR(list->draw(svg, render_d2d_matrix()));
+        
         render_frame frame;
-        ICY_ERROR(app->render[0]->exec(*list, frame));
+        ICY_ERROR(app->render_10->exec(*list, frame));
         ICY_ERROR(app->display->system->render(frame));
         return error_type();
     };
@@ -98,7 +114,11 @@ error_type game_system::exec() noexcept
             break;
         if (event->type == event_type::window_resize)
         {
-            app->display->system->resize(event->data<window_size>());
+            size = size = event->data<window_size>();
+            display_options opts;
+            opts.size = event->data<window_size>();
+            app->display->system->options(opts);
+            app->render_10->resize(size);
         }
         if (event->type == event_type::render_frame)
         {
@@ -140,45 +160,54 @@ namespace icy
 
 error_type main_func(const uint64_t luid) noexcept
 {
-    win32_message("Hi"_s, "Hi"_s);
+    //win32_message("Hi"_s, "Hi"_s);
     array<adapter> adapters;
     auto adapter_flags = adapter_flags::debug;
-    if (!luid)
-        adapter_flags = adapter_flags | adapter_flags::d3d12;
+    adapter_flags = adapter_flags | adapter_flags::d3d11 | adapter_flags::d3d10 | adapter_flags::hardware;
     
     ICY_ERROR(adapter::enumerate(adapter_flags, adapters));
-    adapter adapter;
-    if (luid)
+    adapter adapter11;
+    adapter adapter10;
+
+    if (!adapters.empty())
     {
-        for (auto&& gpu : adapters)
+        for (auto&& ad : adapters)
         {
-            if (gpu.luid == luid)
+            if ((ad.flags & adapter_flags::d3d11) && ad.luid == 40746)
             {
-                adapter = gpu;
+                adapter11 = ad;
+                break;
+            }
+        }
+        for (auto&& ad : adapters)
+        {
+            // 40019
+            if ((ad.flags & adapter_flags::d3d10) && ad.luid == 40746)
+            {
+                adapter10 = ad;
                 break;
             }
         }
     }
-    else if (!adapters.empty())
-    {
-        adapter = adapters.front();
-    }
-    if (!adapter)
+    if (!adapter11 || !adapter10)
         return last_system_error();
 
     application app;
     ICY_ERROR(create_event_thread(app.window, default_window_flags));
     ICY_ERROR(app.window->launch());
 
-    ICY_ERROR(create_event_thread(app.display, adapter, app.window->system->handle(), display_flags::none));
+    ICY_ERROR(create_event_thread(app.display, adapter11, app.window->system->handle(),
+        display_flags::sRGB));
     ICY_ERROR(app.display->launch());
-    ICY_ERROR(app.display->system->vsync(display_frame_vsync));
+
+    display_options opts;
+    opts.vsync = display_frame_unlim;
+    ICY_ERROR(app.display->system->options(opts));
+
+    ICY_ERROR(create_render_factory(app.render_10, adapter10, render_flags::none));
+    app.render_10->resize(window_size(1920, 1080));
+    //ICY_ERROR(create_render_factory(app.render_10, adapter10, render_flags::none));
     
-    for (auto&& system : app.render)
-    {
-        ICY_ERROR(create_render_factory(system, adapter, render_flags::none));
-        ICY_ERROR(system->resize(window_size(720, 480)));
-    }
     ICY_ERROR(create_event_thread(app.game, &app));
     ICY_ERROR(app.game->launch());
     ICY_ERROR(app.game->wait());

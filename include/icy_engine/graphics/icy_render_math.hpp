@@ -74,11 +74,11 @@ namespace icy
 			value._21 = -s;
 			return value;
 		}
-		static render_d2d_matrix scale(const float scale) noexcept
+		static render_d2d_matrix scale(const float sx, const float sy) noexcept
 		{
 			render_d2d_matrix value;
-			value._11 = scale;
-			value._22 = scale;
+			value._11 = sx;
+			value._22 = sy;
 			return value;
 		}
 		render_d2d_matrix operator*(const render_d2d_matrix& rhs) const noexcept

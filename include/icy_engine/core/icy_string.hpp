@@ -59,6 +59,11 @@ namespace icy
 	};
 	template<typename T> class array;
 
+	inline error_type to_string(const string_view rhs, string& str) noexcept
+	{
+		str.clear();
+		return str.append(rhs);
+	}
 	namespace detail
 	{
 		inline error_type to_string_arg(std::integral_constant<size_t, 0>, size_t, const void*, string&) noexcept
@@ -74,11 +79,7 @@ namespace icy
 				return to_string_arg(std::integral_constant<size_t, N - 1>{}, index, tuple, str);
 		}
 	}
-	inline error_type to_string(const string_view rhs, string& str) noexcept
-	{
-		str.clear();
-		return str.append(rhs);
-	}
+
 	inline error_type to_string(const char* const value, string& str) noexcept
 	{
 		return to_string(string_view(value, strlen(value)), str);
@@ -215,7 +216,7 @@ namespace icy
 		auto ptr = format.bytes().data();
 		auto len = format.bytes().size();
 		const auto tuple = std::make_tuple(std::forward<arg_types>(args)...);
-		for (auto k = 0u; k < len; ++k)
+		for (auto k = 0_z; k < len; ++k)
 		{
 			if (ptr[k] == '%')
 			{

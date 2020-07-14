@@ -1,0 +1,8 @@
+#include "shaders/svg_ps.hpp"
+#include "shaders/svg_vs.hpp"
+#include "shaders/screen_ps.hpp"
+#include "shaders/screen_ps2.hpp"
+#include "shaders/screen_ps4.hpp"
+#include "shaders/screen_ps8.hpp"
+#include "shaders/screen_ps16.hpp"
+#include "shaders/screen_vs.hpp"

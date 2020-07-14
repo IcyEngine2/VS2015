@@ -28,17 +28,17 @@ namespace icy
 		array(const array&) = delete;
 		array& operator=(const array&) = delete;
 		array(array&& rhs) noexcept
-		{
-			std::swap(m_ptr, rhs.m_ptr);
-			std::swap(m_size, rhs.m_size);
+		{			
+			std::swap(array_view<T>::m_ptr, rhs.m_ptr);
+			std::swap(array_view<T>::m_size, rhs.m_size);
             std::swap(m_capacity, rhs.m_capacity);
 		}
 		ICY_DEFAULT_MOVE_ASSIGN(type);
 		~array() noexcept
 		{
-			for (auto k = m_size; k--;)
-				allocator_type::destroy(m_ptr + k);
-			allocator_type::deallocate(m_ptr);
+			for (auto k = array_view<T>::m_size; k--;)
+				allocator_type::destroy(array_view<T>::m_ptr + k);
+			allocator_type::deallocate(array_view<T>::m_ptr);
 		}
 	public:
 		size_type capacity() const noexcept
@@ -47,17 +47,17 @@ namespace icy
 		}
 		error_type resize(const size_type size) noexcept
 		{
-			if (size > m_size)
+			if (size > array_view<T>::m_size)
 			{
 				if (const auto error = reserve(size))
 					return error;
 
-				while (m_size != size)
-					allocator_type::construct(m_ptr + (m_size++), T{});
+				while (array_view<T>::m_size != size)
+					allocator_type::construct(array_view<T>::m_ptr + (array_view<T>::m_size++), T{});
 			}
 			else
 			{
-				pop_back(m_size - size);
+				pop_back(array_view<T>::m_size - size);
 			}
 			return error_type();
 		}
@@ -78,29 +78,29 @@ namespace icy
 		template<typename... arg_types>
 		error_type emplace_back(arg_types&& ... args) noexcept
 		{
-            ICY_ERROR(reserve(m_size + 1));
-            allocator_type::construct(m_ptr + m_size, std::forward<arg_types>(args)...);
-			++m_size;
+            ICY_ERROR(reserve(array_view<T>::m_size + 1));
+            allocator_type::construct(array_view<T>::m_ptr + array_view<T>::m_size, std::forward<arg_types>(args)...);
+			++array_view<T>::m_size;
 			return error_type();
 		}
 
 		template<typename iter_type>
 		error_type append(std::move_iterator<iter_type> first, const std::move_iterator<iter_type> last) noexcept
 		{
-            ICY_ERROR(reserve(size() + std::distance(first, last)));
+            ICY_ERROR(reserve(array_view<T>::size() + std::distance(first, last)));
 			for (; first != last; ++first)
-				allocator_type::construct(m_ptr + (m_size++), std::move(*first));
+				allocator_type::construct(array_view<T>::m_ptr + (array_view<T>::m_size++), std::move(*first));
 			return error_type();
 		}
         template<typename iter_type>
         error_type append(iter_type first, const iter_type last) noexcept
         {
-            ICY_ERROR(reserve(size() + std::distance(first, last)));
+            ICY_ERROR(reserve(array_view<T>::size() + std::distance(first, last)));
             for (; first != last; ++first)
             {
                 T tmp;
                 ICY_ERROR(copy(*first, tmp));
-                allocator_type::construct(m_ptr + (m_size++), std::move(tmp));
+                allocator_type::construct(array_view<T>::m_ptr + (array_view<T>::m_size++), std::move(tmp));
             }
             return error_type();
         }
@@ -141,13 +141,13 @@ namespace icy
 
 		void clear() noexcept
 		{
-			pop_back(size());
+			pop_back(array_view<T>::size());
 		}
 		void pop_back(const size_type count = 1) noexcept
 		{
-			ICY_ASSERT(count <= size(), "INVALID POP_BACK COUNT");
+			ICY_ASSERT(count <= array_view<T>::size(), "INVALID POP_BACK COUNT");
 			for (auto k = 0_z; k < count; ++k)
-				allocator_type::destroy(m_ptr + (--m_size));
+				allocator_type::destroy(array_view<T>::m_ptr + (--array_view<T>::m_size));
 		}
 	private:
         template<typename rhs_type>
@@ -171,14 +171,14 @@ namespace icy
 
 				if (clear)
 				{
-					for (auto k = size(); k; --k)
+					for (auto k = array_view<T>::size(); k; --k)
 					{
-						allocator_type::construct(ptr + k - 1, std::move(m_ptr[k - 1]));
-						allocator_type::destroy(m_ptr + k - 1);
+						allocator_type::construct(ptr + k - 1, std::move(array_view<T>::m_ptr[k - 1]));
+						allocator_type::destroy(array_view<T>::m_ptr + k - 1);
 					}
-					allocator_type::deallocate(m_ptr);
+					allocator_type::deallocate(array_view<T>::m_ptr);
 				}
-				m_ptr = ptr;
+				array_view<T>::m_ptr = ptr;
                 m_capacity = new_capacity;
 			}
 			return error_type();

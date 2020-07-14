@@ -371,7 +371,7 @@ namespace icy
 		array_view() noexcept = default;
 		array_view(const pointer ptr, const size_type size) noexcept : base{ ptr, size }
 		{
-
+			
 		}
 		array_view(const pointer begin, const pointer end) noexcept : base{ begin, end }
 		{

@@ -462,7 +462,7 @@ namespace icy
         {
             memset(this, 0, sizeof(*this));
         }
-        guid(const uint64_t x0, const uint64_t x1) noexcept
+        guid(const uint64_t x0, const uint64_t x1) noexcept : guid()
         {
             *reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(this) + 0x00) = x0;
             *reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(this) + 0x08) = x1;
@@ -586,11 +586,11 @@ namespace icy
         error_type initialize() noexcept;
         void shutdown() noexcept;
         template<typename T>
-        T find(const char* func) noexcept
+        T find(const char* func) const noexcept
         {
             return reinterpret_cast<T>(GetProcAddress(m_module, func));
         }
-        void* find(const char* func) noexcept
+        void* find(const char* func) const noexcept
         {
             return reinterpret_cast<void*>(GetProcAddress(m_module, func));
         }

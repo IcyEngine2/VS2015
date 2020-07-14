@@ -5,6 +5,7 @@
 #include <dxgidebug.h>
 #include <d3d12.h>
 #include <d3d11_4.h>
+#include <d3d10_1.h>
 
 using namespace icy;
 
@@ -61,28 +62,35 @@ error_type adapter::enumerate(const adapter_flags filter, array<adapter>& array)
     {
         return make_stdlib_error(std::errc::function_not_supported);
     }
-
+    
     auto count = 0u;
     while (true)
     {
         com_ptr<IDXGIAdapter1> com_adapter;
-        const auto hr = dxgi_factory->EnumAdapters1(count++, &com_adapter);
+        auto hr = dxgi_factory->EnumAdapters1(count++, &com_adapter);
         if (hr == DXGI_ERROR_NOT_FOUND)
             break;
         ICY_COM_ERROR(hr);
 
-        DXGI_ADAPTER_DESC1 desc = {};
+        DXGI_ADAPTER_DESC1 desc;
         ICY_COM_ERROR(com_adapter->GetDesc1(&desc));
 
         if ((filter & adapter_flags::hardware) && (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE))
             continue;
 
-        const auto has_api_mask = uint32_t(filter) & ~uint32_t(adapter_flags::hardware);
-        const auto level = D3D_FEATURE_LEVEL_11_0;
-        const auto err_d3d12 = d3d12_func(com_adapter, level, __uuidof(ID3D12Device), nullptr);
-        const auto err_d3d11 = d3d11_func(com_adapter, D3D_DRIVER_TYPE_UNKNOWN, nullptr, 0, &level, 1, D3D11_SDK_VERSION, nullptr, nullptr, nullptr);
+        const auto has_api_mask = uint32_t(filter) & uint32_t(adapter_flags::d3d10 | adapter_flags::d3d11 | adapter_flags::d3d12);
+
+        const auto d3d10_level = D3D_FEATURE_LEVEL_10_1;
+        const auto d3d11_level = D3D_FEATURE_LEVEL_11_0;
+        const auto d3d12_level = D3D_FEATURE_LEVEL_11_0;
+        
+        const auto err_d3d12 = !d3d12_func ? S_FALSE : d3d12_func(com_adapter, d3d12_level, __uuidof(ID3D12Device), nullptr);
+        const auto err_d3d11 = !d3d11_func ? S_FALSE : d3d11_func(com_adapter, D3D_DRIVER_TYPE_UNKNOWN, nullptr, 0, &d3d11_level, 1, D3D11_SDK_VERSION, nullptr, nullptr, nullptr);
+        const auto err_d3d10 = !d3d11_func ? S_FALSE : d3d11_func(com_adapter, D3D_DRIVER_TYPE_UNKNOWN, nullptr, 0, &d3d10_level, 1, D3D11_SDK_VERSION, nullptr, nullptr, nullptr);
+
         const auto has_d3d12 = d3d12_func && err_d3d12 == S_FALSE;
         const auto has_d3d11 = d3d11_func && err_d3d11 == S_FALSE;
+        const auto has_d3d10 = d3d11_func && err_d3d10 == S_FALSE;
 
         const auto append = [&desc, &array, com_adapter, filter](adapter_flags flag)->error_type
         {
@@ -110,6 +118,10 @@ error_type adapter::enumerate(const adapter_flags filter, array<adapter>& array)
         {
             ICY_ERROR(append(adapter_flags::d3d11));
         }
+        if (has_d3d10 && (has_api_mask ? (filter & adapter_flags::d3d10) : true))
+        {
+            ICY_ERROR(append(adapter_flags::d3d10));
+        }
     }
     std::sort(array.begin(), array.end(), [](const adapter& lhs, const adapter& rhs) { return lhs.vid_mem > rhs.vid_mem; });
     return{};
@@ -130,18 +142,7 @@ error_type adapter::msaa(render_flags& quality) const noexcept
         return make_stdlib_error(std::errc::invalid_argument);
 
     array<uint32_t> levels;
-    if (data->flags() & adapter_flags::d3d12)
-    {
-        ICY_ERROR(data->msaa_d3d12(levels));
-    }
-    else if (data->flags() & adapter_flags::d3d11)
-    {
-        ICY_ERROR(data->msaa_d3d11(levels));
-    }
-    else
-    {
-        return make_stdlib_error(std::errc::invalid_argument);
-    }
+    ICY_ERROR(data->query_msaa(levels));
     for (auto&& level : levels)
     {
         switch (level)
@@ -183,65 +184,73 @@ error_type adapter::data_type::initialize(const com_ptr<IDXGIAdapter> adapter, c
 
     DXGI_ADAPTER_DESC desc = {};
     ICY_COM_ERROR(adapter->GetDesc(&desc));
-    ICY_ERROR(to_string(desc.Description, m_name));
+    const auto wide = const_array_view<wchar_t>(
+        desc.Description, wcsnlen(desc.Description, _countof(desc.Description)));
+    ICY_ERROR(to_string(wide, m_name));
     return error_type();
 }
-error_type adapter::data_type::msaa_d3d12(array<uint32_t>& quality) const noexcept
+error_type adapter::data_type::query_msaa(array<uint32_t>& quality) const noexcept
 {
     quality.clear();
-
-    auto lib = "d3d12"_lib;
-    ICY_ERROR(lib.initialize());
-    if (const auto func = ICY_FIND_FUNC(lib, D3D12CreateDevice))
+    if (m_flags & adapter_flags::d3d12)
     {
-        com_ptr<ID3D12Device> device;
-        ICY_COM_ERROR(func(m_adapter, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device)));
-
-        D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS sample = {};
-        sample.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        sample.SampleCount = 2u;
-
-        while (true)
+        auto lib = "d3d12"_lib;
+        ICY_ERROR(lib.initialize());
+        if (const auto func = ICY_FIND_FUNC(lib, D3D12CreateDevice))
         {
-            auto hr = device->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS, &sample, sizeof(sample));
-            if (SUCCEEDED(hr) && sample.NumQualityLevels)
+            com_ptr<ID3D12Device> device;
+            ICY_COM_ERROR(func(m_adapter, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device)));
+
+            D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS sample = {};
+            sample.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            sample.SampleCount = 2u;
+
+            while (true)
             {
-                ICY_ERROR(quality.push_back(sample.SampleCount));
-                sample.SampleCount <<= 1;
+                auto hr = device->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS, &sample, sizeof(sample));
+                if (SUCCEEDED(hr) && sample.NumQualityLevels)
+                {
+                    ICY_ERROR(quality.push_back(sample.SampleCount));
+                    sample.SampleCount <<= 1;
+                }
+                else
+                    break;
             }
-            else
-                break;
+        }
+        else
+        {
+            return make_stdlib_error(std::errc::function_not_supported);
         }
     }
-    else
+    else if (m_flags & (adapter_flags::d3d10 | adapter_flags::d3d11))
     {
-        return make_stdlib_error(std::errc::function_not_supported);
-    }
-    return error_type();
-}
-error_type adapter::data_type::msaa_d3d11(array<uint32_t>& quality) const noexcept
-{
-    auto lib = "d3d11"_lib;
-    ICY_ERROR(lib.initialize());
-    if (const auto func = ICY_FIND_FUNC(lib, D3D11CreateDevice))
-    {
-        const auto level = D3D_FEATURE_LEVEL_11_0;
-        com_ptr<ID3D11Device> device;
-        ICY_COM_ERROR(func(m_adapter, D3D_DRIVER_TYPE_UNKNOWN, nullptr, 0,
-            &level, 1, D3D11_SDK_VERSION, &device, nullptr, nullptr));
-
-        auto sample = 2u;
-        while (true)
+        auto lib = "d3d11"_lib;
+        ICY_ERROR(lib.initialize());
+        if (const auto func = ICY_FIND_FUNC(lib, D3D11CreateDevice))
         {
-            auto count = 0u;
-            const auto hr = device->CheckMultisampleQualityLevels(DXGI_FORMAT_R8G8B8A8_UNORM, sample, &count);
-            if (SUCCEEDED(hr) && count)
+            const auto level = m_flags & adapter_flags::d3d10 ?
+                D3D_FEATURE_LEVEL_10_1 : D3D_FEATURE_LEVEL_11_0;
+            com_ptr<ID3D11Device> device;
+            ICY_COM_ERROR(func(m_adapter, D3D_DRIVER_TYPE_UNKNOWN, nullptr, 0,
+                &level, 1, D3D11_SDK_VERSION, &device, nullptr, nullptr));
+
+            auto sample = 2u;
+            while (true)
             {
-                ICY_ERROR(quality.push_back(sample));
-                sample <<= 1;
+                auto count = 0u;
+                const auto hr = device->CheckMultisampleQualityLevels(DXGI_FORMAT_R8G8B8A8_UNORM, sample, &count);
+                if (SUCCEEDED(hr) && count)
+                {
+                    ICY_ERROR(quality.push_back(sample));
+                    sample <<= 1;
+                }
+                else
+                    break;
             }
-            else
-                break;
+        }
+        else
+        {
+            return make_stdlib_error(std::errc::function_not_supported);
         }
     }
     else
@@ -258,7 +267,7 @@ display_data::~display_data()
         while (auto frame = static_cast<d3d12_render_frame*>(m_frame.queue.pop()))
             destroy_frame(*frame);
     }
-    else if (m_adapter & adapter_flags::d3d11)
+    else if (m_adapter & (adapter_flags::d3d11 | adapter_flags::d3d10))
     {
         while (auto frame = static_cast<d3d11_render_frame*>(m_frame.queue.pop()))
             destroy_frame(*frame);
@@ -306,7 +315,11 @@ error_type display_data::initialize(IUnknown& device, IDXGIFactory& factory, HWN
     {
         ICY_COM_ERROR(factory.CreateSwapChain(&device, &desc0, &m_chain));
     }
-    
+
+    DXGI_SWAP_CHAIN_DESC desc;
+    ICY_COM_ERROR(m_chain->GetDesc(&desc));
+    ICY_ERROR(resize(*m_chain, window_size(desc.BufferDesc.Width, desc.BufferDesc.Height)));
+
     m_cpu_timer = CreateWaitableTimerW(nullptr, FALSE, nullptr);
     if (!m_cpu_timer)
         return last_system_error();
@@ -315,8 +328,6 @@ error_type display_data::initialize(IUnknown& device, IDXGIFactory& factory, HWN
     if (!m_update)
         return last_system_error();
 
-    m_chain->GetDesc(&desc0);
-    ICY_ERROR(resize(window_size(desc0.BufferDesc.Width, desc0.BufferDesc.Height)));
     return error_type();
 }
 error_type display_data::exec() noexcept
@@ -344,33 +355,32 @@ error_type display_data::exec() noexcept
             SetWaitableTimer(m_cpu_timer, &offset, 0, nullptr, nullptr, FALSE);
         }
     };
-    window_size size;
     while (true)
     {
+        window_size size;
         while (auto event = pop())
         {
             if (event->type == event_type::global_quit)
                 return error_type();
             if (event->type == event_type::system_internal)
             {
-                const auto& event_data = event->data<system_event>();
-                if (event_data.vsync.count() < 0)
-                {
-                    size = event_data.size;
-                }
-                else
+                const auto& event_data = event->data<display_options>();
+                if (event_data.vsync.count() >= 0)
                 {
                     m_frame.delta = event_data.vsync;
                     reset();
                 }
+                if (event_data.size.x && event_data.size.y)
+                {
+                    size = event_data.size;
+                }
             }
         }
-        
         if (size.x && size.y)
         {
-            ICY_ERROR(resize(*m_chain, size, m_flags));
-            size = window_size();
+            ICY_ERROR(resize(*m_chain, size));
         }
+
         if (m_cpu_ready && m_gpu_ready)
         {
             if (auto frame_data = m_frame.queue.pop())
@@ -384,15 +394,26 @@ error_type display_data::exec() noexcept
                     return make_stdlib_error(std::errc::not_enough_memory);
                 allocator_type::construct(frame.data);
 
+                void* handle = nullptr;
                 if (m_adapter & adapter_flags::d3d12)
                 {
                     frame.data->d3d12 = static_cast<d3d12_render_frame*>(frame_data);
+                    ICY_ERROR(wait_frame(*frame.data->d3d12, handle));
                 }
-                else if (m_adapter & adapter_flags::d3d11)
+                else if (m_adapter & (adapter_flags::d3d11 | adapter_flags::d3d10))
                 {
                     frame.data->d3d11 = static_cast<d3d11_render_frame*>(frame_data);
+                    ICY_ERROR(wait_frame(*frame.data->d3d11, handle));
                 }
-                ICY_ERROR(repaint(*m_chain, m_frame.delta == display_frame_vsync, frame));
+                else
+                {
+                    return make_stdlib_error(std::errc::invalid_argument);
+                }
+                
+
+                const auto now = clock_type::now();
+                ICY_ERROR(repaint(*m_chain, m_frame.delta == display_frame_vsync, handle));
+                frame.data->time_cpu = clock_type::now() - now;
                 frame.data->index = m_frame.index++;
                 ICY_ERROR(event::post(this, event_type::render_frame, std::move(frame)));
                 reset();
@@ -425,21 +446,9 @@ error_type display_data::exec() noexcept
     }
     return error_type();
 }
-error_type display_data::vsync(const duration_type delta) noexcept
+error_type display_data::options(display_options options) noexcept
 {
-    if (delta.count() < 0)
-        return make_stdlib_error(std::errc::invalid_argument);
-    system_event event;
-    event.vsync = delta;
-    return post(this, event_type::system_internal, event);
-}
-error_type display_data::resize(const window_size size) noexcept
-{
-    if (!size.x || !size.y)
-        return make_stdlib_error(std::errc::invalid_argument);
-    system_event event;
-    event.size = size;
-    return post(this, event_type::system_internal, event);    
+    return post(this, event_type::system_internal, std::move(options));
 }
 error_type display_data::signal(const event_data&) noexcept
 {
@@ -459,7 +468,7 @@ error_type display_data::render(const render_frame frame) noexcept
         m_frame.queue.push(frame.data->d3d12);
         frame.data->d3d12 = nullptr;
     }
-    else if (m_adapter & adapter_flags::d3d11)
+    else if (m_adapter & (adapter_flags::d3d11 | adapter_flags::d3d10))
     {
         if (!frame.data->d3d11)
             return make_stdlib_error(std::errc::invalid_argument);
@@ -528,6 +537,10 @@ duration_type render_frame::time_gpu() const noexcept
 {
     return data ? data->time_gpu : duration_type();
 }
+window_size render_frame::size() const noexcept
+{
+    return data ? data->size : window_size();
+}
 
 error_type icy::create_render_list(shared_ptr<render_list>& list) noexcept
 {
@@ -544,11 +557,11 @@ error_type icy::create_render_factory(shared_ptr<render_factory>& system, const 
 
     if (adapter.data->flags() & adapter_flags::d3d12)
     {
-        return create_d3d12(system, *adapter.data, flags);
+        return create_d3d12(system, adapter, flags);
     }
-    else if (adapter.data->flags() & adapter_flags::d3d11)
+    else if (adapter.data->flags() & (adapter_flags::d3d11 | adapter_flags::d3d10))
     {
-        return create_d3d11(system, *adapter.data, flags);
+        return create_d3d11(system, adapter, flags);
     }
     else
     {
@@ -562,11 +575,11 @@ error_type icy::create_event_system(shared_ptr<display_system>& display, const a
 
     if (adapter.data->flags() & adapter_flags::d3d12)
     {
-        return create_d3d12(display, *adapter.data, hwnd, flags);
+        return create_d3d12(display, adapter, hwnd, flags);
     }
-    else if (adapter.data->flags() & adapter_flags::d3d11)
+    else if (adapter.data->flags() & (adapter_flags::d3d11 | adapter_flags::d3d10))
     {
-        return create_d3d11(display, *adapter.data, hwnd, flags);
+        return create_d3d11(display, adapter, hwnd, flags);
     }
     else
     {

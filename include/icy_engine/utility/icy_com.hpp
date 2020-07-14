@@ -3,7 +3,7 @@
 #include <icy_engine/core/icy_core.hpp>
 #include <Unknwnbase.h>
 
-#define ICY_COM_ERROR(HR) if (const auto hr_ = (HR)) return make_system_error(uint32_t(hr_))
+#define ICY_COM_ERROR(HR) { const auto hr_ = (HR); if (hr_ != S_OK) return make_system_error(uint32_t(hr_)); }
 
 namespace icy
 {

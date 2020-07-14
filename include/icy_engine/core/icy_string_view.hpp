@@ -225,7 +225,7 @@ namespace icy
 
 	inline constexpr string_view operator""_s(const char* const ptr, const size_t size) noexcept
 	{
-		return string_view{ ptr, size };
+		return string_view(ptr, size);
 	}
     uint32_t hash(const string_view string) noexcept;
     uint64_t hash64(const string_view string) noexcept;

@@ -1,5 +1,6 @@
 #include <icy_engine/core/icy_color.hpp>
 #include <icy_engine/core/icy_string.hpp>
+#include <cmath>
 
 using namespace icy;
 

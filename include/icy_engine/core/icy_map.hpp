@@ -531,7 +531,7 @@ namespace icy
     public:
         reference operator*() const noexcept
         {
-            return reference{ m_map.m_vals[m_index], m_map.m_keys[m_index] };
+            return reference{ base::m_map.m_vals[base::m_index], base::m_map.m_keys[base::m_index] };
         }
         reference operator[](const difference_type offset) const noexcept
         {

@@ -7,7 +7,11 @@
 #include <cstdio>
 #include <process.h>
 #include <thread>
+#if _MSC_VER >= 1900
+#include <xthreads.h>
+#else
 #include <thr/threads.h>
+#endif
 using namespace icy;
 
 #define LDRP_IMAGE_DLL                          0x00000004
@@ -169,14 +173,14 @@ void icy::sleep(const clock_type::duration duration) noexcept
     const auto ms = ms_timeout(duration);
     if (!ms)
     {
-        thrd_yield();
+        _Thrd_yield();
     }
     else
     {
         xtime tm;
         tm.sec = time_t(std::chrono::duration_cast<std::chrono::seconds>(duration).count());
         tm.nsec = long(std::chrono::duration_cast<std::chrono::nanoseconds>(duration - std::chrono::seconds(tm.sec)).count());
-        thrd_sleep(&tm);
+        _Thrd_sleep(&tm);
     }
     //SleepEx(ms, TRUE);
 }

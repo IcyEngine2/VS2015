@@ -122,15 +122,7 @@ namespace icy
         }
         virtual error_type exec() noexcept = 0;
         error_type post(event_system* const source, const event_type type) noexcept;
-        template<typename T> error_type post(event_system* const source, const event_type type, T&& arg) noexcept
-        {
-            event_data* new_event = nullptr;
-            ICY_ERROR(event_data::create(type, source, sizeof(T), new_event));
-            event_data::initialize(*new_event, std::is_trivially_destructible<T> {}, std::move(arg));
-            const auto error = post(*new_event);
-            new_event->release();
-            return error;
-        }
+        template<typename T> error_type post(event_system* const source, const event_type type, T&& arg) noexcept;
     protected:
         void filter(const uint64_t mask) noexcept;
         event pop() noexcept;        
@@ -325,4 +317,14 @@ namespace icy
         return event_type(uint64_t(event_type::user) << index); 
     }
     event_type next_event_user() noexcept;
+
+    template<typename T> error_type event_system::post(event_system* const source, const event_type type, T&& arg) noexcept
+    {
+        event_data* new_event = nullptr;
+        ICY_ERROR(event_data::create(type, source, sizeof(T), new_event));
+        event_data::initialize(*new_event, std::is_trivially_destructible<T> {}, std::move(arg));
+        const auto error = post(*new_event);
+        new_event->release();
+        return error;
+    }
 }

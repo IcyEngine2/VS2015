@@ -227,7 +227,7 @@ namespace icy
                 ICY_ASSERT(threads, "INVALID SEMAPHORE THREADS COUNT");
                 ICY_ASSERT(timeout.count() >= 0, "INVALID SYNC TIMEOUT");
                 const auto index = m_counter.fetch_add(1, std::memory_order_acq_rel);
-                const auto now = clock::now();
+                const auto now = clock_type::now();
                 sync(index, now, timeout, threads, tag{});
                 return index == 0;
             }
@@ -235,7 +235,7 @@ namespace icy
 			template<typename clock_type>
             void check_time(const typename clock_type::time_point now, const typename clock_type::duration timeout) noexcept
             {
-                ICY_ASSERT(timeout.count() == 0 || clock::now() - now < timeout,
+                ICY_ASSERT(timeout.count() == 0 || clock_type::now() - now < timeout,
                     "SEMAPHORE SYNC TIMEOUT");
             }
 			template<typename clock_type>
