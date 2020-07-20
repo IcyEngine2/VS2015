@@ -2366,7 +2366,7 @@ CURLcode Curl_vsetopt(struct Curl_easy *data, CURLoption option, va_list param)
   case CURLOPT_PROTOCOLS:
     /* set the bitmask for the protocols that are allowed to be used for the
        transfer, which thus helps the app which takes URLs from users or other
-       external inputs and want to restrict what protocol(s) to deal
+       external inputs and want to  what protocol(s) to deal
        with. Defaults to CURLPROTO_ALL. */
     data->set.allowed_protocols = va_arg(param, long);
     break;

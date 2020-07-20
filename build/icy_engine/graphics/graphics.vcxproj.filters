@@ -21,71 +21,89 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_render_svg_core.cpp">
+    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_window.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_window.cpp">
+    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_adapter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_display.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_texture.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_render_factory.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_render_svg_geometry.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_render_svg_text.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_render_commands_2d.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_d3d11.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_d3d12.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_graphics.cpp">
+    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_render_commands_3d.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\..\include\icy_engine\graphics\icy_render_svg.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\include\icy_engine\graphics\icy_render_math.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\..\include\icy_engine\graphics\icy_graphics.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_system.hpp">
       <Filter>Private Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_render_svg_core.hpp">
-      <Filter>Private Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_window.hpp">
-      <Filter>Private Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_render.hpp">
       <Filter>Private Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_shader.hpp">
       <Filter>Private Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_adapter.hpp">
+      <Filter>Private Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_display.hpp">
+      <Filter>Private Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_texture.hpp">
+      <Filter>Private Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_render_factory.hpp">
+      <Filter>Private Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_render_svg.hpp">
+      <Filter>Private Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_render_commands.hpp">
+      <Filter>Private Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="..\..\..\source\icy_engine\graphics\shaders\svg_ps.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="..\..\..\source\icy_engine\graphics\shaders\svg_vs.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
     <FxCompile Include="..\..\..\source\icy_engine\graphics\shaders\screen_vs.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
-    <FxCompile Include="..\..\..\source\icy_engine\graphics\shaders\screen_ps2.hlsl">
+    <FxCompile Include="..\..\..\source\icy_engine\graphics\shaders\draw_texture_ps.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
-    <FxCompile Include="..\..\..\source\icy_engine\graphics\shaders\screen_ps4.hlsl">
+    <FxCompile Include="..\..\..\source\icy_engine\graphics\shaders\draw_texture_vs.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
-    <FxCompile Include="..\..\..\source\icy_engine\graphics\shaders\screen_ps8.hlsl">
+    <FxCompile Include="..\..\..\source\icy_engine\graphics\shaders\msaa_ps2.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
-    <FxCompile Include="..\..\..\source\icy_engine\graphics\shaders\screen_ps16.hlsl">
+    <FxCompile Include="..\..\..\source\icy_engine\graphics\shaders\msaa_ps4.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
-    <FxCompile Include="..\..\..\source\icy_engine\graphics\shaders\screen_ps.hlsl">
+    <FxCompile Include="..\..\..\source\icy_engine\graphics\shaders\msaa_ps8.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="..\..\..\source\icy_engine\graphics\shaders\msaa_ps16.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
   </ItemGroup>

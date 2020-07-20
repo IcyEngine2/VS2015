@@ -457,14 +457,14 @@ typedef png_info * * png_infopp;
 
 /* Types with names ending 'p' are pointer types.  The corresponding types with
  * names ending 'rp' are identical pointer types except that the pointer is
- * marked 'restrict', which means that it is the only pointer to the object
- * passed to the function.  Applications should not use the 'restrict' types;
+ * marked '', which means that it is the only pointer to the object
+ * passed to the function.  Applications should not use the '' types;
  * it is always valid to pass 'p' to a pointer with a function argument of the
  * corresponding 'rp' type.  Different compilers have different rules with
- * regard to type matching in the presence of 'restrict'.  For backward
- * compatibility libpng callbacks never have 'restrict' in their parameters and,
+ * regard to type matching in the presence of ''.  For backward
+ * compatibility libpng callbacks never have '' in their parameters and,
  * consequentially, writing portable application code is extremely difficult if
- * an attempt is made to use 'restrict'.
+ * an attempt is made to use ''.
  */
 typedef png_struct * PNG_RESTRICT png_structrp;
 typedef const png_struct * PNG_RESTRICT png_const_structrp;

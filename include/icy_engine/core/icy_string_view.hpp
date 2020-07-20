@@ -42,7 +42,6 @@ namespace icy
 			mask_3 = 0x10,
 		};
 		friend string_view;
-		template<typename, size_t> friend class string_type;
 	public:
 		using type = string_iterator;
 		using iterator_category = std::bidirectional_iterator_tag;

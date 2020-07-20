@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>16.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{9756bbf4-a4c6-496a-836d-2f3dd733a899}</ProjectGuid>
+    <RootNamespace>gumbo</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\..\vsprops\LibDebugL2.props" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\..\vsprops\LibReleaseL2.props" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>true</LinkIncremental>
+    <IncludePath>$(ProjectDir)..\..\..\source\libs\gumbo;$(IncludePath)</IncludePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <IncludePath>$(ProjectDir)..\..\..\source\libs\gumbo;$(IncludePath)</IncludePath>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\..\source\libs\gumbo\attribute.c" />
+    <ClCompile Include="..\..\..\source\libs\gumbo\char_ref.c" />
+    <ClCompile Include="..\..\..\source\libs\gumbo\error.c" />
+    <ClCompile Include="..\..\..\source\libs\gumbo\parser.c" />
+    <ClCompile Include="..\..\..\source\libs\gumbo\string_buffer.c" />
+    <ClCompile Include="..\..\..\source\libs\gumbo\string_piece.c" />
+    <ClCompile Include="..\..\..\source\libs\gumbo\tag.c" />
+    <ClCompile Include="..\..\..\source\libs\gumbo\tokenizer.c" />
+    <ClCompile Include="..\..\..\source\libs\gumbo\utf8.c" />
+    <ClCompile Include="..\..\..\source\libs\gumbo\util.c" />
+    <ClCompile Include="..\..\..\source\libs\gumbo\vector.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\..\source\libs\gumbo\attribute.h" />
+    <ClInclude Include="..\..\..\source\libs\gumbo\char_ref.h" />
+    <ClInclude Include="..\..\..\source\libs\gumbo\error.h" />
+    <ClInclude Include="..\..\..\source\libs\gumbo\gumbo.h" />
+    <ClInclude Include="..\..\..\source\libs\gumbo\insertion_mode.h" />
+    <ClInclude Include="..\..\..\source\libs\gumbo\parser.h" />
+    <ClInclude Include="..\..\..\source\libs\gumbo\string_buffer.h" />
+    <ClInclude Include="..\..\..\source\libs\gumbo\string_piece.h" />
+    <ClInclude Include="..\..\..\source\libs\gumbo\tag_enum.h" />
+    <ClInclude Include="..\..\..\source\libs\gumbo\tag_gperf.h" />
+    <ClInclude Include="..\..\..\source\libs\gumbo\tag_sizes.h" />
+    <ClInclude Include="..\..\..\source\libs\gumbo\tag_strings.h" />
+    <ClInclude Include="..\..\..\source\libs\gumbo\tokenizer.h" />
+    <ClInclude Include="..\..\..\source\libs\gumbo\tokenizer_states.h" />
+    <ClInclude Include="..\..\..\source\libs\gumbo\token_type.h" />
+    <ClInclude Include="..\..\..\source\libs\gumbo\utf8.h" />
+    <ClInclude Include="..\..\..\source\libs\gumbo\util.h" />
+    <ClInclude Include="..\..\..\source\libs\gumbo\vector.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

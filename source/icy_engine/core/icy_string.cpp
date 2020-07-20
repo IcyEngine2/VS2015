@@ -213,7 +213,7 @@ error_type icy::to_value(const string_view str, guid& guid) noexcept
     return error_type();
 }
 
-string::string(string&& rhs) noexcept
+string::string(string&& rhs) noexcept : m_realloc(rhs.m_realloc), m_user(rhs.m_user)
 {
 	if (rhs.is_dynamic())
 	{
@@ -230,7 +230,7 @@ string::string(string&& rhs) noexcept
 string::~string() noexcept
 {
 	if (is_dynamic())
-		icy::realloc(m_ptr, 0);
+		m_realloc(m_ptr, 0, m_user);
 }
 error_type icy::to_string(const_array_view<wchar_t> src, string& str) noexcept
 {
@@ -381,11 +381,11 @@ error_type string::reserve(const size_type capacity) noexcept
 		char* new_ptr = nullptr;
 		if (is_dynamic())
 		{
-			new_ptr = static_cast<char*>(icy::realloc(m_ptr, new_capacity));			
+			new_ptr = static_cast<char*>(m_realloc(m_ptr, new_capacity, m_user));			
 		}
 		else
 		{
-			new_ptr = static_cast<char*>(icy::realloc(nullptr, new_capacity));
+			new_ptr = static_cast<char*>(m_realloc(nullptr, new_capacity, m_user));
 			if (new_ptr)
 				memcpy(new_ptr, m_ptr, m_size + 1);
 		}

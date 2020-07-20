@@ -210,6 +210,15 @@ namespace icy
 			value.a = a;
 			return value;
 		}
+		static color from_rgba(const uint32_t rgba) noexcept
+		{
+			color value;
+			value.r = (rgba >> 0x00) & 0xFF;
+			value.g = (rgba >> 0x08) & 0xFF;
+			value.b = (rgba >> 0x10) & 0xFF;
+			value.a = (rgba >> 0x18) & 0xFF;
+			return value;
+		}
 		static color from_rgbaf(const float r, const float g, const float b, const float a = 1) noexcept
         {
             color value;

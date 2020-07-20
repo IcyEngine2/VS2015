@@ -114,6 +114,16 @@ namespace icy
         error_type initialize(const heap& heap) noexcept;
         virtual error_type operator()(const size_t index, const void* ptr, const char* func_name) noexcept;
     };
+
+    inline void* global_realloc(const void* const ptr, const size_t size, void*) noexcept
+    {
+        return icy::realloc(ptr, size);
+    }
+    inline void* heap_realloc(const void* const ptr, const size_t size, void* user) noexcept
+    {
+        return static_cast<heap*>(user)->realloc(ptr, size);
+    }
+
 	
     class allocator_type
     {

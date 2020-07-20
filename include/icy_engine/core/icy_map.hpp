@@ -10,12 +10,19 @@ namespace icy
 	{
         friend error_type copy(const map<K, T>& src, map<K, T>& dst) noexcept
         {
-            array<K> keys;
-            array<T> vals;
-            ICY_ERROR(copy(src.m_keys, keys));
-            ICY_ERROR(copy(src.m_vals, vals));
-            dst.m_keys = std::move(keys);
-            dst.m_vals = std::move(vals);
+            ICY_ERROR(dst.m_keys.reserve(src.m_keys.size()));
+            ICY_ERROR(dst.m_vals.reserve(src.m_vals.size()));
+            dst.m_keys.clear();
+            dst.m_vals.clear();
+            for (auto k = 0u; k < src.size(); ++k)
+            {
+                K new_key;
+                T new_val;
+                ICY_ERROR(copy(src.m_keys[k], new_key));
+                ICY_ERROR(copy(src.m_vals[k], new_val));
+                ICY_ERROR(dst.m_keys.push_back(std::move(new_key)));
+                ICY_ERROR(dst.m_vals.push_back(std::move(new_val)));
+            }
             return error_type();
         }
 	public:
@@ -35,7 +42,15 @@ namespace icy
 		using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 		using reverse_iterator = std::reverse_iterator<iterator>;
 	public:
-		map() noexcept = default;
+        map() noexcept = default;
+        map(heap* const heap) noexcept : m_keys(heap), m_vals(heap)
+        {
+
+        }
+        map(const realloc_func realloc, void* user) noexcept : m_keys(realloc, user), m_vals(realloc, user)
+        {
+
+        }
         const_array_view<K> keys() const noexcept
 		{
 			return m_keys;

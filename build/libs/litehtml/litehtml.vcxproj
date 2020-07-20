@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>16.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{2ada0045-e02a-458b-955b-57c034b5291e}</ProjectGuid>
+    <RootNamespace>litehtml</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\..\vsprops\LibDebugL2.props" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\..\vsprops\LibReleaseL2.props" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <TargetName>lib$(ProjectName)d</TargetName>
+    <IncludePath>..\..\..\source\libs\litehtml\include;..\..\..\source\libs\litehtml\src\gumbo\include;..\..\..\source\libs\litehtml\src\gumbo\include\gumbo;..\..\..\source\libs\litehtml\src\gumbo\visualc\include;$(IncludePath)</IncludePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <TargetName>lib$(ProjectName)</TargetName>
+    <IncludePath>..\..\..\source\libs\litehtml\include;..\..\..\source\libs\litehtml\src\gumbo\include;..\..\..\source\libs\litehtml\src\gumbo\include\gumbo;..\..\..\source\libs\litehtml\src\gumbo\visualc\include;$(IncludePath)</IncludePath>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\background.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\box.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\context.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\css_length.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\css_selector.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\document.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\element.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\el_anchor.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\el_base.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\el_before_after.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\el_body.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\el_break.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\el_cdata.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\el_comment.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\el_div.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\el_font.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\el_image.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\el_li.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\el_link.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\el_para.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\el_script.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\el_space.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\el_style.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\el_table.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\el_td.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\el_text.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\el_title.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\el_tr.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\gumbo\attribute.c" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\gumbo\char_ref.c" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\gumbo\error.c" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\gumbo\parser.c" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\gumbo\string_buffer.c" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\gumbo\string_piece.c" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\gumbo\tag.c" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\gumbo\tokenizer.c" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\gumbo\utf8.c" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\gumbo\util.c" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\gumbo\vector.c" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\html.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\html_tag.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\iterators.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\media_query.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\num_cvt.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\style.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\stylesheet.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\table.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\utf8_strings.cpp" />
+    <ClCompile Include="..\..\..\source\libs\litehtml\src\web_color.cpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

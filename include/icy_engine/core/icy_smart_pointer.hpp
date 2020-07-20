@@ -232,6 +232,10 @@ namespace icy
                     allocator_type::deallocate(m_ptr);
             }
         }
+        weak_ptr(std::nullptr_t) noexcept
+        {
+
+        }
         template<typename U>        
         weak_ptr(const shared_ptr<U>& rhs) noexcept : m_ptr(rhs.m_ptr)
         {

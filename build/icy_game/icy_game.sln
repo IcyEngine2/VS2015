@@ -6,6 +6,7 @@ MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_game_client", "icy_game_client\icy_game_client.vcxproj", "{9A514876-FECE-4256-93ED-1D18880CA8E7}"
 	ProjectSection(ProjectDependencies) = postProject
 		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC} = {B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}
+		{8E656049-2EAF-4620-9E9F-638C0DEFD018} = {8E656049-2EAF-4620-9E9F-638C0DEFD018}
 		{2529D4F5-C845-4B41-B789-4FCFFF27B9BA} = {2529D4F5-C845-4B41-B789-4FCFFF27B9BA}
 	EndProjectSection
 EndProject
@@ -25,6 +26,8 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_game_editor", "icy_game_editor\icy_game_editor.vcxproj", "{A7380837-26B1-4182-9D4F-178DC9A29AB9}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_engine_graphics", "..\icy_engine\graphics\graphics.vcxproj", "{2529D4F5-C845-4B41-B789-4FCFFF27B9BA}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "css", "..\libs\css\css.vcxproj", "{8E656049-2EAF-4620-9E9F-638C0DEFD018}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -64,6 +67,10 @@ Global
 		{2529D4F5-C845-4B41-B789-4FCFFF27B9BA}.Debug|x64.Build.0 = Debug|x64
 		{2529D4F5-C845-4B41-B789-4FCFFF27B9BA}.Release|x64.ActiveCfg = Release|x64
 		{2529D4F5-C845-4B41-B789-4FCFFF27B9BA}.Release|x64.Build.0 = Release|x64
+		{8E656049-2EAF-4620-9E9F-638C0DEFD018}.Debug|x64.ActiveCfg = Debug|x64
+		{8E656049-2EAF-4620-9E9F-638C0DEFD018}.Debug|x64.Build.0 = Debug|x64
+		{8E656049-2EAF-4620-9E9F-638C0DEFD018}.Release|x64.ActiveCfg = Release|x64
+		{8E656049-2EAF-4620-9E9F-638C0DEFD018}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

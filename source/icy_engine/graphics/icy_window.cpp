@@ -1,4 +1,3 @@
-#define ICY_WINDOW_INTERNAL 1
 #include "icy_window.hpp"
 #include <icy_engine/graphics/icy_graphics.hpp>
 #include <icy_engine/core/icy_string.hpp>

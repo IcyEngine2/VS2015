@@ -2,14 +2,16 @@
 
 #include "icy_array_view.hpp"
 #include "icy_smart_pointer.hpp"
+#include "icy_string.hpp"
 
 namespace icy
 {
-    template<typename T>
+	template<typename T>
 	class array : public array_view<T>
 	{
+		template<typename U>
+		friend class array;
 	public:
-		using allocator_type = allocator_type;
 		using type = array<T>;
 		using base = array_view<T>;
 		using value_type = typename base::value_type;
@@ -24,21 +26,33 @@ namespace icy
 		using const_reverse_iterator = typename base::const_reverse_iterator;
 		using reverse_iterator = typename base::reverse_iterator;
 	public:
-		array() noexcept = default;
+		array() noexcept : array(nullptr, nullptr)
+		{
+
+		}
+		array(heap* const heap) noexcept : array(heap ? heap_realloc : global_realloc, heap)
+		{
+
+		}
+		array(const realloc_func realloc, void* const user) noexcept : 
+			m_realloc(realloc ? realloc : global_realloc), m_user(user)
+		{
+
+		}
 		array(const array&) = delete;
 		array& operator=(const array&) = delete;
-		array(array&& rhs) noexcept
-		{			
+		array(array&& rhs) noexcept : m_realloc(rhs.m_realloc), m_user(rhs.m_user)
+		{
 			std::swap(array_view<T>::m_ptr, rhs.m_ptr);
 			std::swap(array_view<T>::m_size, rhs.m_size);
             std::swap(m_capacity, rhs.m_capacity);
 		}
-		ICY_DEFAULT_MOVE_ASSIGN(type);
+		ICY_DEFAULT_MOVE_ASSIGN(array);
 		~array() noexcept
 		{
 			for (auto k = array_view<T>::m_size; k--;)
 				allocator_type::destroy(array_view<T>::m_ptr + k);
-			allocator_type::deallocate(array_view<T>::m_ptr);
+			m_realloc(array_view<T>::m_ptr, 0, m_user);
 		}
 	public:
 		size_type capacity() const noexcept
@@ -53,7 +67,7 @@ namespace icy
 					return error;
 
 				while (array_view<T>::m_size != size)
-					allocator_type::construct(array_view<T>::m_ptr + (array_view<T>::m_size++), T{});
+					construct(array_view<T>::m_ptr + (array_view<T>::m_size++));
 			}
 			else
 			{
@@ -89,7 +103,7 @@ namespace icy
 		{
             ICY_ERROR(reserve(array_view<T>::size() + std::distance(first, last)));
 			for (; first != last; ++first)
-				allocator_type::construct(array_view<T>::m_ptr + (array_view<T>::m_size++), std::move(*first));
+				construct(array_view<T>::m_ptr + (array_view<T>::m_size++), std::move(*first));
 			return error_type();
 		}
         template<typename iter_type>
@@ -100,7 +114,7 @@ namespace icy
             {
                 T tmp;
                 ICY_ERROR(copy(*first, tmp));
-                allocator_type::construct(array_view<T>::m_ptr + (array_view<T>::m_size++), std::move(tmp));
+                construct(array_view<T>::m_ptr + (array_view<T>::m_size++), std::move(tmp));
             }
             return error_type();
         }
@@ -165,7 +179,7 @@ namespace icy
 			if (capacity > this->capacity())
 			{
                 const auto new_capacity = icy::align_size(capacity * sizeof(T)) / sizeof(T);
-				const auto ptr = allocator_type::allocate<T>(new_capacity);
+				const auto ptr = static_cast<T*>(m_realloc(nullptr, new_capacity * sizeof(T), m_user));
 				if (!ptr)
 					return make_stdlib_error(std::errc::not_enough_memory);
 
@@ -173,21 +187,53 @@ namespace icy
 				{
 					for (auto k = array_view<T>::size(); k; --k)
 					{
-						allocator_type::construct(ptr + k - 1, std::move(array_view<T>::m_ptr[k - 1]));
+						construct(ptr + k - 1, std::move(array_view<T>::m_ptr[k - 1]));
 						allocator_type::destroy(array_view<T>::m_ptr + k - 1);
 					}
-					allocator_type::deallocate(array_view<T>::m_ptr);
+					m_realloc(array_view<T>::m_ptr, 0, m_user);
 				}
 				array_view<T>::m_ptr = ptr;
                 m_capacity = new_capacity;
 			}
 			return error_type();
 		}
+		void construct(string* lhs, string&& rhs) noexcept
+		{
+			ICY_ASSERT(rhs.realloc() == m_realloc && rhs.user() == m_user, "INVALID CUSTOM HEAP CONTAINER");
+			allocator_type::construct(lhs, std::move(rhs));
+		}
+		template<typename U>
+		void construct(array<U>* lhs, array<U>&& rhs) noexcept
+		{
+			ICY_ASSERT(rhs.m_realloc == m_realloc && rhs.m_user == m_user, "INVALID CUSTOM HEAP CONTAINER");
+			allocator_type::construct(lhs, std::move(rhs));
+		}
+		template<typename U>
+		void construct(U* lhs, U&& rhs) noexcept
+		{
+			allocator_type::construct(lhs, std::move(rhs));
+		}
+		void construct(string* lhs) noexcept
+		{
+			allocator_type::construct(lhs, string(m_realloc, m_user));
+		}
+		template<typename U>
+		void construct(array<U>* lhs) noexcept
+		{
+			allocator_type::construct(lhs, array<U>(m_realloc, m_user));
+		}
+		template<typename U>
+		void construct(U* lhs) noexcept
+		{
+			allocator_type::construct(lhs);
+		}
     private:
         size_type m_capacity = 0_z;
+		realloc_func m_realloc;
+		void* m_user;
 	};
 
-    template<typename T>
+	template<typename T>
     error_type copy(const const_array_view<T>& src, array<T>& dst) noexcept
     {
         array<T> tmp;

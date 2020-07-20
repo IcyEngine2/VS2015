@@ -10,12 +10,12 @@
 
 namespace icy
 {
-    template<typename T> class array;
     enum float_type
     {
         float_type_fixed,
         float_type_exp,
     };
+	
 	class string : public string_view
 	{
 		template<typename T> friend error_type to_string_unsigned(const T _value, const uint64_t base, string& str) noexcept;
@@ -23,7 +23,16 @@ namespace icy
 	public:
 		using type = string;
 	public:
-		string() noexcept
+		string() noexcept : string(nullptr, nullptr)
+		{
+
+		}
+		string(heap* const heap) noexcept : string(heap ? heap_realloc : global_realloc, heap)
+		{
+
+		}
+		string(const realloc_func realloc, void* const user) noexcept :
+			m_realloc(realloc ? realloc : global_realloc), m_user(user)
 		{
 			m_ptr = m_buffer;
 		}
@@ -31,7 +40,7 @@ namespace icy
 		string& operator=(const string&) = delete;
 		string(string&& rhs) noexcept;
 		~string() noexcept;
-		ICY_DEFAULT_MOVE_ASSIGN(type);
+		ICY_DEFAULT_MOVE_ASSIGN(string);
 	public:
 		size_type capacity() const noexcept
 		{
@@ -53,11 +62,20 @@ namespace icy
 		error_type replace(const string_view find, const string_view replace) noexcept;
 		error_type reserve(const size_type capacity) noexcept;
 		error_type resize(const size_type size, const char symb = '\0') noexcept;
+		realloc_func realloc() const noexcept
+		{
+			return m_realloc;
+		}
+		void* user() const noexcept
+		{
+			return m_user;
+		}
 	private:
 		char m_buffer[ICY_DEFAULT_STRING_BUFFER] = {};
         size_t m_capacity = 0;
+		realloc_func m_realloc;
+		void* m_user;
 	};
-	template<typename T> class array;
 
 	inline error_type to_string(const string_view rhs, string& str) noexcept
 	{

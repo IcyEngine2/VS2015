@@ -15,25 +15,7 @@ struct HDC__;
 
 namespace icy 
 {
-	class render_svg_system
-	{
-	public:
-		error_type initialize() noexcept;
-		ID2D1Factory& d2d1() const noexcept
-		{
-			return *m_d2d1_factory;
-		}
-		IDWriteFactory& dwrite() const noexcept
-		{
-			return *m_dwrite_factory;
-		}
-		float dpi() const noexcept;
-	private:
-		library m_d2d1_lib = "d2d1"_lib;
-		library m_dwrite_lib = "dwrite"_lib;
-		com_ptr<ID2D1Factory> m_d2d1_factory;
-		com_ptr<IDWriteFactory> m_dwrite_factory;
-	};
+	
 	class render_svg_font::data_type
 	{
 	public:

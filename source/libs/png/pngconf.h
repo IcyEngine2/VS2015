@@ -404,7 +404,7 @@
 #    endif
 #    ifndef PNG_ALLOCATED
 #      if (_MSC_VER >= 1400)
-#        define PNG_ALLOCATED __declspec(restrict)
+#        define PNG_ALLOCATED __declspec()
 #      endif
 #    endif
 #    ifndef PNG_DEPRECATED
@@ -442,7 +442,7 @@
 #  define PNG_PRIVATE     /* This is a private libpng function */
 #endif
 #ifndef PNG_RESTRICT
-#  define PNG_RESTRICT    /* The C99 "restrict" feature */
+#  define PNG_RESTRICT    /* The C99 "" feature */
 #endif
 
 #ifndef PNG_FP_EXPORT     /* A floating point API. */

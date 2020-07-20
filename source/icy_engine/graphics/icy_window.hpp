@@ -1,7 +1,7 @@
 #pragma once
 
-#include <icy_engine/graphics/icy_graphics.hpp>
 #include <icy_engine/core/icy_queue.hpp>
+#include <icy_engine/graphics/icy_graphics.hpp>
 
 class window_data : public icy::window_system
 {

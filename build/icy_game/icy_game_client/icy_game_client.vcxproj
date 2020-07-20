@@ -81,7 +81,16 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\..\source\icy_engine\html\icy_css.cpp" />
+    <ClCompile Include="..\..\..\source\icy_engine\html\icy_html.cpp" />
+    <ClCompile Include="..\..\..\source\icy_engine\html\icy_render.cpp" />
     <ClCompile Include="..\..\..\source\icy_game\client\icy_game_client_main.cpp" />
+    <ClCompile Include="..\..\..\source\libs\duktape\duktape.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\..\include\icy_engine\html\icy_css.hpp" />
+    <ClInclude Include="..\..\..\include\icy_engine\html\icy_html.hpp" />
+    <ClInclude Include="..\..\..\include\icy_engine\html\icy_render.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
