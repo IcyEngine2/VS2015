@@ -1,5 +1,4 @@
 #include "icy_window.hpp"
-#include <icy_engine/graphics/icy_graphics.hpp>
 #include <icy_engine/core/icy_string.hpp>
 #include <icy_engine/core/icy_array.hpp>
 #include <icy_engine/core/icy_input.hpp>
@@ -38,7 +37,6 @@ static decltype(&::SetWindowPlacement) win32_set_window_placement;
 static decltype(&::MsgWaitForMultipleObjectsEx) win32_msg_wait_for_multiple_objects_ex;
 static decltype(&::SetWindowTextW) win32_set_window_text;
 static decltype(&::GetWindowTextW) win32_get_window_text;
-static decltype(&::GetWindowThreadProcessId) win32_get_window_pid;
 static decltype(&::GetWindowTextLengthW) win32_get_window_text_length;
 static decltype(&::GetClientRect) win32_get_client_rect;
 static decltype(&::GetWindowLongPtrW) win32_get_window_longptr;
@@ -439,77 +437,5 @@ error_type icy::create_event_system(shared_ptr<window_system>& window, const win
     event = nullptr;
     ICY_ERROR(new_ptr->initialize());
     window = new_ptr;
-    return error_type();
-}
-error_type icy::enum_windows(array<window_info>& vec) noexcept
-{
-    auto m_library = "user32"_lib;
-    ICY_ERROR(m_library.initialize());
-        
-    decltype(&EnumWindows) win32_enum_windows = nullptr;
-
-    struct win32_find_window
-    {
-        error_type error;
-        array<window_info>* vec = nullptr;
-        decltype(&IsWindowVisible) win32_is_window_visible = nullptr;
-        decltype(&GetWindow) win32_get_window = nullptr;
-        decltype(&GetWindowRect) win32_get_window_rect = nullptr;
-        decltype(&GetWindowLongW) win32_get_window_long = nullptr;
-    };
-    win32_find_window data;
-    
-    ICY_WIN32_FUNC(win32_enum_windows, EnumWindows);
-    ICY_WIN32_FUNC(win32_get_window_text_length, GetWindowTextLengthW);
-    ICY_WIN32_FUNC(win32_get_window_text, GetWindowTextW);
-    ICY_WIN32_FUNC(win32_get_window_pid, GetWindowThreadProcessId);
-    ICY_WIN32_FUNC(data.win32_is_window_visible, IsWindowVisible);
-    ICY_WIN32_FUNC(data.win32_get_window, GetWindow);
-    ICY_WIN32_FUNC(data.win32_get_window_rect, GetWindowRect);
-    ICY_WIN32_FUNC(data.win32_get_window_long, GetWindowLongW);
-
-    data.vec = &vec;
-    const auto proc = [](HWND hwnd, LPARAM ptr)
-    {
-        const auto self = reinterpret_cast<win32_find_window*>(ptr);
-        if (self->win32_is_window_visible(hwnd) && self->win32_get_window(hwnd, GW_OWNER) == 0)
-        {
-            RECT rect;
-            if (!self->win32_get_window_rect(hwnd, &rect) 
-                || (rect.right - rect.left) == 0 
-                || (rect.bottom - rect.top) == 0)
-                return 1;
-
-            window_info info; 
-            info.handle = hwnd;
-            self->error = win32_name(hwnd, info.name);
-            if (self->error)
-                return 0;
-            if (info.name.empty())
-                return 1;
-
-            if ((self->win32_get_window_long(hwnd, GWL_STYLE) & (WS_POPUP | WS_THICKFRAME)) == 0)
-                return 1;
-
-            auto pid = 0ul;
-            win32_get_window_pid(hwnd, &pid);
-            if (!pid)
-            {
-                self->error = last_system_error();
-                return 0;
-            }
-
-            info.pid = pid;
-            self->error = self->vec->push_back(std::move(info));
-            if (self->error)
-                return 0;
-        }
-        return 1;
-    };
-
-    auto ok = win32_enum_windows(proc, reinterpret_cast<LPARAM>(&data));
-    ICY_ERROR(data.error);
-    if (!ok)
-        return last_system_error();
     return error_type();
 }

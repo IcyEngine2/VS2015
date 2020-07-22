@@ -30,6 +30,7 @@ namespace icy
         using base::cend;
         using base::crbegin;
         using base::crend;
+        using base::size;
         const_iterator begin() const noexcept
         {
             return base::begin();
@@ -78,9 +79,9 @@ namespace icy
             if (it != end())
             {
                 auto offset = size_t(it - begin());
-                for (auto k = offset + 1; k < size(); ++k)
-                    m_ptr[k - 1] = std::move(m_ptr[k]);
-                pop_back();
+                for (auto k = offset + 1; k < base::size(); ++k)
+                    base::m_ptr[k - 1] = std::move(base::m_ptr[k]);
+                base::pop_back();
             }
             return it;
         }
@@ -107,8 +108,8 @@ namespace icy
                 const auto length = size();
                 ICY_ERROR(base::emplace_back());
                 for (auto k = length; k != offset; --k)
-                    m_ptr[k] = std::move(m_ptr[k - 1]);
-                m_ptr[offset] = std::move(key);
+                    base::m_ptr[k] = std::move(base::m_ptr[k - 1]);
+                base::m_ptr[offset] = std::move(key);
             }
             else
             {

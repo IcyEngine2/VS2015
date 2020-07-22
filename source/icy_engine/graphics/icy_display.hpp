@@ -1,7 +1,8 @@
 #pragma once
 
-#include <icy_engine/graphics/icy_graphics.hpp>
 #include <icy_engine/utility/icy_com.hpp>
+#include <icy_engine/graphics/icy_display.hpp>
+#include <icy_engine/graphics/icy_adapter.hpp>
 
 struct IDXGISwapChain;
 struct IDXGIFactory;

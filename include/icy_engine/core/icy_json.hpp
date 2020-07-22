@@ -40,8 +40,31 @@ namespace icy
 	public:
 		json(const json_type type = json_type::none) noexcept : m_type(type)
 		{
-			memset(&m_string, 0, sizeof(m_string));
-		}
+            switch (type)
+            {
+            case json_type::boolean:
+                new (&m_boolean) json_type_boolean{};
+                break;
+            case json_type::integer:
+                new (&m_integer) json_type_integer{};
+                break;
+            case json_type::floating:
+                new (&m_floating) json_type_double{};
+                break;
+            case json_type::string:
+                new (&m_string) json_type_string{};
+                break;
+            case json_type::array:
+                new (&m_array) json_type_array{};
+                break;
+            case json_type::object:
+                new (&m_object) json_type_object{};
+                break;
+            default:
+                memset(this, 0, sizeof(*this));
+                break;
+            }
+        }
         json_type type() const noexcept
         {
             return m_type;

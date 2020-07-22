@@ -43,6 +43,7 @@ namespace icy
     public:
         static error_type query(array<network_address>& array, const string_view host,
             const string_view port, const duration_type timeout = network_default_timeout) noexcept;
+
         network_address() noexcept = default;
         network_address(network_address&& rhs) noexcept;
         ICY_DEFAULT_MOVE_ASSIGN(network_address);
@@ -92,20 +93,23 @@ namespace icy
     
     class network_system_tcp_client : public event_system
     {
-        friend error_type create_network_tcp_client(shared_ptr<network_system_tcp_client>& system,
+        friend error_type create_event_system(shared_ptr<network_system_tcp_client>& system,
             const network_address& address, const const_array_view<uint8_t> bytes, const duration_type timeout) noexcept;
+        friend error_type create_event_system(shared_ptr<network_system_tcp_client>& system,
+            const network_address& address, const http_request& http, const duration_type timeout) noexcept;
     public:
         ~network_system_tcp_client() noexcept;
         error_type send(const const_array_view<uint8_t> buffer) noexcept;
         error_type recv(const size_t capacity) noexcept;
         error_type exec() noexcept override;
+        error_type exec_once() noexcept;
         error_type signal(const event_data& event) noexcept override;
     private:
         detail::network_system_data* m_data = nullptr;
     };
     class network_system_udp_client : public event_system
     {
-        friend error_type create_network_udp_client(shared_ptr<network_system_udp_client>& system) noexcept;
+        friend error_type create_event_system(shared_ptr<network_system_udp_client>& system) noexcept;
     public:
         ~network_system_udp_client() noexcept;
         error_type join(const network_address& multicast) noexcept;
@@ -119,10 +123,8 @@ namespace icy
     };
     class network_system_http_client : public event_system
     {
-        friend error_type create_network_http_client(shared_ptr<network_system_http_client>& system,
-            const network_address& address, const http_request& request, 
-            const duration_type timeout = network_default_timeout, 
-            const size_t buffer = network_default_buffer) noexcept;
+        friend error_type create_event_system(shared_ptr<network_system_http_client>& system,
+            const network_address& address, const http_request& request, const duration_type timeout, const size_t buffer) noexcept;
     public:
         ~network_system_http_client() noexcept;
         error_type exec() noexcept override;
@@ -133,7 +135,7 @@ namespace icy
 
     class network_system_tcp_server : public event_system
     {
-        friend error_type create_network_tcp_server(shared_ptr<network_system_tcp_server>& system, const network_server_config& args) noexcept;
+        friend error_type create_event_system(shared_ptr<network_system_tcp_server>& system, const network_server_config& args) noexcept;
     public:
         ~network_system_tcp_server() noexcept;
         error_type open(const network_tcp_connection conn) noexcept;
@@ -147,7 +149,7 @@ namespace icy
     };
     class network_system_udp_server : public event_system
     {
-        friend error_type create_network_udp_server(shared_ptr<network_system_udp_server>& system, const network_server_config& args) noexcept;
+        friend error_type create_event_system(shared_ptr<network_system_udp_server>& system, const network_server_config& args) noexcept;
     public:
         ~network_system_udp_server() noexcept;
         error_type send(const network_address& addr, const const_array_view<uint8_t> buffer) noexcept;
@@ -159,7 +161,7 @@ namespace icy
     };
     class network_system_http_server : public event_system
     {
-        friend error_type create_network_http_server(shared_ptr<network_system_http_server>& system, const network_server_config& args) noexcept;
+        friend error_type create_event_system(shared_ptr<network_system_http_server>& system, const network_server_config& args) noexcept;
     public:
         ~network_system_http_server() noexcept;
         error_type reply(const network_tcp_connection conn, const http_response& response) noexcept;
@@ -167,6 +169,25 @@ namespace icy
         error_type signal(const event_data& event) noexcept override;
     private:
         detail::network_system_data* m_data = nullptr;
+    };
+
+    class network_udp_socket
+    {
+    public:
+        network_udp_socket() noexcept = default;
+        network_udp_socket(const network_udp_socket&) noexcept;
+        ~network_udp_socket() noexcept;
+        error_type initialize(const uint16_t port) noexcept;
+        error_type send(const network_address& addr, const const_array_view<uint8_t> buffer) noexcept;
+        error_type recv(const size_t size) noexcept;
+    public:
+        virtual void recv(const network_address& addr, const const_array_view<uint8_t> buffer) const noexcept
+        {
+
+        }
+    private:
+        class data_type;
+        data_type* data = nullptr;
     };
 
     error_type to_string(const network_address& address, string& str) noexcept;

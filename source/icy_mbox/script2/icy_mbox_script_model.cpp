@@ -281,7 +281,9 @@ error_type mbox_model_explorer::reset(const mbox::library& library, const guid& 
 
         node_type new_node;
         ICY_ERROR(new_node.initialize(*ptr));  
-        ICY_ERROR(it->value.nodes.insert(ptr->name, index));
+        string name;
+        ICY_ERROR(copy(ptr->name, name));
+        ICY_ERROR(it->value.nodes.insert(std::move(name), index));
         ICY_ERROR(m_data.insert(index, std::move(new_node)));
     }
         
@@ -328,7 +330,9 @@ error_type mbox_model_explorer::exec(const event event) noexcept
                 ICY_ERROR(parent_node.insert_rows(new_row, 1));
                 auto xgui_node = parent_node.node(new_row, 0);
                 ICY_ERROR(initialize(mbox_node, xgui_node));
-                ICY_ERROR(nodes.insert(oper.value.name, oper.value.index));
+                string name;
+                ICY_ERROR(copy(oper.value.name, name));
+                ICY_ERROR(nodes.insert(std::move(name), oper.value.index));
                 ICY_ERROR(m_data.insert(oper.value.index, std::move(mbox_node)));
                 continue;
             }
@@ -357,7 +361,9 @@ error_type mbox_model_explorer::exec(const event event) noexcept
                 auto xgui_node = parent_node.node(new_row, 0);
                 ICY_ERROR(to_string(oper.value.name, global_find->value.name));
                 ICY_ERROR(xgui_node.text(oper.value.name));
-                ICY_ERROR(nodes.insert(oper.value.name, oper.value.index));
+                string name;
+                ICY_ERROR(copy(oper.value.name, name));
+                ICY_ERROR(nodes.insert(std::move(name), oper.value.index));
             }
             else if (oper.type == mbox::transaction::operation_type::remove)
             {
@@ -443,7 +449,9 @@ error_type mbox_model_directory::reset(const mbox::library& library, const guid&
         const auto& base = *library.find(index);
         node_type new_node;
         ICY_ERROR(new_node.initialize(base, &library));
-        ICY_ERROR(m_data.insert(base.name, std::move(new_node)));
+        string name;
+        ICY_ERROR(copy(base.name, name));
+        ICY_ERROR(m_data.insert(std::move(name), std::move(new_node)));
     }
     ICY_ERROR(m_model.insert_rows(0, vec.size()));
     auto row = 0_z;
@@ -468,7 +476,9 @@ error_type mbox_model_directory::exec(const event event) noexcept
                     node_type new_node;
                     ICY_ERROR(new_node.initialize(oper.value, nullptr));
                     ICY_ERROR(initialize(row, oper.value.name, new_node));
-                    ICY_ERROR(m_data.insert(oper.value.name, std::move(new_node)));
+                    string name;
+                    ICY_ERROR(copy(oper.value.name, name));
+                    ICY_ERROR(m_data.insert(std::move(name), std::move(new_node)));
                 }
                 else
                 {

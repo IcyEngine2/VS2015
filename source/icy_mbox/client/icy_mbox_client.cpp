@@ -84,8 +84,8 @@ private:
     mbox_window_callback m_window;
     mbox::info m_info;
     mbox_main_thread m_main;
-    network_system_udp m_udp_network;
-    network_system_tcp m_tcp_network;
+    network_system_tcp_client m_udp_network;
+    network_system_tcp_client m_tcp_network;
     network_udp_thread m_udp_thread;
     //detail::spin_lock<> m_lock;
     mpsc_queue<array<rectangle>> m_recv_image;
@@ -93,7 +93,7 @@ private:
     mpsc_queue<array<matrix<color>>> m_send_image;
     mpsc_queue<array<input_message>> m_send_input;
     bool m_paused = false;
-    array<std::pair<key_message, pause_type>> m_pause;
+    array<std::pair<input_message, pause_type>> m_pause;
 };
 static mbox_application& instance()
 {

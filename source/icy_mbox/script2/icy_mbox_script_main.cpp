@@ -30,7 +30,7 @@
 
 using namespace icy;
 
-gui_queue* icy::global_gui;
+std::atomic<gui_queue*> icy::global_gui;
 gui_image g_icons[size_t(mbox_image::_total)];
 
 class mbox_application;
@@ -153,10 +153,10 @@ int main()
 
     mbox_application app;
     if (const auto error = app.initialize())
-        return show_error(error, "init application"_s);
+        return show_error(error, "init application"_s).code;
 
     if (const auto error = app.exec())
-        return show_error(error, "exec application"_s);
+        return show_error(error, "exec application"_s).code;
 
     return 0;
 }
@@ -167,7 +167,7 @@ error_type mbox_main_thread::run() noexcept
 error_type mbox_application::initialize() noexcept
 {
     ICY_ERROR(m_library.initialize());
-    ICY_ERROR(create_gui(m_gui));
+    ICY_ERROR(create_event_system(m_gui));
     icy::global_gui = m_gui.get();
 
     const auto func = [this](const const_array_view<uint8_t> bytes, const mbox_image index)
@@ -229,7 +229,7 @@ error_type mbox_application::exec() noexcept
 {
     ICY_SCOPE_EXIT{ event::post(nullptr, event_type::global_quit); };
     ICY_ERROR(m_main.launch());
-    ICY_ERROR(m_gui->loop());
+    ICY_ERROR(m_gui->exec());
     ICY_ERROR(m_main.error());
     return {};
 }
@@ -238,11 +238,11 @@ error_type mbox_application::rename(string& str) noexcept
     xgui_widget dialog;
     ICY_ERROR(dialog.initialize(gui_widget_type::dialog_input_line, {}));
     ICY_ERROR(dialog.text(str));
-    shared_ptr<event_loop> loop;
-    ICY_ERROR(event_loop::create(loop, event_type::gui_update));
+    shared_ptr<event_queue> loop;
+    ICY_ERROR(create_event_system(loop, event_type::gui_update));
     ICY_ERROR(dialog.show(true));
     event event;
-    ICY_ERROR(loop->loop(event));
+    ICY_ERROR(loop->pop(event));
     if (event->type == event_type::gui_update)
     {
         auto& event_data = event->data<gui_event>();
@@ -331,14 +331,14 @@ error_type mbox_application::run_main() noexcept
 {
     ICY_SCOPE_EXIT{ event::post(nullptr, event_type::global_quit); };
 
-    shared_ptr<event_loop> loop;
-    ICY_ERROR(event_loop::create(loop,
+    shared_ptr<event_queue> loop;
+    ICY_ERROR(create_event_system(loop,
         event_type::window_close | event_type::gui_any | event_type::user_any));
 
     while (true)
     {
         event event;
-        ICY_ERROR(loop->loop(event));
+        ICY_ERROR(loop->pop(event));
         if (event->type == event_type::global_quit)
             break;
         ICY_ERROR(exec(event));
@@ -442,7 +442,7 @@ error_type mbox_application::on_create(const mbox_event_data_create& create) noe
         new_base.type = create.type;
         new_base.parent = create.parent;
         ICY_ERROR(to_string(str, new_base.name));
-        ICY_ERROR(create_guid(new_base.index));
+        ICY_ERROR(guid::create(new_base.index));
         ICY_ERROR(txn.insert(new_base));
 
         if (const auto error = txn.execute(m_library))
@@ -601,13 +601,13 @@ error_type mbox_application::on_remove(const mbox_event_data_base& index) noexce
     ICY_ERROR(exit.text("Cancel"_s));
 
     auto confirm = false;
-    shared_ptr<event_loop> loop;
-    ICY_ERROR(event_loop::create(loop, event_type::gui_update | event_type::window_close));
+    shared_ptr<event_queue> loop;
+    ICY_ERROR(create_event_system(loop, event_type::gui_update | event_type::window_close));
     ICY_ERROR(window.show(true));
     while (true)
     {
         icy::event event;
-        ICY_ERROR(loop->loop(event));
+        ICY_ERROR(loop->pop(event));
         if (event->type == event_type::global_quit)
             break;
 
@@ -683,14 +683,6 @@ error_type mbox_application::on_view(const mbox_event_data_base& index, const bo
     ICY_ERROR(m_gui->text(m_tabs, ptr->widget(), tab_name));
     ICY_ERROR(m_tabs.scroll(ptr->widget()));
     return {};
-}
-
-uint32_t show_error(const error_type error, const string_view text) noexcept
-{
-    string msg;
-    to_string("Error: %4 - %1 code [%2]: %3", msg, error.source, long(error.code), error, text);
-    win32_message(msg, "Error"_s);
-    return error.code;
 }
 
 icy::gui_image find_image(const mbox_image image) noexcept

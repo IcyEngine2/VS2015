@@ -424,7 +424,7 @@ namespace icy
         }
         template<typename T> T* as_user() noexcept
         {
-            return const_cast<void*>(static_cast<const gui_variant*>(this)->user());
+            return const_cast<void*>(static_cast<const gui_variant*>(this)->as_user());
         }
         const void* data() const noexcept
         {

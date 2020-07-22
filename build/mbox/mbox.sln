@@ -1,0 +1,95 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30204.135
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "mbox_server", "mbox_server\mbox_server.vcxproj", "{475983E2-7F59-4593-A812-6C80D9877200}"
+	ProjectSection(ProjectDependencies) = postProject
+		{A96B1537-AC03-4559-8879-BD7957A7C75F} = {A96B1537-AC03-4559-8879-BD7957A7C75F}
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC} = {B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}
+		{4D337F45-E466-4650-9782-63FAEA81F1B1} = {4D337F45-E466-4650-9782-63FAEA81F1B1}
+		{9902EF57-99B8-4977-B390-8C1CB00E9688} = {9902EF57-99B8-4977-B390-8C1CB00E9688}
+		{5795325D-121C-4000-BE54-6BC0050D40D4} = {5795325D-121C-4000-BE54-6BC0050D40D4}
+		{9DAC29E1-1E44-4983-A8CC-977E2D620210} = {9DAC29E1-1E44-4983-A8CC-977E2D620210}
+		{2529D4F5-C845-4B41-B789-4FCFFF27B9BA} = {2529D4F5-C845-4B41-B789-4FCFFF27B9BA}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "mbox_dll", "mbox_dll\mbox_dll.vcxproj", "{A96B1537-AC03-4559-8879-BD7957A7C75F}"
+	ProjectSection(ProjectDependencies) = postProject
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC} = {B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}
+		{9902EF57-99B8-4977-B390-8C1CB00E9688} = {9902EF57-99B8-4977-B390-8C1CB00E9688}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "mbox_test", "mbox_test\mbox_test.vcxproj", "{5795325D-121C-4000-BE54-6BC0050D40D4}"
+	ProjectSection(ProjectDependencies) = postProject
+		{A96B1537-AC03-4559-8879-BD7957A7C75F} = {A96B1537-AC03-4559-8879-BD7957A7C75F}
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC} = {B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}
+		{2529D4F5-C845-4B41-B789-4FCFFF27B9BA} = {2529D4F5-C845-4B41-B789-4FCFFF27B9BA}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_engine_core", "..\icy_engine\core\core.vcxproj", "{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_engine_graphics", "..\icy_engine\graphics\graphics.vcxproj", "{2529D4F5-C845-4B41-B789-4FCFFF27B9BA}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_engine_network", "..\icy_engine\network\network.vcxproj", "{9902EF57-99B8-4977-B390-8C1CB00E9688}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_qtgui", "..\icy_qtgui\icy_qtgui.vcxproj", "{4D337F45-E466-4650-9782-63FAEA81F1B1}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "mbox_script", "mbox_script\mbox_script.vcxproj", "{9DAC29E1-1E44-4983-A8CC-977E2D620210}"
+	ProjectSection(ProjectDependencies) = postProject
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC} = {B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}
+		{4D337F45-E466-4650-9782-63FAEA81F1B1} = {4D337F45-E466-4650-9782-63FAEA81F1B1}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_engine_image", "..\icy_engine\image\image.vcxproj", "{93F213D6-C10B-4300-89C3-28C242CEFAB7}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{475983E2-7F59-4593-A812-6C80D9877200}.Debug|x64.ActiveCfg = Debug|x64
+		{475983E2-7F59-4593-A812-6C80D9877200}.Debug|x64.Build.0 = Debug|x64
+		{475983E2-7F59-4593-A812-6C80D9877200}.Release|x64.ActiveCfg = Release|x64
+		{475983E2-7F59-4593-A812-6C80D9877200}.Release|x64.Build.0 = Release|x64
+		{A96B1537-AC03-4559-8879-BD7957A7C75F}.Debug|x64.ActiveCfg = Debug|x64
+		{A96B1537-AC03-4559-8879-BD7957A7C75F}.Debug|x64.Build.0 = Debug|x64
+		{A96B1537-AC03-4559-8879-BD7957A7C75F}.Release|x64.ActiveCfg = Release|x64
+		{A96B1537-AC03-4559-8879-BD7957A7C75F}.Release|x64.Build.0 = Release|x64
+		{5795325D-121C-4000-BE54-6BC0050D40D4}.Debug|x64.ActiveCfg = Debug|x64
+		{5795325D-121C-4000-BE54-6BC0050D40D4}.Debug|x64.Build.0 = Debug|x64
+		{5795325D-121C-4000-BE54-6BC0050D40D4}.Release|x64.ActiveCfg = Release|x64
+		{5795325D-121C-4000-BE54-6BC0050D40D4}.Release|x64.Build.0 = Release|x64
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}.Debug|x64.ActiveCfg = Debug|x64
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}.Debug|x64.Build.0 = Debug|x64
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}.Release|x64.ActiveCfg = Release|x64
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}.Release|x64.Build.0 = Release|x64
+		{2529D4F5-C845-4B41-B789-4FCFFF27B9BA}.Debug|x64.ActiveCfg = Debug|x64
+		{2529D4F5-C845-4B41-B789-4FCFFF27B9BA}.Debug|x64.Build.0 = Debug|x64
+		{2529D4F5-C845-4B41-B789-4FCFFF27B9BA}.Release|x64.ActiveCfg = Release|x64
+		{2529D4F5-C845-4B41-B789-4FCFFF27B9BA}.Release|x64.Build.0 = Release|x64
+		{9902EF57-99B8-4977-B390-8C1CB00E9688}.Debug|x64.ActiveCfg = Debug|x64
+		{9902EF57-99B8-4977-B390-8C1CB00E9688}.Debug|x64.Build.0 = Debug|x64
+		{9902EF57-99B8-4977-B390-8C1CB00E9688}.Release|x64.ActiveCfg = Release|x64
+		{9902EF57-99B8-4977-B390-8C1CB00E9688}.Release|x64.Build.0 = Release|x64
+		{4D337F45-E466-4650-9782-63FAEA81F1B1}.Debug|x64.ActiveCfg = Debug|x64
+		{4D337F45-E466-4650-9782-63FAEA81F1B1}.Debug|x64.Build.0 = Debug|x64
+		{4D337F45-E466-4650-9782-63FAEA81F1B1}.Release|x64.ActiveCfg = Release|x64
+		{4D337F45-E466-4650-9782-63FAEA81F1B1}.Release|x64.Build.0 = Release|x64
+		{9DAC29E1-1E44-4983-A8CC-977E2D620210}.Debug|x64.ActiveCfg = Debug|x64
+		{9DAC29E1-1E44-4983-A8CC-977E2D620210}.Debug|x64.Build.0 = Debug|x64
+		{9DAC29E1-1E44-4983-A8CC-977E2D620210}.Release|x64.ActiveCfg = Release|x64
+		{9DAC29E1-1E44-4983-A8CC-977E2D620210}.Release|x64.Build.0 = Release|x64
+		{93F213D6-C10B-4300-89C3-28C242CEFAB7}.Debug|x64.ActiveCfg = Debug|x64
+		{93F213D6-C10B-4300-89C3-28C242CEFAB7}.Debug|x64.Build.0 = Debug|x64
+		{93F213D6-C10B-4300-89C3-28C242CEFAB7}.Release|x64.ActiveCfg = Release|x64
+		{93F213D6-C10B-4300-89C3-28C242CEFAB7}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {F84648C0-2C88-4C78-96EC-1578C1D56551}
+	EndGlobalSection
+EndGlobal

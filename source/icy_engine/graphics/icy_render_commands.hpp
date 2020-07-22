@@ -1,6 +1,7 @@
 #pragma once
 
 #include <icy_engine/core/icy_queue.hpp>
+#include <icy_engine/graphics/icy_render_svg.hpp>
 #include "icy_render_factory.hpp"
 
 struct IDWriteTextLayout;

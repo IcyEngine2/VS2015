@@ -1,4 +1,5 @@
 #include "icy_adapter.hpp"
+#include <icy_engine/graphics/icy_render.hpp>
 #include <dxgi1_6.h>
 #include <dxgidebug.h>
 #include <d3d12.h>

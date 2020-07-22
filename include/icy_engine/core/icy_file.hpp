@@ -169,5 +169,6 @@ namespace icy
         string_view extension;
     };
 
+	error_type process_directory(string& path) noexcept;
     error_type make_directory(const string_view path) noexcept;
 }

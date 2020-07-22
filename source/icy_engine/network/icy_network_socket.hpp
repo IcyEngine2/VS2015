@@ -10,8 +10,11 @@
 namespace icy
 { 
     namespace detail
-    { 
-        error_type network_setopt(SOCKET sock, const int opt, int value, const int level = 0xFFFF) noexcept; 
+    {
+        error_type network_func_init(library& lib) noexcept;
+
+        error_type network_setopt(SOCKET sock, const int opt, int value, const int level = 0xFFFF) noexcept;
+        extern decltype(&::getsockopt) network_func_getsockopt;
         extern decltype(&::setsockopt) network_func_setsockopt;
         extern decltype(&::shutdown) network_func_shutdown;
         extern decltype(&::closesocket) network_func_closesocket;
@@ -36,6 +39,12 @@ namespace icy
         public:
             enum class type { tcp, udp };
         public:
+            network_socket() noexcept = default;
+            network_socket(network_socket&& rhs) noexcept : m_value(rhs.m_value)
+            {
+                rhs.m_value = SOCKET(-1);
+            }
+            ICY_DEFAULT_MOVE_ASSIGN(network_socket);
             ~network_socket() noexcept
             {
                 shutdown();
@@ -50,8 +59,31 @@ namespace icy
             {
                 return m_value;
             }
+            type get_type() const noexcept;
         private:
             SOCKET m_value = -1;
+        };
+        struct network_connection;
+
+        struct network_tcp_overlapped
+        {
+            OVERLAPPED overlapped = {};
+            network_connection* conn = nullptr;
+            event_type type = event_type::none;
+            array<uint8_t> bytes;
+            uint32_t offset = 0;
+            uint32_t http_header = 0;   //  "Content-Length: X"
+            uint32_t http_length = 0;   //  X
+            uint32_t http_offset = 0;   //  "\r\n\r\n"
+        };
+        struct network_udp_overlapped
+        {
+            OVERLAPPED overlapped = {};
+            event_type type = event_type::none;
+            array<uint8_t> bytes;
+            char addr_buf[sizeof(sockaddr_in6)];
+            int addr_len = sizeof(addr_buf);
+            void* user = nullptr;
         };
     }
 }

@@ -115,11 +115,11 @@ error_type json::create(const string_view str, json& parent, const const_array_v
 	switch (parent.m_type)
 	{
 	case json_type::boolean:
-		return to_value(str, parent.m_boolean);
+		return to_value(val, parent.m_boolean);
 	case json_type::integer:
-		return to_value(str, parent.m_integer);
+		return to_value(val, parent.m_integer);
 	case json_type::floating:
-		return to_value(str, parent.m_floating);
+		return to_value(val, parent.m_floating);
 	
 	case json_type::string:
 		new (&parent.m_string) json_type_string;

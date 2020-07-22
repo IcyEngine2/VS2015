@@ -509,6 +509,25 @@ file_name::file_name(const string_view file) noexcept
         name = string_view(ptr, extension.bytes().data());
 }
 
+error_type icy::process_directory(string& path) noexcept
+{
+    auto flags =
+        GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT |
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS;
+    HMODULE module = nullptr;
+    if (!GetModuleHandleExW(flags, reinterpret_cast<LPCWSTR>(&process_directory), &module))
+        return last_system_error();
+
+    wchar_t wbuf[MAX_PATH];
+    auto wlen = 0;
+    wlen = GetModuleFileNameW(module, wbuf, _countof(wbuf));
+    if (wlen == 0)
+        wlen = GetModuleFileNameW(nullptr, wbuf, _countof(wbuf));
+
+    while (wlen && wbuf[wlen] != '/' && wbuf[wlen] != '\\')
+        --wlen;
+    return to_string(const_array_view<wchar_t>(wbuf, wlen ? wlen + 1 : 0), path);
+}
 error_type icy::make_directory(const string_view path) noexcept
 {
     const auto chr_drive = L':';

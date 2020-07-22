@@ -351,6 +351,7 @@ namespace icy
 		pointer m_ptr;
 		size_type m_size;
 	};
+
 	template<typename T> class array_view : public const_array_view<T>
 	{
 	public:
@@ -469,12 +470,6 @@ namespace icy
 			return assign(list);
 		}
 	};
-
-    template<typename T>
-    int compare(const const_array_view<T> lhs, const const_array_view<T> rhs) noexcept
-    {
-        return detail::compare_container(lhs, rhs);
-    }
 
 	template<typename iterator_type, typename T>
 	iterator_type binary_search(const iterator_type first, const iterator_type last, const T& value) noexcept

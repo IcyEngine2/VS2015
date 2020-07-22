@@ -4,58 +4,42 @@
 #include <icy_engine/core/icy_queue.hpp>
 #include <icy_engine/network/icy_http.hpp>
 
+struct icy::detail::network_connection
+{
+    network_connection() noexcept = default;
+    ~network_connection() noexcept
+    {
+        shutdown();
+    }
+    network_connection(network_connection&&) noexcept = default;
+    error_type shutdown() noexcept;
+    error_type accept(network_system_data& system) noexcept;
+    error_type recv() noexcept;
+    error_type recv(array<uint8_t>&& bytes) noexcept;
+    error_type send() noexcept;
+    error_type send(array<uint8_t>&& bytes) noexcept;
+    error_type disc() noexcept;
+
+    network_socket socket;
+    detail::network_tcp_overlapped ovl_recv;
+    detail::network_tcp_overlapped ovl_send;
+    mpsc_queue<detail::network_tcp_overlapped> rqueue;
+    mpsc_queue<detail::network_tcp_overlapped> squeue;
+    network_address addr;
+    struct
+    {
+        unique_ptr<http_request> request;
+        unique_ptr<http_response> response;
+    } http;
+};
 class icy::detail::network_system_data
 {
+    friend detail::network_connection;
     static constexpr auto http_header_bits = 0x10;  //  64 kb
     static constexpr auto http_length_bits = 0x1B;  //  64 mb
     static constexpr auto http_max_header = (1 << http_header_bits) - 1;
     static constexpr auto http_max_length = (1 << http_length_bits) - 1;
-    struct network_connection;
-    struct network_tcp_overlapped
-    {
-        OVERLAPPED overlapped = {};
-        network_connection* conn = nullptr;
-        event_type type = event_type::none;
-        array<uint8_t> bytes;
-        uint32_t offset = 0;
-        uint32_t http_header = 0;   //  "Content-Length: X"
-        uint32_t http_length = 0;   //  X
-        uint32_t http_offset = 0;   //  "\r\n\r\n"
-    };
-    struct network_udp_overlapped
-    {
-        OVERLAPPED overlapped = {};
-        event_type type = event_type::none;
-        array<uint8_t> bytes;
-    };
-    struct network_connection
-    {
-        network_connection() noexcept = default;
-        ~network_connection() noexcept
-        {
-            shutdown();
-        }
-        network_connection(network_connection&&) noexcept = default;
-        error_type shutdown() noexcept;
-        error_type accept(network_system_data& system) noexcept;
-        error_type recv() noexcept;
-        error_type recv(array<uint8_t>&& bytes) noexcept;
-        error_type send() noexcept;
-        error_type send(array<uint8_t>&& bytes) noexcept;
-        error_type disc() noexcept;
 
-        network_socket socket;
-        network_tcp_overlapped ovl_recv;
-        network_tcp_overlapped ovl_send;
-        mpsc_queue<network_tcp_overlapped> rqueue;
-        mpsc_queue<network_tcp_overlapped> squeue;
-        network_address addr;
-        struct
-        {
-            unique_ptr<http_request> request;
-            unique_ptr<http_response> response;
-        } http;
-    };
     struct network_command
     {
         uint32_t conn = 0;
@@ -101,5 +85,12 @@ private:
     mpsc_queue<network_command> m_cmds;
     array<network_connection> m_conn;
     network_server_config m_config;
+    struct udp_type
+    {
+        detail::network_udp_overlapped ovl_recv;
+        detail::network_udp_overlapped ovl_send;
+        mpsc_queue<detail::network_udp_overlapped> rqueue;
+        mpsc_queue<detail::network_udp_overlapped> squeue;
+    } m_udp;
     bool m_http = false;
 };

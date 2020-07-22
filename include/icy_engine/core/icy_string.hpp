@@ -365,4 +365,10 @@ namespace icy
         string short_name;      //  short name (en-US)
         uint32_t code = 0;      //  lcid
     };    
+
+	template<>
+	inline int compare<string>(const string& lhs, const string& rhs) noexcept
+	{
+		return compare(string_view(lhs), string_view(rhs));
+	}
  }

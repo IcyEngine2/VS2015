@@ -1,7 +1,8 @@
 #pragma once
 
 #include <icy_engine/utility/icy_com.hpp>
-#include <icy_engine/graphics/icy_graphics.hpp>
+#include <icy_engine/graphics/icy_render.hpp>
+#include <icy_engine/graphics/icy_adapter.hpp>
 
 struct ID2D1Device;
 struct ID3D11Device;
@@ -61,5 +62,4 @@ private:
     icy::detail::intrusive_mpsc_queue m_tex;
     icy::detail::intrusive_mpsc_queue m_cmd_2d;
     icy::detail::intrusive_mpsc_queue m_cmd_3d;
-    bool m_nt_handle = false;
 };

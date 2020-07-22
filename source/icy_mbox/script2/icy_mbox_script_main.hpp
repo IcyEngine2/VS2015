@@ -25,8 +25,6 @@ struct mbox_event_data_create
     mbox::type type;
 };
 
-uint32_t show_error(const icy::error_type error, const icy::string_view text) noexcept;
-
 enum class mbox_image
 {
     none,

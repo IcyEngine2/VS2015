@@ -166,6 +166,137 @@ namespace std
 
 namespace icy
 {
+    namespace detail
+    {
+        enum class compare_type
+        {
+            none,
+            container,
+            pointer,
+        };
+        template<typename T> int compare_ex(std::integral_constant<compare_type, compare_type::container>, const T& lhs, const T& rhs) noexcept;
+        template<typename T> int compare_ex(std::integral_constant<compare_type, compare_type::pointer>, const T& lhs, const T& rhs) noexcept;
+
+        template<typename T, typename _ = void>
+        struct is_container : std::false_type {};
+
+        template<typename... Ts>
+        struct is_container_helper {};
+
+        template<typename T>
+        struct is_container<
+            T,
+            std::conditional_t<
+            false,
+            is_container_helper<
+            typename T::value_type,
+            typename T::size_type,
+            typename T::iterator,
+            typename T::const_iterator,
+            decltype(std::declval<T>().size()),
+            decltype(std::declval<T>().begin()),
+            decltype(std::declval<T>().end()),
+            decltype(std::declval<T>().cbegin()),
+            decltype(std::declval<T>().cend())
+            >,
+            void
+            >
+        > : public std::true_type{};
+
+        template<typename T>
+        int compare_ex(std::integral_constant<compare_type, compare_type::container>, const T& lhs, const T& rhs) noexcept;
+
+        template<typename T>
+        inline int compare(std::integral_constant<compare_type, compare_type::pointer>, const T& lhs, const T& rhs) noexcept
+        {
+            return int(rhs < lhs) - int(lhs < rhs);
+        }
+        template<typename T>
+        inline int compare(std::integral_constant<compare_type, compare_type::pointer>, T& lhs, T& rhs) noexcept
+        {
+            return int(rhs < lhs) - int(lhs < rhs);
+        }
+    }
+
+    template<typename T>
+    inline int compare(const T& lhs, const T& rhs) noexcept
+    {
+        return detail::compare_ex(std::integral_constant<detail::compare_type,
+            detail::is_container<T>::value ? detail::compare_type::container :
+            std::is_pointer<T>::value ? detail::compare_type::pointer : detail::compare_type::none>{}, lhs, rhs);
+    }
+
+    template<>
+    inline int compare<char const*>(char const* const& lhs, char const* const& rhs) noexcept
+    {
+        return int(rhs < lhs) - int(lhs < rhs);
+    }
+
+    template<typename T>
+    inline int detail::compare_ex(std::integral_constant<detail::compare_type, detail::compare_type::container>, const T& lhs, const T& rhs) noexcept
+    {
+        const auto lhs_size = std::size(lhs);
+        const auto rhs_size = std::size(rhs);
+        const auto min_size = lhs_size < rhs_size ? lhs_size : rhs_size;
+        auto it = std::begin(lhs);
+        auto jt = std::begin(rhs);
+        for (auto k = 0_z; k < min_size; ++k, ++it, ++jt)
+        {
+            const auto cmp = icy::compare(*it, *jt);
+            if (cmp != 0) return cmp;
+        }
+        return int(rhs_size < lhs_size) - int(lhs_size < rhs_size);
+    }
+        
+    template<> inline int compare<uint8_t>(const uint8_t& lhs, const uint8_t& rhs) noexcept
+    {
+        return int(rhs < lhs) - int(lhs < rhs);
+    }
+    template<> inline int compare<uint16_t>(const uint16_t& lhs, const uint16_t& rhs) noexcept
+    {
+        return int(rhs < lhs) - int(lhs < rhs);
+    }
+    template<> inline int compare<uint32_t>(const uint32_t& lhs, const uint32_t& rhs) noexcept
+    {
+        return int(rhs < lhs) - int(lhs < rhs);
+    }
+    template<> inline int compare<uint64_t>(const uint64_t& lhs, const uint64_t& rhs) noexcept
+    {
+        return int(rhs < lhs) - int(lhs < rhs);
+    }
+    template<> inline int compare<char>(const char& lhs, const char& rhs) noexcept
+    {
+        return int(rhs < lhs) - int(lhs < rhs);
+    }
+    template<> inline int compare<int8_t>(const int8_t& lhs, const int8_t& rhs) noexcept
+    {
+        return int(rhs < lhs) - int(lhs < rhs);
+    }
+    template<> inline int compare<int16_t>(const int16_t& lhs, const int16_t& rhs) noexcept
+    {
+        return int(rhs < lhs) - int(lhs < rhs);
+    }
+    template<> inline int compare<int32_t>(const int32_t& lhs, const int32_t& rhs) noexcept
+    {
+        return int(rhs < lhs) - int(lhs < rhs);
+    }
+    template<> inline int compare<int64_t>(const int64_t& lhs, const int64_t& rhs) noexcept
+    {
+        return int(rhs < lhs) - int(lhs < rhs);
+    }
+
+    template<> inline int compare<float>(const float& lhs, const float& rhs) noexcept
+    {
+        return int(rhs < lhs) - int(lhs < rhs);
+    }
+    template<> inline int compare<double>(const double& lhs, const double& rhs) noexcept
+    {
+        return int(rhs < lhs) - int(lhs < rhs);
+    }
+    template<> inline int compare<bool>(const bool& lhs, const bool& rhs) noexcept
+    {
+        return int(rhs < lhs) - int(lhs < rhs);
+    }
     template<typename T> using remove_cvr = std::remove_cv_t<std::remove_reference_t<T>>;
     namespace detail
     {
@@ -276,73 +407,7 @@ namespace icy
             return size_t(static_cast<const char*>(last) - static_cast<const char*>(first));
         }
 
-     
-        constexpr inline int compare(const uint8_t lhs, const uint8_t rhs) noexcept
-        {
-            return int(rhs < lhs) - int(lhs < rhs);
-        }
-        constexpr inline int compare(const uint16_t lhs, const uint16_t rhs) noexcept
-        {
-            return int(rhs < lhs) - int(lhs < rhs);
-        }
-        constexpr inline int compare(const uint32_t lhs, const uint32_t rhs) noexcept
-        {
-            return int(rhs < lhs) - int(lhs < rhs);
-        }
-        constexpr inline int compare(const uint64_t lhs, const uint64_t rhs) noexcept
-        {
-            return int(rhs < lhs) - int(lhs < rhs);
-        }
-        constexpr inline int compare(const int8_t lhs, const int8_t rhs) noexcept
-        {
-            return int(rhs < lhs) - int(lhs < rhs);
-        }
-        constexpr inline int compare(const int16_t lhs, const int16_t rhs) noexcept
-        {
-            return int(rhs < lhs) - int(lhs < rhs);
-        }
-        constexpr inline int compare(const int32_t lhs, const int32_t rhs) noexcept
-        {
-            return int(rhs < lhs) - int(lhs < rhs);
-        }
-        constexpr inline int compare(const int64_t lhs, const int64_t rhs) noexcept
-        {
-            return int(rhs < lhs) - int(lhs < rhs);
-        }
-        constexpr inline int compare(const float lhs, const float rhs) noexcept
-        {
-            return int(rhs < lhs) - int(lhs < rhs);
-        }
-        constexpr inline int compare(const double lhs, const double rhs) noexcept
-        {
-            return int(rhs < lhs) - int(lhs < rhs);
-        }
-        template<typename T>
-        constexpr int compare(const T* const lhs, const T* const rhs) noexcept
-        {
-            return int(rhs < lhs) - int(lhs < rhs);
-        }
-        constexpr inline int compare(const bool lhs, const bool rhs) noexcept
-        {
-            return int(rhs < lhs) - int(lhs < rhs);
-        }
 
-
-        template<typename T>
-        int compare_container(const T& lhs, const T& rhs) noexcept
-        {
-            const auto lhs_size = std::size(lhs);
-            const auto rhs_size = std::size(rhs);
-            const auto min_size = lhs_size < rhs_size ? lhs_size : rhs_size;
-            auto it = std::begin(lhs);
-            auto jt = std::begin(rhs);
-            for (auto k = 0_z; k < min_size; ++k, ++it, ++jt)
-            {
-                const auto cmp = compare(*it, *jt);
-                if (cmp != 0) return cmp;
-            }
-            return compare(lhs_size, rhs_size);
-        }
         
 #define rel_ops(T)                                                                          \
         bool operator<(const T& rhs) const noexcept                                         \
@@ -446,7 +511,9 @@ namespace icy
     error_type to_string(const error_type error, string& str, const string_view locale) noexcept;
 
     class guid;
-    inline int compare(const guid& lhs, const guid& rhs) noexcept;
+    
+    template<> inline int compare<guid>(const guid& lhs, const guid& rhs) noexcept;
+
     class guid
     {
     public:
@@ -478,7 +545,8 @@ namespace icy
         uint16_t Data3;
         uint8_t Data4[8];
     };
-    inline int compare(const guid& lhs, const guid& rhs) noexcept
+
+    template<> inline int compare<guid>(const guid& lhs, const guid& rhs) noexcept
     {
         const auto value = memcmp(&lhs, &rhs, sizeof(guid));
         return value > 0 ? 1 : value < 0 ? -1 : 0;
@@ -535,8 +603,7 @@ namespace icy
     {
         return value * value;
     }
-    using detail::compare;
-
+    
     class mutex
     {
         friend cvar;
@@ -565,6 +632,7 @@ namespace icy
     error_type win32_parse_cargs(array<string>& args) noexcept;
     error_type computer_name(string& str) noexcept;
     error_type process_name(HINSTANCE__* module, string& str) noexcept;
+    uint32_t process_index() noexcept;
 
     class library
     {
@@ -594,6 +662,10 @@ namespace icy
         {
             return reinterpret_cast<void*>(GetProcAddress(m_module, func));
         }
+        HINSTANCE__* handle() const noexcept
+        {
+            return m_module;
+        }
     private:
         const char* m_name = nullptr;
         HINSTANCE__* m_module = nullptr;
@@ -612,6 +684,20 @@ namespace icy
         return error_type();
     }
 
+
+    struct window_size
+    {
+        window_size() noexcept : x(0), y(0)
+        {
+
+        }
+        window_size(const uint32_t x, const uint32_t y) noexcept : x(x), y(y)
+        {
+
+        }
+        uint32_t x;
+        uint32_t y;
+    };
 }
 
 #if !defined _CONSOLE

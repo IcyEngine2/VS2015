@@ -561,10 +561,12 @@ namespace icy
     template<typename K, typename T>
     error_type map<K, T>::insert(typename map<K, T>::key_type&& new_key, typename map<K, T>::value_type&& new_val, typename map<K, T>::iterator* it) noexcept
     {
+        using icy::compare;
+
         auto jt = lower_bound(new_key);
         if (jt.index() != size())
         {
-            if (icy::compare(jt->key, new_key) == 0)
+            if (compare(jt->key, new_key) == 0)
                 return make_stdlib_error(std::errc::invalid_argument);
         }
 

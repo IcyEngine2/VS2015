@@ -16,11 +16,12 @@ namespace mbox
         char address[32] = {};
     };
 
-    struct key : icy::detail::rel_ops<key>
+    struct key
     {
-        int compare(const key& rhs) const noexcept
+        rel_ops(key);
+        friend int compare(const key& lhs, const key& rhs) noexcept
         {
-            return icy::compare(value, rhs.value);
+            return icy::compare(lhs.value, rhs.value);
         }
         union
         {

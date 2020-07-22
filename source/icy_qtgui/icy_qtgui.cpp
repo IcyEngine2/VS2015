@@ -895,14 +895,14 @@ bool qtgui_system::notify(QObject* object, QEvent* event) noexcept
                 const auto index = object->property(qtgui_property_name).toULongLong();
 
                 auto node_0 = new qtgui_event_node;
-                node_0->type = event_type::window_close;
+                node_0->type = event_type::gui_update;
                 node_0->args.widget.index = index;
                 m_queue.push(node_0);
 
-                auto node_1 = new qtgui_event_node;
+                /*auto node_1 = new qtgui_event_node;
                 node_1->type = event_type::gui_action;
                 node_1->args.widget.index = index;
-                m_queue.push(node_1);
+                m_queue.push(node_1);*/
                 qtgui_exit();
                 return 0;
             }
@@ -1796,7 +1796,7 @@ std::errc qtgui_system::process(const qtgui_event_create_widget& event)
         const auto message = new QMessageBox(parent);
         widget = message;
         QObject::connect(message, &QMessageBox::buttonClicked,
-            [func, message](QAbstractButton*) { func(QVariant(), event_type::window_close); });
+            [func, message](QAbstractButton*) { func(QVariant(), event_type::gui_update); });
         break;
     }
 

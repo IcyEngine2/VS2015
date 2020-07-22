@@ -1,8 +1,7 @@
 #pragma once
 
 #include "icy_array_view.hpp"
-#include "icy_smart_pointer.hpp"
-#include "icy_string.hpp"
+#include "icy_memory.hpp"
 
 namespace icy
 {
@@ -67,7 +66,7 @@ namespace icy
 					return error;
 
 				while (array_view<T>::m_size != size)
-					construct(array_view<T>::m_ptr + (array_view<T>::m_size++));
+					allocator_type::construct(array_view<T>::m_ptr + (array_view<T>::m_size++));
 			}
 			else
 			{
@@ -103,7 +102,7 @@ namespace icy
 		{
             ICY_ERROR(reserve(array_view<T>::size() + std::distance(first, last)));
 			for (; first != last; ++first)
-				construct(array_view<T>::m_ptr + (array_view<T>::m_size++), std::move(*first));
+				allocator_type::construct(array_view<T>::m_ptr + (array_view<T>::m_size++), std::move(*first));
 			return error_type();
 		}
         template<typename iter_type>
@@ -114,7 +113,7 @@ namespace icy
             {
                 T tmp;
                 ICY_ERROR(copy(*first, tmp));
-                construct(array_view<T>::m_ptr + (array_view<T>::m_size++), std::move(tmp));
+				allocator_type::construct(array_view<T>::m_ptr + (array_view<T>::m_size++), std::move(tmp));
             }
             return error_type();
         }
@@ -187,7 +186,7 @@ namespace icy
 				{
 					for (auto k = array_view<T>::size(); k; --k)
 					{
-						construct(ptr + k - 1, std::move(array_view<T>::m_ptr[k - 1]));
+						allocator_type::construct(ptr + k - 1, std::move(array_view<T>::m_ptr[k - 1]));
 						allocator_type::destroy(array_view<T>::m_ptr + k - 1);
 					}
 					m_realloc(array_view<T>::m_ptr, 0, m_user);
@@ -196,36 +195,6 @@ namespace icy
                 m_capacity = new_capacity;
 			}
 			return error_type();
-		}
-		void construct(string* lhs, string&& rhs) noexcept
-		{
-			ICY_ASSERT(rhs.realloc() == m_realloc && rhs.user() == m_user, "INVALID CUSTOM HEAP CONTAINER");
-			allocator_type::construct(lhs, std::move(rhs));
-		}
-		template<typename U>
-		void construct(array<U>* lhs, array<U>&& rhs) noexcept
-		{
-			ICY_ASSERT(rhs.m_realloc == m_realloc && rhs.m_user == m_user, "INVALID CUSTOM HEAP CONTAINER");
-			allocator_type::construct(lhs, std::move(rhs));
-		}
-		template<typename U>
-		void construct(U* lhs, U&& rhs) noexcept
-		{
-			allocator_type::construct(lhs, std::move(rhs));
-		}
-		void construct(string* lhs) noexcept
-		{
-			allocator_type::construct(lhs, string(m_realloc, m_user));
-		}
-		template<typename U>
-		void construct(array<U>* lhs) noexcept
-		{
-			allocator_type::construct(lhs, array<U>(m_realloc, m_user));
-		}
-		template<typename U>
-		void construct(U* lhs) noexcept
-		{
-			allocator_type::construct(lhs);
 		}
     private:
         size_type m_capacity = 0_z;

@@ -78,11 +78,11 @@ namespace icy
 		{
 
 		}
-        input_message(const bool active) noexcept : type(input_type::active), active(active)
+        explicit input_message(const bool active) noexcept : type(input_type::active), active(active)
         {
 
         }
-		input_message(const wchar_t* const wstring) noexcept : type(input_type::text), text{}
+        explicit input_message(const wchar_t* const wstring) noexcept : type(input_type::text), text{}
 		{
 			for (auto k = 0_z; k < u16_max && wstring && wstring[k]; ++k)
 				text[k] = wstring[k];

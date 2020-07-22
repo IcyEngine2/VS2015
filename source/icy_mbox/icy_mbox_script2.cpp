@@ -528,7 +528,7 @@ error_type mbox::library::load_from(const icy::string_view filename) noexcept
     ICY_ERROR(file_input.read(str_input.data(), size));
     ICY_ERROR(str_input.resize(size));
     json json_input;
-    if (const auto error = json::create(string_view(str_input.data(), size), json_input))
+    if (const auto error = to_value(string_view(str_input.data(), size), json_input))
     {
         if (error == make_stdlib_error(std::errc::illegal_byte_sequence))
             return make_mbox_error(mbox_error_code::invalid_json_parse);
@@ -561,7 +561,7 @@ error_type mbox::library::load_from(const icy::string_view filename) noexcept
                 return make_mbox_error(mbox_error_code::invalid_index);
             return error;
         }
-        if (str_index.to_value(base.index))
+        if (to_value(str_index, base.index))
             return make_mbox_error(mbox_error_code::invalid_index);
 
         if (const auto error = json_object.get(str_key_parent, str_parent))
@@ -570,7 +570,7 @@ error_type mbox::library::load_from(const icy::string_view filename) noexcept
                 return make_mbox_error(mbox_error_code::invalid_parent);
             return error;
         }
-        if (str_parent.to_value(base.parent))
+        if (to_value(str_parent, base.parent))
             return make_mbox_error(mbox_error_code::invalid_parent);
         
         for (; base.type < mbox::type::_total; base.type = type(uint32_t(base.type) + 1))
@@ -617,7 +617,7 @@ error_type mbox::library::load_from(const icy::string_view filename) noexcept
                         const auto str = json_action.get(str_key_group);
                         if (!str.empty())
                         {
-                            if (str.to_value(group))
+                            if (to_value(str, group))
                                 return make_mbox_error(mbox_error_code::invalid_group);
                         }
                         base.actions.push_back(type == mbox::action_type::group_join ?
@@ -631,7 +631,7 @@ error_type mbox::library::load_from(const icy::string_view filename) noexcept
                         const auto str = json_action.get(str_key_focus);
                         if (!str.empty())
                         {
-                            if (str.to_value(focus))
+                            if (to_value(str, focus))
                                 return make_mbox_error(mbox_error_code::invalid_group);
                         }
                         base.actions.push_back(action::create_focus(focus));
@@ -665,7 +665,7 @@ error_type mbox::library::load_from(const icy::string_view filename) noexcept
                             type == mbox::action_type::on_button_release)
                         {
                             guid command;
-                            if (json_action.get(str_key_command).to_value(command))
+                            if (to_value(json_action.get(str_key_command), command))
                                 return make_mbox_error(mbox_error_code::invalid_command);
                             ICY_ERROR(base.actions.push_back(type == mbox::action_type::on_button_press ?
                                 action::create_on_button_press(button, command) : 
@@ -697,7 +697,7 @@ error_type mbox::library::load_from(const icy::string_view filename) noexcept
 
                         if (!str_timer.empty())
                         {
-                            if (str_timer.to_value(timer))
+                            if (to_value(str_timer, timer))
                                 return make_mbox_error(mbox_error_code::invalid_timer);
                         }
                         if (type == mbox::action_type::timer_start)
@@ -722,7 +722,7 @@ error_type mbox::library::load_from(const icy::string_view filename) noexcept
                         {
                             guid command;
                             const auto str_command = json_action.get(str_key_command);
-                            if (!str_command.empty() && str_command.to_value(command))
+                            if (!str_command.empty() && to_value(str_command, command))
                                 return make_mbox_error(mbox_error_code::invalid_command);
                             ICY_ERROR(base.actions.push_back(mbox::action::create_on_timer(timer, command)));
                         }
@@ -733,7 +733,7 @@ error_type mbox::library::load_from(const icy::string_view filename) noexcept
                         action::execute_type execute;
                         const auto str_command = json_action.get(str_key_command);
 
-                        if (!str_command.empty() && str_command.to_value(execute.command))
+                        if (!str_command.empty() && to_value(str_command, execute.command))
                             return make_mbox_error(mbox_error_code::invalid_command);
 
                         if (to_string(execute_type::broadcast) == json_action.get(str_key_execute_type))
@@ -742,7 +742,7 @@ error_type mbox::library::load_from(const icy::string_view filename) noexcept
                             execute.etype = execute_type::multicast;
 
                         if (execute.etype != execute_type::self)
-                            json_action.get(str_key_group).to_value(execute.group);
+                            to_value(json_action.get(str_key_group), execute.group);
                         
                         ICY_ERROR(base.actions.push_back(mbox::action::create_command_execute(execute)));
                         break;
@@ -751,11 +751,11 @@ error_type mbox::library::load_from(const icy::string_view filename) noexcept
                     {
                         action::replace_type replace;
                         const auto str_source = json_action.get(str_key_action_replace_source);
-                        if (!str_source.empty() && str_source.to_value(replace.source))
+                        if (!str_source.empty() && to_value(str_source, replace.source))
                             return make_mbox_error(mbox_error_code::invalid_command);
 
                         const auto str_target = json_action.get(str_key_action_replace_target);
-                        if (!str_target.empty() && str_target.to_value(replace.target))
+                        if (!str_target.empty() && to_value(str_target, replace.target))
                             return make_mbox_error(mbox_error_code::invalid_command);
 
                         ICY_ERROR(base.actions.push_back(mbox::action::create_command_replace(replace)));

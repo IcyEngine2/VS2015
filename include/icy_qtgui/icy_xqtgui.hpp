@@ -259,6 +259,10 @@ namespace icy
         {
             return global_gui.load()->clear(*this);
         }
+        uint64_t model() const noexcept
+        {
+            return _ptr ? _ptr->model() : 0;
+        }
     };
     class xgui_submenu
     {
@@ -288,7 +292,7 @@ namespace icy
             ICY_ERROR(window.text(msg));
             ICY_ERROR(window.show(true));
             shared_ptr<event_queue> loop;
-            ICY_ERROR(create_event_system(loop, event_type::window_close));
+            ICY_ERROR(create_event_system(loop, event_type::gui_update | event_type::gui_action));
             while (global_gui.load())
             {
                 event event;
@@ -300,8 +304,7 @@ namespace icy
                 if (event->type == event_type::global_quit)
                     return{};
 
-                if (event->type == event_type::window_close &&
-                    shared_ptr<event_system>(event->source).get() == global_gui.load())
+                if (event->type == event_type::gui_update || event->type == event_type::gui_action)
                 {
                     auto& event_data = event->data<gui_event>();
                     if (event_data.widget == window)

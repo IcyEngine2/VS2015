@@ -131,4 +131,9 @@ namespace icy
 		bracket_close = 0xDD,
 		quote = 0xDE,
 	};
+
+	inline int compare(const key lhs, const key rhs) noexcept
+	{
+		return int32_t(lhs) - int32_t(rhs);
+	}
 }

@@ -419,3 +419,7 @@ error_type icy::process_name(HINSTANCE__* module, string& str) noexcept
     auto length = GetModuleFileNameW(module, buffer, _countof(buffer));
     return to_string(const_array_view<wchar_t>(buffer, length), str);
 }
+uint32_t icy::process_index() noexcept
+{
+    return GetCurrentProcessId();
+}

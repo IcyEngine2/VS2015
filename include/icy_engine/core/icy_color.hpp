@@ -155,7 +155,9 @@ namespace icy
 	class color;
 	class color_hsv;
 
-    int compare(const color& lhs, const color& rhs) noexcept;
+	template<>
+	inline int compare<color>(const color& lhs, const color& rhs) noexcept;
+
     class color
     {
     public:
@@ -282,9 +284,10 @@ namespace icy
 		color_hsv(const color& color) noexcept;
     };
 
-    inline int compare(const color& lhs, const color& rhs) noexcept
+	template<>
+    inline int compare<color>(const color& lhs, const color& rhs) noexcept
     {
-        return icy::compare(lhs.to_rgb(), rhs.to_rgb());
+        return compare(lhs.to_rgb(), rhs.to_rgb());
     }
 
 	string_view to_string(const colors value) noexcept;

@@ -23,17 +23,14 @@ error_type icy::create_event_system(shared_ptr<console_system>& system) noexcept
     }
 
     ICY_SCOPE_EXIT{ if (new_console) FreeConsole(); };
-    if (new_console)
+    const auto func = [](DWORD)
     {
-        const auto func = [](DWORD)
-        {
-            event::post(nullptr, event_type::global_quit);
-            Sleep(INFINITE);
-            return 0;
-        };
-        if (!SetConsoleCtrlHandler(func, TRUE))
-            return last_system_error();
-    }
+        event::post(nullptr, event_type::global_quit);
+        Sleep(INFINITE);
+        return 0;
+    };
+    if (!SetConsoleCtrlHandler(func, TRUE))
+        return last_system_error();
 
     shared_ptr<console_system> new_system;
     ICY_ERROR(make_shared(new_system, console_system::tag()));

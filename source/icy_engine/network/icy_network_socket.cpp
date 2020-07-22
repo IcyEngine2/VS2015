@@ -9,6 +9,7 @@ error_type detail::network_setopt(SOCKET sock, const int opt, int value, const i
         reinterpret_cast<const char*>(&value), sizeof(value)) == SOCKET_ERROR ? last_system_error() : error_type{};
 }
 
+decltype(&::getsockopt) detail::network_func_getsockopt;
 decltype(&::setsockopt) detail::network_func_setsockopt;
 decltype(&::shutdown) detail::network_func_shutdown;
 decltype(&::closesocket) detail::network_func_closesocket;
@@ -61,4 +62,11 @@ error_type network_socket::initialize(const network_socket::type sock_type, cons
     m_value = value;
 
     return {};
+}
+network_socket::type network_socket::get_type() const noexcept
+{
+    auto val  = 0;
+    auto len = int(sizeof(val));
+    getsockopt(m_value, SOL_SOCKET, SO_TYPE, reinterpret_cast<char*>(&val), &len);
+    return val == SOCK_STREAM ? type::tcp : type::udp;
 }

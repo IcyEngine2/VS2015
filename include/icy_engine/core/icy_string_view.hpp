@@ -28,8 +28,9 @@ namespace icy
 
 	class string;
     class string_iterator;
-    inline int compare(const string_iterator& lhs, const string_iterator& rhs) noexcept;
-    inline int compare(const string_view& lhs, const string_view& rhs) noexcept;
+
+	template<> inline int compare<string_iterator>(const string_iterator& lhs, const string_iterator& rhs) noexcept;
+	template<> inline int compare<string_view>(const string_view& lhs, const string_view& rhs) noexcept;
 
 	class string_iterator
 	{
@@ -213,14 +214,15 @@ namespace icy
 		pointer m_ptr;
 		size_type m_size;
 	};
-    inline int compare(const string_iterator& lhs, const string_iterator& rhs) noexcept
-    {
-        return compare(static_cast<const char*>(lhs), static_cast<const char*>(rhs));
-    }
-    inline int compare(const string_view& lhs, const string_view& rhs) noexcept
-    {
-        return detail::compare_container(lhs.bytes(), rhs.bytes());
-    }
+
+	template<> inline int compare<string_iterator>(const string_iterator& lhs, const string_iterator& rhs) noexcept
+	{
+		return compare(static_cast<const char*>(lhs), static_cast<const char*>(rhs));
+	}
+	template<> inline int compare<string_view>(const string_view& lhs, const string_view& rhs) noexcept
+	{
+		return compare(lhs.bytes(), rhs.bytes());
+	}
 
 	inline constexpr string_view operator""_s(const char* const ptr, const size_t size) noexcept
 	{

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <icy_engine/utility/icy_com.hpp>
-#include <icy_engine/graphics/icy_graphics.hpp>
+#include <icy_engine/graphics/icy_render.hpp>
 
 struct IDXGIResource;
 

@@ -16,7 +16,32 @@ static LPFN_ACCEPTEX network_func_accept_ex = nullptr;
 static LPFN_GETACCEPTEXSOCKADDRS network_func_get_accept_ex_sockaddrs = nullptr;
 static LPFN_DISCONNECTEX network_func_disconnect_ex = nullptr;
 
-error_type network_system_data::network_connection::accept(network_system_data& system) noexcept
+error_type detail::network_func_init(library& lib) noexcept
+{
+    network_func_send = ICY_FIND_FUNC(lib, WSASend);
+    network_func_recv = ICY_FIND_FUNC(lib, WSARecv);
+    network_func_shutdown = reinterpret_cast<decltype(&::shutdown)>(lib.find("shutdown"));
+    network_func_closesocket = ICY_FIND_FUNC(lib, closesocket);
+    network_func_socket = ICY_FIND_FUNC(lib, WSASocketW);
+    network_func_setsockopt = ICY_FIND_FUNC(lib, setsockopt);
+    network_func_getsockopt = ICY_FIND_FUNC(lib, getsockopt);
+    network_func_recv_from = ICY_FIND_FUNC(lib, WSARecvFrom);
+
+    if (false
+        || !network_func_send
+        || !network_func_recv
+        || !network_func_shutdown
+        || !network_func_closesocket
+        || !network_func_socket
+        || !network_func_setsockopt
+        || !network_func_getsockopt
+        || !network_func_recv_from)
+        return make_stdlib_error(std::errc::function_not_supported);
+
+    return error_type();
+}
+
+error_type detail::network_connection::accept(network_system_data& system) noexcept
 {
     ICY_ERROR(shutdown());
 
@@ -38,7 +63,7 @@ error_type network_system_data::network_connection::accept(network_system_data& 
     }
     return error_type();
 }
-error_type network_system_data::network_connection::recv() noexcept
+error_type detail::network_connection::recv() noexcept
 {
     ICY_ASSERT(ovl_recv.offset < ovl_recv.bytes.size(), "TCP CONNECTION CORRUPTED");
     auto flags = 0ul;
@@ -54,7 +79,7 @@ error_type network_system_data::network_connection::recv() noexcept
     }
     return error_type();
 };
-error_type network_system_data::network_connection::recv(array<uint8_t>&& bytes) noexcept
+error_type detail::network_connection::recv(array<uint8_t>&& bytes) noexcept
 {
     if (bytes.empty())
         return make_stdlib_error(std::errc::invalid_argument);
@@ -79,7 +104,7 @@ error_type network_system_data::network_connection::recv(array<uint8_t>&& bytes)
     }
     return error_type();
 }
-error_type network_system_data::network_connection::send() noexcept
+error_type detail::network_connection::send() noexcept
 {
     ICY_ASSERT(ovl_send.offset < ovl_send.bytes.size(), "TCP CONNECTION CORRUPTED");
     auto flags = 0ul;
@@ -95,7 +120,7 @@ error_type network_system_data::network_connection::send() noexcept
     }
     return error_type();
 };
-error_type network_system_data::network_connection::send(array<uint8_t>&& bytes) noexcept
+error_type detail::network_connection::send(array<uint8_t>&& bytes) noexcept
 {
     if (bytes.empty())
         return make_stdlib_error(std::errc::invalid_argument);
@@ -120,7 +145,7 @@ error_type network_system_data::network_connection::send(array<uint8_t>&& bytes)
     }
     return error_type();
 }
-error_type network_system_data::network_connection::disc() noexcept
+error_type detail::network_connection::disc() noexcept
 {
     network_tcp_overlapped new_ovl;
     network_tcp_overlapped* ptr = &new_ovl;
@@ -144,8 +169,7 @@ error_type network_system_data::network_connection::disc() noexcept
     }
     return error_type();
 };
-
-error_type network_system_data::network_connection::shutdown() noexcept
+error_type detail::network_connection::shutdown() noexcept
 {
     rqueue.clear();
     squeue.clear();
@@ -184,6 +208,7 @@ error_type network_system_data::network_connection::shutdown() noexcept
     ICY_ERROR(error_recv);
     return {};
 }
+
 void network_system_data::destroy(network_system_data*& ptr) noexcept
 {
     if (ptr)
@@ -250,19 +275,10 @@ error_type network_system_data::initialize(const bool http) noexcept
 
     m_bind = reinterpret_cast<decltype(&::bind)>(m_library.find("bind"));
     m_htons = ICY_FIND_FUNC(m_library, htons);
-    network_func_send = ICY_FIND_FUNC(m_library, WSASend);
-    network_func_recv = ICY_FIND_FUNC(m_library, WSARecv);
-    network_func_shutdown = reinterpret_cast<decltype(&::shutdown)>(m_library.find("shutdown"));
-    network_func_closesocket = ICY_FIND_FUNC(m_library, closesocket);
-    network_func_socket = ICY_FIND_FUNC(m_library, WSASocketW);
-    network_func_setsockopt = ICY_FIND_FUNC(m_library, setsockopt);
 
-    if (false
-        || !network_func_shutdown
-        || !network_func_closesocket
-        || !network_func_socket
-        || !network_func_setsockopt
-        || !m_bind || !m_htons)
+    ICY_ERROR(network_func_init(m_library));
+
+    if (!m_bind || !m_htons)
         return make_stdlib_error(std::errc::function_not_supported);
 
     m_iocp = iocp;
@@ -375,8 +391,11 @@ error_type detail::network_system_data::post(const uint32_t conn, const event_ty
 {
     if (m_config.port) // is server
     {
-        if (conn == 0 || conn > m_conn.size())
-            return make_stdlib_error(std::errc::invalid_argument);
+        if (m_socket.get_type() == network_socket::type::tcp)
+        {
+            if (conn == 0 || conn > m_conn.size())
+                return make_stdlib_error(std::errc::invalid_argument);
+        }
     }
     else
     {
@@ -722,5 +741,117 @@ error_type detail::network_system_data::loop_tcp(event_system& system) noexcept
 }
 error_type detail::network_system_data::loop_udp(event_system& system) noexcept
 {
-    return make_stdlib_error(std::errc::function_not_supported);
+    const auto recv_from = [this](array<uint8_t>&& bytes)
+    {
+        if (m_udp.ovl_recv.type == event_type::network_recv)
+        {
+            network_udp_overlapped ovl;
+            ovl.type = event_type::network_recv;
+            ovl.bytes = std::move(bytes);
+            ICY_ERROR(m_udp.rqueue.push(std::move(ovl)));
+        }
+        else
+        {
+            m_udp.ovl_recv.type = event_type::network_recv;
+            m_udp.ovl_recv.bytes = std::move(bytes);
+            m_udp.ovl_recv.addr_len = sizeof(m_udp.ovl_recv.addr_buf);
+
+            WSABUF buf = { ULONG(m_udp.ovl_recv.bytes.size()), reinterpret_cast<char*>(m_udp.ovl_recv.bytes.data()) };
+            auto rbytes = 0ul;
+            auto flags = 0ul;
+            if (network_func_recv_from(m_socket, &buf, 1, &rbytes, &flags, reinterpret_cast<sockaddr*>(m_udp.ovl_recv.addr_buf),
+                &m_udp.ovl_recv.addr_len, &m_udp.ovl_recv.overlapped, nullptr) == SOCKET_ERROR)
+            {
+                const auto error = last_system_error();
+                if (error.code != make_system_error_code(ERROR_IO_PENDING))
+                    return error;
+            }
+        }
+        return error_type();
+    };
+    const auto send_to = [this](array<uint8_t>&& bytes, const sockaddr* const addr_buf, const int addr_len)
+    {
+        if (m_udp.ovl_send.type == event_type::network_send)
+        {
+            network_udp_overlapped ovl;
+            memcpy(ovl.addr_buf, addr_buf, ovl.addr_len = addr_len);
+            ovl.bytes = std::move(bytes);
+            ovl.type = event_type::network_send;
+            ICY_ERROR(m_udp.squeue.push(std::move(ovl)));
+        }
+        else
+        {
+            m_udp.ovl_send.type = event_type::network_send;
+            m_udp.ovl_send.bytes = std::move(bytes);
+
+            WSABUF buf = { ULONG(m_udp.ovl_send.bytes.size()), reinterpret_cast<char*>(m_udp.ovl_send.bytes.data()) };
+            auto sbytes = 0ul;
+            if (network_func_send_to(m_socket, &buf, 1, &sbytes, 0, addr_buf, addr_len, &m_udp.ovl_send.overlapped, nullptr) == SOCKET_ERROR)
+            {
+                const auto error = last_system_error();
+                if (error.code != make_system_error_code(ERROR_IO_PENDING))
+                    return error;
+            }
+        }
+        return error_type();
+    };
+
+    network_command cmd;
+    while (m_cmds.pop(cmd))
+    {
+        network_event event;
+        switch (cmd.type)
+        {
+        case event_type::network_recv:
+        {
+            event.error = recv_from(std::move(cmd.bytes));
+            break;
+        }
+        case event_type::network_send:
+        {
+            event.error = send_to(std::move(cmd.bytes), cmd.address.data(), cmd.address.size());
+            break;
+        }
+        default:
+            return make_stdlib_error(std::errc::function_not_supported);
+        };
+        if (event.error)
+        {
+            ICY_ERROR(event::post(&system, cmd.type, std::move(event)));
+        }
+    }
+
+    OVERLAPPED_ENTRY entry = {};
+    auto count = 0ul;
+    SetLastError(ERROR_SUCCESS);
+    GetQueuedCompletionStatus(m_iocp, &entry.dwNumberOfBytesTransferred,
+        &entry.lpCompletionKey, &entry.lpOverlapped, INFINITE);
+    auto ovl = reinterpret_cast<network_udp_overlapped*>(entry.lpOverlapped);
+    if (!ovl)
+        return last_system_error();
+
+    network_event event;
+    event.bytes = std::move(ovl->bytes);
+    event.bytes.resize(entry.dwNumberOfBytesTransferred);
+
+    if (ovl->type == event_type::network_recv)
+    {
+        event.error = network_address_query::create(event.address, ovl->addr_len, *reinterpret_cast<const sockaddr*>(ovl->addr_buf));
+        ICY_ERROR(event::post(&system, event_type::network_recv, std::move(event)));
+        
+        ovl->type = event_type::none;
+        network_udp_overlapped new_ovl;
+        if (m_udp.rqueue.pop(new_ovl))
+            ICY_ERROR(recv_from(std::move(new_ovl.bytes)));
+    }
+    else if (ovl->type == event_type::network_send)
+    {
+        ICY_ERROR(event::post(&system, event_type::network_send, std::move(event)));
+
+        ovl->type = event_type::none;
+        network_udp_overlapped new_ovl;
+        if (m_udp.squeue.pop(new_ovl))
+            ICY_ERROR(send_to(std::move(new_ovl.bytes), reinterpret_cast<const sockaddr*>(new_ovl.addr_buf), new_ovl.addr_len));
+    }
+    return error_type();
 }

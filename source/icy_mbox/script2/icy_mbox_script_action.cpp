@@ -264,13 +264,13 @@ error_type mbox_form_action::exec(const mbox::library& library, const icy::guid&
     saved = false;
     ICY_ERROR(form->m_window.show(true));
 
-    shared_ptr<event_loop> loop;
-    ICY_ERROR(event_loop::create(loop, event_type::window_close | event_type::gui_select | event_type::gui_update));
+    shared_ptr<event_queue> loop;
+    ICY_ERROR(create_event_system(loop, event_type::window_close | event_type::gui_select | event_type::gui_update));
 
     while (true)
     {
         event event;
-        ICY_ERROR(loop->loop(event));
+        ICY_ERROR(loop->pop(event));
         if (event->type == event_type::global_quit)
             break;
 
@@ -307,10 +307,12 @@ error_type mbox_form_action_key::initialize(xgui_widget& parent, const uint32_t 
     dictionary<key> keys;
     for (auto k = 0u; k < 256u; ++k)
     {
-        const auto str = to_string(key(k));
+        string str;
+        copy(to_string(key(k)), str);
         if (str.empty())
             continue;
-        ICY_ERROR(keys.insert(str, key(k)));
+
+        ICY_ERROR(keys.insert(std::move(str), key(k)));
     }
     ICY_ERROR(m_model.insert_rows(0, keys.size() + 1));
     ICY_ERROR(m_model.node(0, 0).text("None"_s));
@@ -524,7 +526,7 @@ error_type mbox_form_action_timer::exec(const event event) noexcept
     {
         const auto& event_data = event->data<gui_event>();
         if (event_data.widget == m_widget_count_value)
-            event_data.data.as_string().to_value(m_value_count);
+            to_value(event_data.data.as_string(), m_value_count);
     }
     ICY_ERROR(m_timer_explorer->exec(event));
     return {};
@@ -842,13 +844,13 @@ error_type mbox_form_action_command_execute::exec(const event event) noexcept
             if (const auto node = group_model->find(select = m_value.group))
                 ICY_ERROR(tree.scroll(node));
 
-            shared_ptr<event_loop> loop;
-            ICY_ERROR(event_loop::create(loop, event_type::gui_select | event_type::gui_update | event_type::window_close));
+            shared_ptr<event_queue> loop;
+            ICY_ERROR(create_event_system(loop, event_type::gui_select | event_type::gui_update | event_type::window_close));
 
             while (true)
             {
                 icy::event event;
-                ICY_ERROR(loop->loop(event));
+                ICY_ERROR(loop->pop(event));
                 if (event->type == event_type::global_quit)
                     break;
 
