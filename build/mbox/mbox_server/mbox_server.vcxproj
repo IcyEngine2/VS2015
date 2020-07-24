@@ -85,7 +85,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\source\mbox\mbox_script.hpp" />
-    <ClInclude Include="..\..\..\source\mbox\mbox_server\mbox_server_script_exec.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

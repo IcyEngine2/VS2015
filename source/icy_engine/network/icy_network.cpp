@@ -49,23 +49,21 @@ network_system_udp_client::~network_system_udp_client() noexcept
 }
 error_type network_system_udp_client::join(const network_address& multicast) noexcept
 {
-    return {};
+    if (!m_data)
+        return make_stdlib_error(std::errc::invalid_argument);
+    return m_data->join(multicast, true);
 }
 error_type network_system_udp_client::leave(const network_address& multicast) noexcept
 {
-    return {};
+    if (!m_data)
+        return make_stdlib_error(std::errc::invalid_argument);
+    return m_data->join(multicast, false);
 }
 error_type network_system_udp_client::send(const network_address& address, const const_array_view<uint8_t> buffer) noexcept
 {
     array<uint8_t> bytes;
     ICY_ERROR(copy(buffer, bytes));
-    return m_data->post(0, event_type::network_send, std::move(bytes));
-}
-error_type network_system_udp_client::recv(const size_t capacity) noexcept
-{
-    array<uint8_t> bytes;
-    ICY_ERROR(bytes.resize(capacity));
-    return m_data->post(0, event_type::network_recv, std::move(bytes));
+    return m_data->post(0, event_type::network_send, std::move(bytes), &address);
 }
 error_type network_system_udp_client::exec() noexcept
 {
@@ -154,12 +152,6 @@ error_type network_system_udp_server::send(const network_address& addr, const co
     ICY_ERROR(copy(buffer, bytes));
     return m_data->post(0u, event_type::network_send, std::move(bytes), &addr);
 }
-error_type network_system_udp_server::recv(const size_t capacity) noexcept
-{
-    array<uint8_t> bytes;
-    ICY_ERROR(bytes.resize(capacity));
-    return m_data->post(0u, event_type::network_recv, std::move(bytes));
-}
 error_type network_system_udp_server::exec() noexcept
 {
     while (true)
@@ -233,11 +225,12 @@ error_type icy::create_event_system(shared_ptr<network_system_tcp_client>& syste
     system = std::move(new_system);
     return {};
 }
-error_type icy::create_event_system(shared_ptr<network_system_udp_client>& system) noexcept
+error_type icy::create_event_system(shared_ptr<network_system_udp_client>& system, const network_server_config& args) noexcept
 {
     std::remove_reference_t<decltype(system)> new_system;
     ICY_ERROR(make_shared(new_system));
     ICY_ERROR(detail::network_system_data::create(new_system->m_data, false));
+    ICY_ERROR(new_system->m_data->launch(args, detail::network_socket::type::udp));
     new_system->filter(event_type::global_quit);
     system = std::move(new_system);
     return {};

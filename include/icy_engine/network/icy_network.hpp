@@ -36,6 +36,9 @@ namespace icy
         duration_type timeout = network_default_timeout;
         network_address_type addr_type = network_address_type::ip_v4;
     };
+    class network_address;
+    template<> inline int compare<network_address>(const network_address& lhs, const network_address& rhs) noexcept;
+
     class network_address
     {
         friend detail::network_address_query;
@@ -43,7 +46,7 @@ namespace icy
     public:
         static error_type query(array<network_address>& array, const string_view host,
             const string_view port, const duration_type timeout = network_default_timeout) noexcept;
-
+        rel_ops(network_address);
         network_address() noexcept = default;
         network_address(network_address&& rhs) noexcept;
         ICY_DEFAULT_MOVE_ASSIGN(network_address);
@@ -60,6 +63,7 @@ namespace icy
         {
             return m_addr_type;
         }
+        uint16_t port() const noexcept;
         explicit operator bool() const noexcept
         {
             return !!m_addr;
@@ -70,6 +74,17 @@ namespace icy
         string m_name;
         sockaddr* m_addr = nullptr;
     };
+
+    template<> inline int compare<network_address>(const network_address& lhs, const network_address& rhs) noexcept
+    {
+        if (lhs.size() < rhs.size())
+            return -1;
+        else if (lhs.size() > rhs.size())
+            return +1;
+        else
+            return memcmp(lhs.data(), rhs.data(), lhs.size());
+    }
+
     struct network_tcp_connection
     {
         network_tcp_connection(const uint32_t index = 0) noexcept : index(index)
@@ -109,13 +124,12 @@ namespace icy
     };
     class network_system_udp_client : public event_system
     {
-        friend error_type create_event_system(shared_ptr<network_system_udp_client>& system) noexcept;
+        friend error_type create_event_system(shared_ptr<network_system_udp_client>& system, const network_server_config& args) noexcept;
     public:
         ~network_system_udp_client() noexcept;
         error_type join(const network_address& multicast) noexcept;
         error_type leave(const network_address& multicast) noexcept;
         error_type send(const network_address& address, const const_array_view<uint8_t> buffer) noexcept;
-        error_type recv(const size_t capacity) noexcept;
         error_type exec() noexcept override;
         error_type signal(const event_data& event) noexcept override;
     private:
@@ -153,7 +167,6 @@ namespace icy
     public:
         ~network_system_udp_server() noexcept;
         error_type send(const network_address& addr, const const_array_view<uint8_t> buffer) noexcept;
-        error_type recv(const size_t capacity) noexcept;
         error_type exec() noexcept override;
         error_type signal(const event_data& event) noexcept override;
     private:

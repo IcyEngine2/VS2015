@@ -12,10 +12,6 @@
 
 #define ICY_GUI_ERROR(X) if (const auto error = (X)) return make_stdlib_error(static_cast<std::errc>(error)); return error_type();
 
-#ifndef ICY_QTGUI_STATIC
-#define ICY_QTGUI_STATIC 1
-#endif
-
 #if ICY_QTGUI_STATIC
 #define ICY_QTGUI_API
 #else
@@ -117,6 +113,7 @@ namespace icy
         dialog_input_double,
     };
     
+
     class gui_variant;
     class gui_node
     {
@@ -502,13 +499,18 @@ namespace icy
             buffer_type* m_buffer;
         };
     };
+
+#if ICY_QTGUI_BUILD
+
+
+#else
     inline error_type make_variant(gui_variant& var, const realloc_func alloc, void* const user, const char* const data, const size_t size) noexcept
     {
         ICY_GUI_ERROR(var.initialize(alloc, user, data, size, gui_variant_type::array));
     }
     inline error_type make_variant(gui_variant& var, const realloc_func alloc, void* const user, const string_view str) noexcept
     {
-        ICY_GUI_ERROR(var.initialize(alloc, user, 
+        ICY_GUI_ERROR(var.initialize(alloc, user,
             str.bytes().data(), str.bytes().size(), gui_variant_type::lstring));
     }
     inline error_type make_variant(gui_variant& var, const string_view str) noexcept
@@ -524,6 +526,7 @@ namespace icy
         }
         return error_type();
     }
+#endif
     template<typename T, typename = std::enable_if_t<std::is_trivially_destructible<T>::value>>
     inline uint32_t make_variant(gui_variant& var, const realloc_func alloc, void* const user, const T& data) noexcept
     {

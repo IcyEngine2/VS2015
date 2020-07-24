@@ -83,6 +83,24 @@ network_address::~network_address() noexcept
     if (m_addr)
         icy::realloc(m_addr, 0);
 }
+uint16_t network_address::port() const noexcept
+{
+    if (m_addr)
+    {
+        auto value = 0u;
+        if (m_addr_len == sizeof(sockaddr_in))
+            value = reinterpret_cast<const sockaddr_in*>(m_addr)->sin_port;
+        else if (m_addr_len == sizeof(sockaddr_in6))
+            value = reinterpret_cast<const sockaddr_in6*>(m_addr)->sin6_port;
+
+#if _WIN32
+        const auto lower = value & 0xFF;
+        const auto upper = value >> 0x08;
+        return lower << 0x08 | upper;
+#endif
+    }
+    return 0;
+}
 error_type network_address::query(array<network_address>& array, const string_view host, const string_view port, const duration_type timeout) noexcept
 {
     auto lib = "ws2_32"_lib;

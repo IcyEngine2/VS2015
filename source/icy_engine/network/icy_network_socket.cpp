@@ -67,6 +67,6 @@ network_socket::type network_socket::get_type() const noexcept
 {
     auto val  = 0;
     auto len = int(sizeof(val));
-    getsockopt(m_value, SOL_SOCKET, SO_TYPE, reinterpret_cast<char*>(&val), &len);
+    network_func_getsockopt(m_value, SOL_SOCKET, SO_TYPE, reinterpret_cast<char*>(&val), &len);
     return val == SOCK_STREAM ? type::tcp : type::udp;
 }

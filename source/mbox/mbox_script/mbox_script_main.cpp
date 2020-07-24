@@ -21,11 +21,15 @@
 #if _DEBUG
 #pragma comment(lib, "icy_engine_cored")
 #pragma comment(lib, "icy_engine_imaged")
+#if ICY_QTGUI_STATIC
 #pragma comment(lib, "icy_qtguid")
+#endif
 #else
 #pragma comment(lib, "icy_engine_core")
 #pragma comment(lib, "icy_engine_image")
+#if ICY_QTGUI_STATIC
 #pragma comment(lib, "icy_qtgui")
+#endif
 #endif
 
 using namespace icy;

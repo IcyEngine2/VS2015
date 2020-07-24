@@ -1,5 +1,5 @@
 #include <icy_qtgui/icy_qtgui.hpp>
-#include <icy_engine/core/icy_input.hpp>
+//#include <icy_engine/core/icy_input.hpp>
 #include <QtCore/qtimer.h>
 #include <QtCore/qmutex.h>
 #include <QtCore/qthread.h>
@@ -833,11 +833,11 @@ private:
     QQueue<uint64_t> m_free_models;
     QQueue<uint64_t> m_free_images;
     //SendNotifyMessageW
-    using func_send_type = int (__stdcall*)(HWND__*, uint32_t msg, size_t wParam, ptrdiff_t lParam);
-    using func_style_type = ptrdiff_t(__stdcall*)(HWND__*, int, ptrdiff_t);
-    library m_win32_library = "user32"_lib;
-    func_send_type m_win32_send = nullptr;
-    func_style_type m_win32_style = nullptr;
+    //using func_send_type = int (__stdcall*)(HWND__*, uint32_t msg, size_t wParam, ptrdiff_t lParam);
+    //using func_style_type = ptrdiff_t(__stdcall*)(HWND__*, int, ptrdiff_t);
+    //library m_win32_library = "user32"_lib;
+    //func_send_type m_win32_send = nullptr;
+    //func_style_type m_win32_style = nullptr;
 };
 ICY_STATIC_NAMESPACE_END
 
@@ -927,7 +927,7 @@ bool qtgui_system::notify(QObject* object, QEvent* event) noexcept
                 qtgui_exit();
                 return 0;
             }
-            else if (m_win32_send && event->isAccepted() && (false
+            /*else if (m_win32_send && event->isAccepted() && (false
                 || event_type == QEvent::Type::MouseMove 
                 || event_type == QEvent::Type::MouseButtonRelease
                 || event_type == QEvent::Type::MouseButtonPress
@@ -1017,7 +1017,7 @@ bool qtgui_system::notify(QObject* object, QEvent* event) noexcept
                 }
                 output = QApplication::notify(object, event);
                 return 0;
-            }
+            }*/
             else if (object == this && event->type() >= QEvent::Type::User && event->type() < QEvent::Type::MaxUser)
             {
                 auto error = static_cast<std::errc>(0);
@@ -1932,22 +1932,22 @@ std::errc qtgui_system::process(const qtgui_event_create_win32& event)
     //using func_enable_type = int(__stdcall*)(HWND__*, int);
     //using func_get_window_long_ptr_type = ptrdiff_t(__stdcall*)(HWND__*, int);
     //using func_set_window_long_ptr_type = ptrdiff_t(__stdcall*)(HWND__*, int, ptrdiff_t);
-    if (!m_win32_send)
+   /* if (!m_win32_send)
     {
         m_win32_library.initialize();
         m_win32_send = m_win32_library.find<func_send_type>("SendNotifyMessageW");
         m_win32_style = m_win32_library.find<func_style_type>("SetWindowLongPtrW");
-    }
+    }*/
     //const auto func_enable = m_win32.find<func_enable_type>("EnableWindow");
     //const auto func_get = m_win32.find<func_get_window_long_ptr_type>("GetWindowLongPtrW");
     //const auto func_set = m_win32.find<func_set_window_long_ptr_type>("SetWindowLongPtrW");
 
-    if (!m_win32_send || !m_win32_style)
-        return std::errc::function_not_supported;
+    //if (!m_win32_send || !m_win32_style)
+    //   return std::errc::function_not_supported;
 
     //func_enable(event.win32, 0);
     //const auto old_ptr = func_get(event.win32, id_exstyle);
-    const auto old_ptr = m_win32_style(event.win32, -20, 0x08000000);
+    //const auto old_ptr = m_win32_style(event.win32, -20, 0x08000000);
     QWidget* widget = nullptr;
     if (event.parent.index)
     {
@@ -1976,7 +1976,7 @@ std::errc qtgui_system::process(const qtgui_event_create_win32& event)
     
     widget->setProperty(qtgui_property_name, event.widget.index);
     widget->setProperty(qtgui_property_hwnd_window, QVariant::fromValue(window));
-    widget->setProperty(qtgui_property_hwnd_xstyle, old_ptr);
+    //widget->setProperty(qtgui_property_hwnd_xstyle, old_ptr);
     //widget->setAttribute(Qt::WA_TransparentForMouseEvents);
     //widget->setEnabled(false);
     //widget->setFocusPolicy(Qt::FocusPolicy::NoFocus);
@@ -2573,7 +2573,7 @@ std::errc qtgui_system::process(const qtgui_event_destroy_widget& event)
             widget->setAttribute(Qt::WidgetAttribute::WA_DeleteOnClose);
 
             const auto hwnd = reinterpret_cast<HWND__*>(window->winId());
-            m_win32_style(hwnd, -20, widget->property(qtgui_property_hwnd_xstyle).toLongLong());
+            //m_win32_style(hwnd, -20, widget->property(qtgui_property_hwnd_xstyle).toLongLong());
         }
     }
     m_widgets[event.widget.index] = nullptr;
@@ -2689,7 +2689,7 @@ std::errc qtgui_system::process(const qtgui_event_input& event)
         return std::errc::invalid_argument;
 
     const auto widget = m_widgets[event.widget.index];
-    if (!widget || !m_win32_send)
+    if (!widget)
         return std::errc::invalid_argument;
     
     const auto window = widget->property(qtgui_property_hwnd_window).value<QWindow*>();
@@ -2709,7 +2709,7 @@ std::errc qtgui_system::process(const qtgui_event_input& event)
         input.point_x = point.x();
         input.point_y = point.y();
     }
-    uint32_t msg = 0;
+    /*uint32_t msg = 0;
     size_t wParam = 0;
     ptrdiff_t lParam = 0;
     detail::to_winapi(input, msg, wParam, lParam);
@@ -2719,7 +2719,7 @@ std::errc qtgui_system::process(const qtgui_event_input& event)
     {
         auto err = last_system_error();
         err = {};
-    }
+    }*/
 
   /*  const auto input = m_input;
     m_input = false;
@@ -3297,7 +3297,8 @@ std::errc qtgui_make_variant(const QVariant& qvar, gui_variant& var)
         ok = true;
         const auto str = qvar.toString();
         const auto bytes = str.toUtf8();
-        return std::errc(make_variant(var, string_view(bytes)).code);
+        const auto func = realloc_func([](const void* const ptr, const size_t size, void* const) { return ::realloc(const_cast<void*>(ptr), size); });
+        return std::errc(var.initialize(func, nullptr, bytes.data(), bytes.size(), gui_variant_type::lstring));
     }
     }
     if (!ok)
@@ -3306,8 +3307,8 @@ std::errc qtgui_make_variant(const QVariant& qvar, gui_variant& var)
     return std::errc(0);
 }
 
-#undef ICY_GUI_ERROR
-#define ICY_GUI_ERROR(X) if (const auto error = (X)){ if (error.source == error_source_stdlib) return error.code; else return 0xFFFF'FFFFui32; }
+//#undef ICY_GUI_ERROR
+//#define ICY_GUI_ERROR(X) if (const auto error = (X)){ if (error.source == error_source_stdlib) return error.code; else return 0xFFFF'FFFFui32; }
 
 extern "C" __declspec(dllimport) int __stdcall WideCharToMultiByte(unsigned CodePage, unsigned long dwFlags,
     const wchar_t* lpWideCharStr, int cchWideChar, char* lpMultiByteStr, int cbMultiByte, char* = nullptr, int* = 0);

@@ -24,19 +24,19 @@
     <ProjectGuid>{4D337F45-E466-4650-9782-63FAEA81F1B1}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>qtgui</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.17763.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v140</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v140</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -58,18 +58,20 @@
     <LinkIncremental>true</LinkIncremental>
     <TargetName>$(ProjectName)d</TargetName>
     <IncludePath>$(ProjectDir)..\..\include\Qt5\;$(ProjectDir)..\..\include\Qt5\QtCore\;$(ProjectDir)..\..\include\Qt5\QtCore\5.14.0\;$(ProjectDir)..\..\include\Qt5\QtGui\;$(ProjectDir)..\..\include\Qt5\QtGui\5.14.0\;$(ProjectDir)..\..\include\Qt5\QtWidgets\;$(ProjectDir)..\..\include\Qt5\QtWidgets\5.14.0\;$(IncludePath)</IncludePath>
+    <OutDir>$(ProjectDir)..\..\bin\$(Configuration)\</OutDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <TargetName>$(ProjectName)</TargetName>
     <IncludePath>$(ProjectDir)..\..\include\Qt5\;$(ProjectDir)..\..\include\Qt5\QtCore\;$(ProjectDir)..\..\include\Qt5\QtCore\5.14.0\;$(ProjectDir)..\..\include\Qt5\QtGui\;$(ProjectDir)..\..\include\Qt5\QtGui\5.14.0\;$(ProjectDir)..\..\include\Qt5\QtWidgets\;$(ProjectDir)..\..\include\Qt5\QtWidgets\5.14.0\;$(IncludePath)</IncludePath>
+    <OutDir>$(ProjectDir)..\..\bin\$(Configuration)\</OutDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>ICY_QTGUI_STATIC=1;QT_STATIC=1;ICY_QTGUI_BUILD=1;_DEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>QT_STATIC=1;ICY_QTGUI_BUILD=1;ICY_QTGUI_EXPORTS=1;_DEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <ExceptionHandling>Sync</ExceptionHandling>
     </ClCompile>
@@ -87,7 +89,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>ICY_QTGUI_STATIC=1;QT_STATIC=1;ICY_QTGUI_BUILD=1;NDEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>QT_STATIC=1;ICY_QTGUI_BUILD=1;ICY_QTGUI_EXPORTS=1;NDEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <ExceptionHandling>Sync</ExceptionHandling>
     </ClCompile>

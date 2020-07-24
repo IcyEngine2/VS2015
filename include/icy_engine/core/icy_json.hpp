@@ -142,6 +142,12 @@ namespace icy
         {
             return push_back(json(value));
         }
+        error_type push_back(const string_view str) noexcept
+        {
+            string new_str;
+            ICY_ERROR(copy(str, new_str));
+            return push_back(json(std::move(new_str)));
+        }
 		error_type reserve(const size_t size) noexcept;
 		const_array_view<string> keys() const noexcept;
         const_array_view<json> vals() const noexcept;

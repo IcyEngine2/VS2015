@@ -32,33 +32,22 @@ error_type send_http(const input_message& msg) noexcept
             initialize(heap_init::global(g_memory));
             
             string path;
-
-
-           /* HMODULE module = nullptr;
-            if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                (LPCWSTR)&send_http, &module))
-                return;
-
-            wchar_t wbuf[MAX_PATH];
-            auto wlen = GetModuleFileNameW(module, wbuf, _countof(wbuf));
-            if (wlen == 0)
-                return last_system_error();
-                */
-
             process_directory(path);
             path.appendf("%1%2.txt"_s, mbox::config_path, GetCurrentProcessId());
 
-            file fconfig;
             json jconfig;
+            {
+                file fconfig;
+                fconfig.open(path, file_access::read, file_open::open_existing, file_share::read);
+                char buf[4096];
+                auto len = sizeof(buf);
+                fconfig.read(buf, len);
+                to_value(string_view(buf, len), jconfig);                
+            }          
+            file::remove(path);
 
-            fconfig.open(path, file_access::read, file_open::open_existing, file_share::read);
-            char buf[4096];
-            auto len = sizeof(buf);
-            fconfig.read(buf, len);
-            
-            to_value(string_view(buf, len), jconfig);            
             jconfig.get(mbox::json_key_version, version);
-            jconfig.get(mbox::json_key_profile, profile);
+            jconfig.get(mbox::json_key_character, character);
             auto addr_str = jconfig.get(mbox::json_key_connect);
             if (addr_str.find(":") == addr_str.end())
                 return;
@@ -89,7 +78,7 @@ error_type send_http(const input_message& msg) noexcept
         network_address addr;
         network_udp_socket sock;
         string version;
-        string profile;
+        string character;
     };
     static global_type global;
 
@@ -115,9 +104,7 @@ error_type send_http(const input_message& msg) noexcept
     ICY_ERROR(j.insert(json_key_wheel, msg.wheel));
     ICY_ERROR(j.insert(json_key_point_x, msg.point_x));
     ICY_ERROR(j.insert(json_key_point_y, msg.point_y));
-    ICY_ERROR(j.insert(json_key_thread, GetCurrentThreadId()));
-    ICY_ERROR(j.insert(json_key_process, GetCurrentProcessId()));
-    ICY_ERROR(j.insert(json_key_profile, global.profile));
+    ICY_ERROR(j.insert(json_key_character, global.character));
     
     string json_str;
     ICY_ERROR(to_string(j, json_str));

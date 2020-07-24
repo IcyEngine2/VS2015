@@ -69,6 +69,7 @@ public:
     error_type post(const uint32_t conn, unique_ptr<http_response>&& response) noexcept;
     error_type loop_tcp(event_system& system) noexcept;
     error_type loop_udp(event_system& system) noexcept;
+    error_type join(const network_address& addr, bool join) noexcept;
 private:
     uint32_t addr_size() const noexcept
     {
@@ -85,12 +86,11 @@ private:
     mpsc_queue<network_command> m_cmds;
     array<network_connection> m_conn;
     network_server_config m_config;
+    array< detail::network_udp_overlapped> m_udp_recv;
     struct udp_type
     {
-        detail::network_udp_overlapped ovl_recv;
-        detail::network_udp_overlapped ovl_send;
-        mpsc_queue<detail::network_udp_overlapped> rqueue;
-        mpsc_queue<detail::network_udp_overlapped> squeue;
-    } m_udp;
+        detail::network_udp_overlapped ovl;
+        mpsc_queue<detail::network_udp_overlapped> queue;
+    } m_udp_send;
     bool m_http = false;
 };

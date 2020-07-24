@@ -6,7 +6,6 @@
 #include <icy_engine/graphics/icy_remote_window.hpp>
 #include <icy_engine/network/icy_network.hpp>
 #include <icy_engine/network/icy_http.hpp>
-#define ICY_QTGUI_STATIC 1
 #include <icy_qtgui/icy_xqtgui.hpp>
 #include "../mbox.h"
 #include "../mbox_script.hpp"
@@ -16,12 +15,16 @@ using namespace icy;
 #pragma comment(lib, "icy_engine_cored")
 #pragma comment(lib, "icy_engine_graphicsd")
 #pragma comment(lib, "icy_engine_networkd")
+#if ICY_QTGUI_STATIC
 #pragma comment(lib, "icy_qtguid")
+#endif
 #else
 #pragma comment(lib, "icy_engine_core")
 #pragma comment(lib, "icy_engine_graphics")
 #pragma comment(lib, "icy_engine_network")
+#if ICY_QTGUI_STATIC
 #pragma comment(lib, "icy_qtgui")
+#endif
 #endif
 
 std::atomic<icy::gui_queue*> icy::global_gui;
@@ -37,10 +40,16 @@ public:
     }
 };
 
+struct config
+{
+    mbox::library script;
+    guid group;
+    network_address multicast;  //  "230.4.4.2:428444"_s
+};
 class application : public thread
 {
 public:
-    string connect;
+    config config;
     shared_ptr<gui_queue> gui;
     shared_ptr<network_system_udp_server> network;
 private:
@@ -59,9 +68,9 @@ private:
         guid timer;
         guid command;
     };
-    struct mbox_data_type
+    struct mbox_character
     {
-        remote_window window;
+        network_address address;
         set<guid> groups;
         array<mbox_button_event> bevents;
         array<mbox_timer_event> tevents;
@@ -69,74 +78,51 @@ private:
     };
     enum
     {
-        column_process,
-        column_profile,
+        column_address,
+        column_character,
         column_count,
     };
 private:
     error_type run() noexcept;
-    error_type reset() noexcept;
-    error_type process(map<guid, mbox_data_type>::pair_type character, const const_array_view<mbox::action> actions, map<guid, mbox_send>& send) noexcept;
-    error_type process(map<guid, mbox_data_type>::pair_type character, const const_array_view<input_message> data, map<guid, mbox_send>& send) noexcept;
-    error_type find_window(const gui_widget parent, remote_window& output_window, guid& output_index) noexcept;
+    error_type reset(xgui_widget& table) noexcept;
+    error_type process(map<guid, mbox_character>::pair_type character, const const_array_view<mbox::action> actions, map<guid, mbox_send>& send) noexcept;
+    error_type process(map<guid, mbox_character>::pair_type character, const const_array_view<input_message> data, map<guid, mbox_send>& send) noexcept;
 private:
-    mbox::library m_lib;
-    map<guid, mbox_data_type> m_data;
-    gui_node m_profile_model;
+    map<guid, mbox_character> m_data;
     gui_node m_data_model;
 };
 
 error_type application::run() noexcept
 {
     ICY_SCOPE_EXIT{ event::post(nullptr, event_type::global_quit); };
-#if _DEBUG
-    library hook_lib = "mbox_dlld"_lib;
-#else
-    library hook_lib = "mbox_dll"_lib;
-#endif
-    ICY_ERROR(hook_lib.initialize());
-    ICY_ERROR(network->recv(network_default_buffer));
 
     global_gui.store(gui.get());
 
     xgui_widget window;
     ICY_ERROR(window.initialize(gui_widget_type::window, gui_widget(), gui_widget_flag::layout_grid));
 
-    xgui_widget script_path;
-    xgui_widget script_exec;
-    ICY_ERROR(script_path.initialize(gui_widget_type::line_edit, window));
-    ICY_ERROR(script_exec.initialize(gui_widget_type::tool_button, window));
-    ICY_ERROR(script_path.insert(gui_insert(0, 0, 5, 1)));
-    ICY_ERROR(script_exec.insert(gui_insert(5, 0, 1, 1)));
-    ICY_ERROR(script_path.text("path/to/script"_s));
-    ICY_ERROR(script_path.enable(false));
+    xgui_widget btn_ping;
+    xgui_widget btn_reset;
 
-    xgui_widget process_launch;
-    xgui_widget process_find;
-    xgui_widget process_clear;
-    ICY_ERROR(process_launch.initialize(gui_widget_type::text_button, window));
-    ICY_ERROR(process_find.initialize(gui_widget_type::text_button, window));
-    ICY_ERROR(process_clear.initialize(gui_widget_type::text_button, window));
-    ICY_ERROR(process_launch.insert(gui_insert(0, 1, 2, 1)));
-    ICY_ERROR(process_find.insert(gui_insert(2, 1, 2, 1)));
-    ICY_ERROR(process_clear.insert(gui_insert(4, 1, 2, 1)));
-    ICY_ERROR(process_launch.text("Launch"_s));
-    ICY_ERROR(process_find.text("Find"_s));
-    ICY_ERROR(process_clear.text("Clear"_s));
+    ICY_ERROR(btn_ping.initialize(gui_widget_type::text_button, window));
+    ICY_ERROR(btn_reset.initialize(gui_widget_type::text_button, window));
+    ICY_ERROR(btn_ping.insert(gui_insert(0, 0, 1, 1)));
+    ICY_ERROR(btn_reset.insert(gui_insert(1, 0, 1, 1)));
+    ICY_ERROR(btn_ping.text("Ping"_s));
+    ICY_ERROR(btn_reset.text("Reset"_s));
 
-
-    ICY_ERROR(gui->create(m_profile_model));
     ICY_ERROR(gui->create(m_data_model));
 
     xgui_widget table;
     ICY_ERROR(table.initialize(gui_widget_type::grid_view, window));
-    ICY_ERROR(table.bind(m_data_model));
-    ICY_ERROR(table.insert(gui_insert(0, 2, 6, 1)));
+    ICY_ERROR(table.insert(gui_insert(0, 1, 2, 1)));
 
     shared_ptr<event_queue> queue;
     ICY_ERROR(create_event_system(queue, event_type::gui_any | event_type::network_any));
 
     ICY_ERROR(window.show(true));
+    
+    ICY_ERROR(reset(table));
 
     while (true)
     {
@@ -148,333 +134,201 @@ error_type application::run() noexcept
         if (event->type == event_type::network_recv)
         {
             const auto& event_data = event->data<network_event>();
-            ICY_ERROR(network->recv(network_default_buffer));
-            json jinput;
-            if (to_value(string_view(reinterpret_cast<const char*>(event_data.bytes.data()), event_data.bytes.size()), jinput))
-                continue;
-
-            string str_guid;
-            if (jinput.get(mbox::json_key_profile, str_guid))
-                continue;
-            guid index;
-            if (to_value(str_guid, index))
-                continue;
-
-            auto type = 0u;
-            auto key = 0u;
-            auto mod = 0u;
-            if (false
-                || jinput.get(mbox::json_key_type, type)
-                || jinput.get(mbox::json_key_key, key)
-                || jinput.get(mbox::json_key_key, mod))
-                continue;
-
-            auto find = m_data.find(index);
-            if (find == m_data.end())
-                continue;
-
-            auto input = input_message(input_type(type), icy::key(key), key_mod(mod));
             
-            map<guid, mbox_send> send;
-            for (auto&& pair : m_data)
+            json json_input;
+            if (to_value(string_view(reinterpret_cast<const char*>(event_data.bytes.data()), event_data.bytes.size()), json_input))
+                continue;
+
+            const auto chr = json_input.find(mbox::json_key_character);
+            if (!chr)
+                continue;
+
+            if (chr->type() == json_type::array)
             {
-                if (pair.value.window.handle())
-                    ICY_ERROR(send.find_or_insert(pair.key, mbox_send()));
+                string str_address;
+                ICY_ERROR(to_string(event_data.address, str_address));
+
+                auto offset = 0u;
+                for (auto&& data : m_data)
+                {
+                    if (data.value.address == event_data.address)
+                    {
+                        data.value.address = network_address();
+                        const auto node = gui->node(m_data_model, offset, column_address);
+                        ICY_ERROR(gui->text(node, ""_s));
+                    }
+                    ++offset;
+                }
+
+                for (auto k = 0u; k < chr->size(); ++k)
+                {
+                    guid index;
+                    if (to_value(chr->at(k)->get(), index))
+                        continue;
+
+                    const auto find = m_data.find(index);
+                    if (find == m_data.end())
+                        continue;
+
+                    ICY_ERROR(copy(event_data.address, find->value.address));
+                    const auto node = gui->node(m_data_model, std::distance(m_data.begin(), find), column_address);
+                    ICY_ERROR(gui->text(node, str_address));
+                }
             }
-            ICY_ERROR(process(*find, const_array_view<input_message>{ input }, send));
-            
-            for (auto&& pair : send)
+            else if (chr->type() == json_type::string)
             {
-                if (pair.value.input.empty())
+                guid index;
+                if (to_value(chr->get(), index))
                     continue;
 
-                auto target = m_data.find(pair.key);
-                auto erase = false;
-                for (auto&& msg : pair.value.input)
+                auto type = 0u;
+                auto key = 0u;
+                auto mod = 0u;
+                if (false
+                    || json_input.get(mbox::json_key_type, type)
+                    || json_input.get(mbox::json_key_key, key)
+                    || json_input.get(mbox::json_key_key, mod))
+                    continue;
+
+                auto find = m_data.find(index);
+                if (find == m_data.end())
+                    continue;
+
+                auto input = input_message(input_type(type), icy::key(key), key_mod(mod));
+
+                map<guid, mbox_send> send;
+                for (auto&& pair : m_data)
                 {
-                    if (auto error = target->value.window.send(msg))
-                    {
-                        erase = true;
-                        break;
-                    }                        
+                    if (pair.value.address)
+                        ICY_ERROR(send.find_or_insert(pair.key, mbox_send()));
                 }
-                if (erase)
-                    target->value.window = remote_window();
+                ICY_ERROR(process(*find, const_array_view<input_message>{ input }, send));
+
+                for (auto&& pair : send)
+                {
+                    const auto target = m_data.find(pair.key);
+                    if (pair.value.input.empty() || target == m_data.end())
+                        continue;
+
+                    string str_guid;
+                    ICY_ERROR(to_string(pair.key, str_guid));
+
+                    json json_object = json_type::object;
+                    json json_input_array = json_type::array;
+                    for (auto&& input : pair.value.input)
+                    {
+                        json json_input = json_type::object;
+                        ICY_ERROR(json_input.insert(mbox::json_key_type, uint32_t(input.type)));
+                        ICY_ERROR(json_input.insert(mbox::json_key_key, uint32_t(input.key)));
+                        ICY_ERROR(json_input.insert(mbox::json_key_point_x, input.point_y));
+                        ICY_ERROR(json_input.insert(mbox::json_key_point_y, input.point_x));
+                        ICY_ERROR(json_input.insert(mbox::json_key_mods, input.mods));
+                        ICY_ERROR(json_input_array.push_back(std::move(json_input)));
+                    }
+                    ICY_ERROR(json_object.insert(mbox::json_key_character, str_guid));
+                    ICY_ERROR(json_object.insert(mbox::json_key_input, std::move(json_input_array)));
+                    string str;
+                    ICY_ERROR(to_string(json_object, str));
+                    ICY_ERROR(network->send(target->value.address, str.ubytes()));
+                }
             }
             continue;
         }
         else if (!(event->type & event_type::gui_any))
             continue;
-        
+
         const auto& event_data = event->data<gui_event>();
         if (event_data.widget == window)
             return error_type();
 
         if (event->type == event_type::gui_update)
         {
-            if (event_data.widget == script_exec)
+            if (event_data.widget == btn_reset)
             {
-                string file_name;
-                ICY_ERROR(dialog_open_file(file_name, { dialog_filter("MBox Script (*.txt)"_s, "*.txt"_s) }));
-                if (file_name.empty())
-                    continue;
-                
-                if (const auto error = m_lib.load_from(file_name))
-                {
-                    ICY_ERROR(show_error(error, "Invalid MBox Script"_s));
-                }
-                else
-                {
-                    ICY_ERROR(script_path.text(file_name));
-                    ICY_ERROR(reset());
-                }
+                ICY_ERROR(reset(table));
             }
-            else if (event_data.widget == process_clear)
+            if (event_data.widget == btn_ping)
             {
-                ICY_ERROR(reset());
-            }
-            else if (event_data.widget == process_find)
-            {
-                remote_window output_window;
-                guid output_index;
-                ICY_ERROR(find_window(window, output_window, output_index));
-                if (!output_index)
-                    continue;
-                
-                auto count = 0u;
+                json json_object = json_type::object;
+                ICY_ERROR(json_object.insert(mbox::json_key_version, string_view(mbox::config_version)));
+
+                json json_character_array = json_type::array;
                 for (auto&& pair : m_data)
                 {
-                    if (pair.value.window.handle())
-                        ++count;
+                    json json_character = json_type::object;
+                    string str_guid;
+                    string str_name;
+                    ICY_ERROR(to_string(pair.key, str_guid));
+                    ICY_ERROR(json_character.insert(mbox::json_key_index, str_guid));
+                    ICY_ERROR(config.script.path(pair.key, str_name));
+                    ICY_ERROR(json_character.insert(mbox::json_key_name, str_name));
+                    ICY_ERROR(json_character_array.push_back(std::move(json_character)));
                 }
+                ICY_ERROR(json_object.insert(mbox::json_key_character, std::move(json_character_array)));
 
-                ICY_ERROR(gui->insert_rows(m_data_model, count, 1));
-                gui_node nodes[] =
-                {
-                    gui->node(m_data_model, count, column_process),
-                    gui->node(m_data_model, count, column_profile),
-                };
-                for (auto&& node : nodes)
-                {
-                    if (!node)
-                        return make_stdlib_error(std::errc::invalid_argument);
-                }
-                string str_process;
-                string str_window;
-                ICY_ERROR(to_string(output_window.process(), str_process));
-                ICY_ERROR(to_string("MBox %1 [Proc %2]"_s, str_window,
-                    string_view(m_lib.find(output_index)->name), output_window.process()));
-                ICY_ERROR(output_window.rename(str_window));
-
-                ICY_ERROR(gui->text(nodes[column_process], str_process));
-                ICY_ERROR(gui->text(nodes[column_profile], m_lib.find(output_index)->name));
-
-                string str_guid;
-                ICY_ERROR(to_string(output_index, str_guid));
-
-                string path;
-                ICY_ERROR(process_directory(path));
-                ICY_ERROR(path.appendf("%1", mbox::config_path));
-                ICY_ERROR(make_directory(path));
-                ICY_ERROR(path.appendf("%1.txt"_s, string_view(str_process)));
-
-                json jconfig = json_type::object;
-                ICY_ERROR(jconfig.insert(mbox::json_key_version, string_view(mbox::config_version)));
-                ICY_ERROR(jconfig.insert(mbox::json_key_connect, connect));
-                ICY_ERROR(jconfig.insert(mbox::json_key_pause_begin, uint32_t(key::slash)));
-                ICY_ERROR(jconfig.insert(mbox::json_key_pause_end, uint32_t(key::esc)));
-                ICY_ERROR(jconfig.insert(mbox::json_key_pause_toggle, uint32_t(key::enter)));
-                ICY_ERROR(jconfig.insert(mbox::json_key_profile, str_guid));
-
-                string jstr;
-                ICY_ERROR(to_string(jconfig, jstr));
-                file file;
-                ICY_ERROR(file.open(path, file_access::write, file_open::create_always, file_share::read | file_share::write));
-                ICY_ERROR(file.append(jstr.bytes().data(), jstr.bytes().size()));
-
-                ICY_ERROR(output_window.hook(hook_lib, GetMessageHook));
-
-                m_data.find(output_index)->value.window = std::move(output_window);
+                string str;
+                ICY_ERROR(to_string(json_object, str));
+                ICY_ERROR(network->send(config.multicast, str.ubytes()));
             }
         }
 
     }
     return error_type();
 }
-error_type application::reset() noexcept
+error_type application::reset(xgui_widget& table) noexcept
 {
     m_data.clear();
-    
+
     ICY_ERROR(gui->clear(m_data_model));
     ICY_ERROR(gui->insert_cols(m_data_model, 0, column_count - 1));
-    ICY_ERROR(gui->hheader(m_data_model, column_process, "Process ID"_s));
-    ICY_ERROR(gui->hheader(m_data_model, column_profile, "Character"_s));
-    ICY_ERROR(gui->clear(m_profile_model));
-    
+    ICY_ERROR(gui->hheader(m_data_model, column_address, "Network"_s));
+    ICY_ERROR(gui->hheader(m_data_model, column_character, "Character"_s));
+    ICY_ERROR(table.bind(m_data_model));
+
     array<mbox::base> vec;
-    ICY_ERROR(m_lib.enumerate(mbox::type::character, vec));
-    std::sort(vec.begin(), vec.end(), [](const mbox::base& lhs, const mbox::base& rhs) { return lhs.name < rhs.name; });
-    ICY_ERROR(gui->insert_rows(m_profile_model, 0, vec.size() + 1));
-
+    ICY_ERROR(config.script.enumerate(mbox::type::character, vec));
+    if (config.group)
     {
-        auto node =gui->node(m_profile_model, 0, 0);
-        if (!node)
-            return make_stdlib_error(std::errc::not_enough_memory);
-        ICY_ERROR(gui->text(node, "Select character"_s));
-    }
+        auto found = false;
+        array<mbox::base> filter;
+        for (auto&& base : vec)
+        {
+            auto parent = base.parent;
+            while (parent)
+            {
+                if (parent == config.group)
+                    break;
+            }
+            if (parent)
+                continue;
 
+            filter.push_back(std::move(base));
+        }
+        vec = std::move(filter);
+    }
+    ICY_ERROR(gui->insert_rows(m_data_model, 0, vec.size()));
+    
     for (auto k = 0u; k < vec.size(); ++k)
     {
-        mbox_data_type new_tab;
+        mbox_character new_tab;
         map<guid, mbox_send> send;
         auto it = m_data.end();
         ICY_ERROR(m_data.insert(std::move(vec[k].index), std::move(new_tab), &it));
         ICY_ERROR(process(*it, vec[k].actions, send));
 
-        string profile_name;
-        ICY_ERROR(m_lib.reverse_path(vec[k].index, profile_name));
-        auto node = gui->node(m_profile_model, k + 1, 0);
+        auto node = gui->node(m_data_model, k, column_character);
         if (!node)
             return make_stdlib_error(std::errc::not_enough_memory);
 
-        ICY_ERROR(gui->text(node, profile_name));
-        ICY_ERROR(gui->udata(node, vec[k].index));
+        string character_name;
+        ICY_ERROR(config.script.path(vec[k].index, character_name));
+        ICY_ERROR(gui->text(node, character_name));
     }
     return error_type();
 }
-error_type application::find_window(const gui_widget parent, remote_window& output_window, guid& output_index) noexcept
+error_type application::process(map<guid, mbox_character>::pair_type character, const const_array_view<mbox::action> actions, map<guid, mbox_send>& send) noexcept
 {
-    array<remote_window> vec;
-    {
-        array<remote_window> find_windows;
-        ICY_ERROR(remote_window::enumerate(find_windows));
-
-        for (auto&& window : find_windows)
-        {
-            auto skip = false;
-            for (auto&& pair : m_data)
-            {
-                if (pair.value.window.handle() == window.handle())
-                {
-                    skip = true;
-                    break;
-                }
-            }
-            if (window.process() == process_index())
-                skip = true;
-
-            if (skip)
-                continue;
-            vec.push_back(std::move(window));
-        }
-    }
-    if (vec.empty())
-        return error_type();
-
-    xgui_model find_model;
-    ICY_ERROR(find_model.initialize());
-    ICY_ERROR(find_model.insert_rows(0, vec.size()));
-    for (auto k = 0u; k < vec.size(); ++k)
-    {
-        string window_name;
-        ICY_ERROR(vec[k].name(window_name));
-        
-        string str;
-        ICY_ERROR(to_string("[%1] %2", str, vec[k].process(), string_view(window_name)));
-
-        auto node = find_model.node(k, 0);
-        if (!node)
-            return make_stdlib_error(std::errc::not_enough_memory);
-
-        ICY_ERROR(node.text(str));
-    }
-
-
-    xgui_widget window;
-    ICY_ERROR(window.initialize(gui_widget_type::window, parent, gui_widget_flag::layout_vbox));
-    xgui_widget combo;
-    ICY_ERROR(combo.initialize(gui_widget_type::combo_box, window));
-    ICY_ERROR(combo.bind(m_profile_model));
-
-    xgui_widget view;
-    ICY_ERROR(view.initialize(gui_widget_type::list_view, window));
-    ICY_ERROR(view.bind(find_model));
-
-    xgui_widget buttons;
-    ICY_ERROR(buttons.initialize(gui_widget_type::none, window, gui_widget_flag::layout_hbox | gui_widget_flag::auto_insert));
-
-    xgui_widget button_okay;
-    ICY_ERROR(button_okay.initialize(gui_widget_type::text_button, buttons));
-    ICY_ERROR(button_okay.text("Okay"_s));
-
-    xgui_widget button_exit;
-    ICY_ERROR(button_exit.initialize(gui_widget_type::text_button, buttons));
-    ICY_ERROR(button_exit.text("Cancel"_s));
-
-    ICY_ERROR(window.show(true));
-
-    shared_ptr<event_queue> loop;
-    ICY_ERROR(create_event_system(loop, event_type::gui_select | event_type::gui_update));
-
-    remote_window select_window;
-    guid select_index;
-
-    while (true)
-    {
-        event event;
-        ICY_ERROR(loop->pop(event));
-        if (event->type == event_type::global_quit)
-            return event::post(nullptr, event_type::global_quit);
-
-        const auto& event_data = event->data<gui_event>();
-        if (event->type == event_type::gui_update)
-        {
-            if (event_data.widget == button_exit ||
-                event_data.widget == window)
-                return error_type();
-
-            if (event_data.widget == button_okay)
-            {
-                if (!select_window.handle())
-                {
-                    ICY_ERROR(show_error(make_stdlib_error(std::errc::invalid_argument), "No window has been selected"_s));
-                    continue;
-                }
-                if (!select_index)
-                {
-                    ICY_ERROR(show_error(make_stdlib_error(std::errc::invalid_argument), "No character has been selected"_s));
-                    continue;
-                }
-                if (const auto ptr = m_data.try_find(select_index))
-                {
-                    if (ptr->window.handle())
-                    {
-                        ICY_ERROR(show_error(make_stdlib_error(std::errc::invalid_argument), "This character already has a window"_s));
-                        continue;
-                    }
-                }
-                output_window = select_window;
-                output_index = select_index;
-                break;
-            }
-        }
-        else if (event->type == event_type::gui_select)
-        {
-            auto node = event_data.data.as_node();
-            if (node.model() == m_profile_model.model())
-            {
-                select_index = node.udata().as_guid();
-            }
-            else if (node.model() == find_model.model())
-            {
-                select_window = vec[node.row()];
-            }
-        }
-    }
-    return error_type();
-}
-error_type application::process(map<guid, mbox_data_type>::pair_type character, const const_array_view<mbox::action> actions, map<guid, mbox_send>& send) noexcept
-{
+    auto& m_lib = config.script;
     const auto find_send = send.find(character->key);
     for (auto&& action : actions)
     {
@@ -658,8 +512,9 @@ error_type application::process(map<guid, mbox_data_type>::pair_type character, 
     }
     return {};
 }
-error_type application::process(map<guid, mbox_data_type>::pair_type character, const const_array_view<input_message> data, map<guid, mbox_send>& send) noexcept
+error_type application::process(map<guid, mbox_character>::pair_type character, const const_array_view<input_message> data, map<guid, mbox_send>& send) noexcept
 {
+    auto& m_lib = config.script;
     for (auto&& msg : data)
     {
         if (msg.key == key::none)
@@ -699,30 +554,101 @@ error_type application::process(map<guid, mbox_data_type>::pair_type character, 
     return {};
 }
 
+error_type read_config(application& app, bool& success) noexcept
+{
+    string config_path;
+    ICY_ERROR(process_directory(config_path));
+    ICY_ERROR(config_path.append("mbox_server_config.txt"_s));
+
+    file config_file;
+    if (const auto error = config_file.open(config_path, file_access::read, file_open::open_existing, file_share::read))
+    {
+        string error_str;
+        to_string("Open config file '%1'", error_str, string_view(config_path));
+        return show_error(error, error_str);
+    }
+
+    char config_data[4096];
+    auto config_size = sizeof(config_data);
+    if (const auto error = config_file.read(config_data, config_size))
+        return show_error(error, "Read config file"_s);
+
+    json config_json;
+    if (const auto error = to_value(string_view(config_data, config_size), config_json))
+        return show_error(error, "Parse config file to JSON"_s);
+
+    string multicast;
+    string script_path;
+    string script_group;
+    config_json.get(mbox::json_key_multicast, multicast);
+    config_json.get(mbox::json_key_script_path, script_path);
+    config_json.get(mbox::json_key_script_group, script_group);
+
+    {
+        string_view multicast_addr;
+        string_view multicast_port;
+        const auto config_multicast_port_delim = multicast.find(":"_s);
+        if (config_multicast_port_delim != multicast.end())
+        {
+            multicast_addr = string_view(multicast.begin(), config_multicast_port_delim);
+            multicast_port = string_view(config_multicast_port_delim + 1, multicast.end());
+        }
+
+        error_type error;
+        if (!multicast_addr.empty() && !multicast_port.empty())
+        {
+            array<network_address> vec;
+            error = network_address::query(vec, multicast_addr, multicast_port);
+            if (!vec.empty())
+                app.config.multicast = std::move(vec[0]);
+        }
+        else
+        {
+            error = make_stdlib_error(std::errc::invalid_argument);
+        }
+
+        if (!app.config.multicast)
+            return show_error(error, "Invalid multicast address"_s);
+    }
+
+    network_server_config net_config;
+    net_config.buffer = network_default_buffer;
+    net_config.capacity = 10;
+    if (const auto error = create_event_system(app.network, net_config))
+        return show_error(error, "Launch UDP network server"_s);
+
+    if (const auto error = app.config.script.load_from(script_path))
+        return show_error(error, "Invalid MBox script"_s);
+
+    success = true;
+    return error_type();
+}
+
 error_type main_func() noexcept
 {
     ICY_SCOPE_EXIT{ event::post(nullptr, event_type::global_quit); };
 
-    shared_ptr<gui_queue> gui;
-    ICY_ERROR(create_event_system(gui));
+    shared_ptr<application> app;
+    ICY_ERROR(make_shared(app));
 
-    network_server_config config;
-    config.port = 40671;
-    config.capacity = 10;
-    shared_ptr<network_system_udp_server> network;
-    ICY_ERROR(create_event_system(network, config));
+    auto success = false;
+    ICY_ERROR(read_config(*app, success));
+    if (!success)
+        return error_type();
+
+    ICY_ERROR(create_event_system(app->gui));
+        
+    shared_ptr<network_thread> network_thread;
+    ICY_ERROR(make_shared(network_thread));
+
+    network_thread->system = app->network;
+    ICY_ERROR(network_thread->launch());
+    ICY_ERROR(app->launch());
     
-    application app;
-    app.gui = gui;
-    app.network = network;
-    ICY_ERROR(copy("localhost:40671"_s, app.connect));
+    ICY_ERROR(network_thread->rename("Network Thread"_s));
+    ICY_ERROR(app->rename("Application Thread"_s));
 
-    network_thread network_thread;
-    network_thread.system = network;
-    ICY_ERROR(network_thread.launch());
-
-    ICY_ERROR(app.launch());
-    const auto error = gui->exec();
+    const auto error = app->gui->exec();
     global_gui.store(nullptr);
     return error;
 }
