@@ -65,13 +65,12 @@ error_type render_svg_text_stack::initialize(IDWriteFactory& write, const render
 	else
 		return make_stdlib_error(std::errc::function_not_supported);
 
-
 	com_ptr<IDWriteGdiInterop> gdi;
 	ICY_COM_ERROR(write.GetGdiInterop(&gdi));
 	auto ptr = &ncm.lfMessageFont;
 	com_ptr<IDWriteFont> font;
 	ICY_COM_ERROR(gdi->CreateFontFromLOGFONT(ptr, &font));
-
+	
 	if (ptr->lfHeight > 0)
 	{
 		DWRITE_FONT_METRICS metrics = {};

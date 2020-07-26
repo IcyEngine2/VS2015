@@ -75,6 +75,7 @@ namespace icy
     class render_svg_geometry;
     class render_commands_2d;
     class render_commands_3d;
+    class window_system;
 
     class render_factory
     {
@@ -90,6 +91,9 @@ namespace icy
         virtual error_type open_commands_3d(render_commands_3d& commands) noexcept = 0;
         virtual error_type create_texture(const const_array_view<uint8_t> bytes, render_texture& texture) const noexcept = 0;
         virtual error_type create_texture(const const_matrix_view<color> bytes, render_texture& texture) const noexcept = 0;
+        virtual error_type close_commands_2d(render_commands_2d& commands, const window_size& size, render_texture& texture) const noexcept = 0;
+        virtual error_type close_commands_2d(render_commands_2d& commands, window_system& window) const noexcept = 0;
+
     };
     class render_texture
     {
@@ -106,6 +110,7 @@ namespace icy
         data_type* data = nullptr;
     };
 
+    class window_system;
     class render_commands_2d
     {
     public:
@@ -116,7 +121,6 @@ namespace icy
     public:
         error_type draw(const render_svg_geometry& svg, const render_d2d_matrix& transform = render_d2d_matrix(), const float layer = 0, const render_texture texture = render_texture()) noexcept;
         error_type draw(const render_svg_text& text, const render_d2d_matrix& transform = render_d2d_matrix(), const float layer = 0) noexcept;
-        error_type close(const window_size size, render_texture& texture) noexcept;
     public:
         class data_type;
         data_type* data = nullptr;

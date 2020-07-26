@@ -4,6 +4,7 @@
 #include <icy_engine/core/icy_color.hpp>
 #include <icy_engine/core/icy_matrix.hpp>
 #include <icy_engine/core/icy_input.hpp>
+#include <icy_engine/core/icy_event.hpp>
 #include "icy_render_math.hpp"
 
 struct HWND__;
@@ -32,4 +33,17 @@ namespace icy
         class data_type;
         data_type* data = nullptr;
     };
+
+    class remote_window_system : public event_system
+    {
+    public:
+        virtual error_type notify_on_close(const remote_window window) noexcept = 0;
+    };
+    error_type create_event_system(shared_ptr<remote_window_system>& system) noexcept;
+
+    template<>
+    inline int compare<HWND__*>(HWND__* const& lhs, HWND__* const& rhs) noexcept
+    {
+        return int(rhs < lhs) - int(lhs < rhs);
+    }
 }

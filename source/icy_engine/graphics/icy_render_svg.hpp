@@ -7,7 +7,7 @@
 struct IDWriteTextFormat;
 struct IDWriteTextLayout;
 struct NSVGimage;
-struct ID2D1DeviceContext;
+struct ID2D1RenderTarget;
 
 class icy::render_svg_font::data_type
 {
@@ -27,7 +27,7 @@ public:
 class icy::render_svg_geometry::data_type
 {
 public:
-    icy::error_type render(ID2D1DeviceContext& context) noexcept;
+    icy::error_type render(ID2D1RenderTarget& context) noexcept;
 public:
     std::atomic<uint32_t> ref = 1;
     icy::weak_ptr<icy::render_factory> factory;

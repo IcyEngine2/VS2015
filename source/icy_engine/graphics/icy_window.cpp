@@ -1,12 +1,17 @@
 #include "icy_window.hpp"
+#include "icy_render_commands.hpp"
+#include "icy_render_svg.hpp"
 #include <icy_engine/core/icy_string.hpp>
 #include <icy_engine/core/icy_array.hpp>
 #include <icy_engine/core/icy_input.hpp>
+#include <dwrite_3.h>
+#include <d2d1_3.h>
 #include <Windows.h>
 
 using namespace icy;
 
-#define ICY_WIN32_FUNC(X, Y) X = ICY_FIND_FUNC(m_library, Y); if (!X) return make_stdlib_error(std::errc::function_not_supported) 
+#define ICY_USER32_FUNC(X, Y) X = ICY_FIND_FUNC(m_lib_user32, Y); if (!X) return make_stdlib_error(std::errc::function_not_supported) 
+#define ICY_GDI32_FUNC(X, Y) X = ICY_FIND_FUNC(m_lib_gdi32, Y); if (!X) return make_stdlib_error(std::errc::function_not_supported) 
 
 ICY_STATIC_NAMESPACE_BEG
 enum class window_message_type : uint32_t
@@ -15,6 +20,8 @@ enum class window_message_type : uint32_t
     restyle,
     rename,
     close,
+    show,
+    repaint,
 };
 struct window_message
 {
@@ -22,7 +29,8 @@ struct window_message
     wchar_t name[64] = {};
     input_message input;
     window_style style = window_style::windowed;
-    duration_type frame;
+    bool show = false;
+    window_data::repaint_type repaint;
 };
 static decltype(&::TranslateMessage) win32_translate_message;
 static decltype(&::DispatchMessageW) win32_dispatch_message;
@@ -44,6 +52,10 @@ static decltype(&::SetWindowLongPtrW) win32_set_window_longptr;
 static decltype(&::UnregisterClassW) win32_unregister_class;
 static decltype(&::MonitorFromWindow) win32_monitor_from_window;
 static decltype(&::GetMonitorInfoW) win32_get_monitor_info;
+static decltype(&::BeginPaint) win32_begin_paint;
+static decltype(&::EndPaint) win32_end_paint;
+static decltype(&::InvalidateRect) win32_invalidate_rect;
+
 struct win32_flag_enum
 {
     enum : uint32_t
@@ -127,65 +139,88 @@ void window_data::shutdown() noexcept
 }
 error_type window_data::initialize() noexcept
 {
-    shutdown();
-    ICY_ERROR(m_library.initialize());
-    
-    if (const auto func = ICY_FIND_FUNC(m_library, SetThreadDpiAwarenessContext))
+    ICY_LOCK_GUARD(m_lock);
+    shutdown();    
+    ICY_ERROR(m_lib_user32.initialize());
+    ICY_ERROR(m_lib_gdi32.initialize());
+
+    if (const auto func = ICY_FIND_FUNC(m_lib_user32, SetThreadDpiAwarenessContext))
         func(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
     decltype(&::RegisterClassExW) win32_register_class = nullptr;
     decltype(&::CreateWindowExW) win32_create_window = nullptr;
     decltype(&::LoadCursorW) win32_load_cursor = nullptr;
+    decltype(&::SetLayeredWindowAttributes) win32_set_layered_window_attributes = nullptr;
+    decltype(&::SetWindowPos) win32_set_window_pos = nullptr;
+    decltype(&::CreateSolidBrush) win32_create_solid_brush = nullptr;
 
-    ICY_WIN32_FUNC(win32_translate_message, TranslateMessage);
-    ICY_WIN32_FUNC(win32_dispatch_message, DispatchMessageW);
-    ICY_WIN32_FUNC(win32_get_keyboard_state, GetKeyboardState);
-    ICY_WIN32_FUNC(win32_peek_message, PeekMessageW);
-    ICY_WIN32_FUNC(win32_post_message, PostMessageW);
-    ICY_WIN32_FUNC(win32_def_window_proc, DefWindowProcW);
-    ICY_WIN32_FUNC(win32_post_quit_message, PostQuitMessage);
-    ICY_WIN32_FUNC(win32_unregister_class, UnregisterClassW);
-    ICY_WIN32_FUNC(win32_register_class, RegisterClassExW);
-    ICY_WIN32_FUNC(win32_create_window, CreateWindowExW);
-    ICY_WIN32_FUNC(win32_destroy_window, DestroyWindow);
-    ICY_WIN32_FUNC(win32_get_window_placement, GetWindowPlacement);
-    ICY_WIN32_FUNC(win32_set_window_placement, SetWindowPlacement);
-    ICY_WIN32_FUNC(win32_msg_wait_for_multiple_objects_ex, MsgWaitForMultipleObjectsEx);
-    ICY_WIN32_FUNC(win32_set_window_text, SetWindowTextW);
-    ICY_WIN32_FUNC(win32_get_window_text, GetWindowTextW);
-    ICY_WIN32_FUNC(win32_get_window_text_length, GetWindowTextLengthW);
-    ICY_WIN32_FUNC(win32_get_client_rect, GetClientRect);
-    ICY_WIN32_FUNC(win32_get_window_longptr, GetWindowLongPtrW);
-    ICY_WIN32_FUNC(win32_set_window_longptr, SetWindowLongPtrW);
-    ICY_WIN32_FUNC(win32_monitor_from_window, MonitorFromWindow);
-    ICY_WIN32_FUNC(win32_get_monitor_info, GetMonitorInfoW);
-    ICY_WIN32_FUNC(win32_load_cursor, LoadCursorW);
+    ICY_USER32_FUNC(win32_translate_message, TranslateMessage);
+    ICY_USER32_FUNC(win32_dispatch_message, DispatchMessageW);
+    ICY_USER32_FUNC(win32_get_keyboard_state, GetKeyboardState);
+    ICY_USER32_FUNC(win32_peek_message, PeekMessageW);
+    ICY_USER32_FUNC(win32_post_message, PostMessageW);
+    ICY_USER32_FUNC(win32_def_window_proc, DefWindowProcW);
+    ICY_USER32_FUNC(win32_post_quit_message, PostQuitMessage);
+    ICY_USER32_FUNC(win32_unregister_class, UnregisterClassW);
+    ICY_USER32_FUNC(win32_register_class, RegisterClassExW);
+    ICY_USER32_FUNC(win32_create_window, CreateWindowExW);
+    ICY_USER32_FUNC(win32_destroy_window, DestroyWindow);
+    ICY_USER32_FUNC(win32_get_window_placement, GetWindowPlacement);
+    ICY_USER32_FUNC(win32_set_window_placement, SetWindowPlacement);
+    ICY_USER32_FUNC(win32_msg_wait_for_multiple_objects_ex, MsgWaitForMultipleObjectsEx);
+    ICY_USER32_FUNC(win32_set_window_text, SetWindowTextW);
+    ICY_USER32_FUNC(win32_get_window_text, GetWindowTextW);
+    ICY_USER32_FUNC(win32_get_window_text_length, GetWindowTextLengthW);
+    ICY_USER32_FUNC(win32_get_client_rect, GetClientRect);
+    ICY_USER32_FUNC(win32_get_window_longptr, GetWindowLongPtrW);
+    ICY_USER32_FUNC(win32_set_window_longptr, SetWindowLongPtrW);
+    ICY_USER32_FUNC(win32_monitor_from_window, MonitorFromWindow);
+    ICY_USER32_FUNC(win32_get_monitor_info, GetMonitorInfoW);
+    ICY_USER32_FUNC(win32_begin_paint, BeginPaint);
+    ICY_USER32_FUNC(win32_end_paint, EndPaint);
+    ICY_USER32_FUNC(win32_invalidate_rect, InvalidateRect);
+    //ICY_USER32_FUNC(win32_draw_text, DrawTextW);
+    ICY_USER32_FUNC(win32_load_cursor, LoadCursorW);
+    ICY_USER32_FUNC(win32_set_layered_window_attributes, SetLayeredWindowAttributes);
+    ICY_USER32_FUNC(win32_set_window_pos, SetWindowPos);
+
+    //ICY_GDI32_FUNC(win32_create_solid_brush, CreateSolidBrush);
 
     swprintf_s(m_cname, L"Icy Window %u.%u", GetCurrentProcessId(), GetCurrentThreadId());
-    
+
     WNDCLASSEXW cls = { sizeof(WNDCLASSEXW) };
-	cls.lpszClassName = m_cname;
-	cls.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
-	cls.lpfnWndProc = win32_def_window_proc;
-	cls.hInstance = win32_instance();
+    cls.lpszClassName = m_cname;
+    cls.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
+    cls.lpfnWndProc = win32_def_window_proc;
+    cls.hInstance = win32_instance();
     cls.hCursor = win32_load_cursor(nullptr, IDC_ARROW);
-	
-	if (win32_register_class(&cls) == 0)
-	    return last_system_error();
-	
-    m_hwnd = win32_create_window(0, cls.lpszClassName, nullptr, win32_normal_style,
+    //cls.hbrBackground = win32_create_solid_brush(0);
+    if (win32_register_class(&cls) == 0)
+        return last_system_error();
+
+    const auto style = m_flags & window_flags::layered ? win32_popup_style : win32_normal_style;
+    const auto ex_style = m_flags & window_flags::layered ? (WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT) : WS_EX_APPWINDOW;
+    m_hwnd = win32_create_window(ex_style, cls.lpszClassName, nullptr, style,
 		CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
 		nullptr, nullptr, cls.hInstance, nullptr);	
 	if (!m_hwnd)
 		return last_system_error();
     
+    if (m_flags & window_flags::layered)
+    {
+        if (!win32_set_layered_window_attributes(m_hwnd, 0, 0, LWA_COLORKEY))
+            return last_system_error();
+    }
+
     win32_set_window_longptr(m_hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
     win32_set_window_longptr(m_hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(proc));
-    
+
     filter(event_type::system_internal);
     m_win32_flags |= win32_flag::initialized;
+    m_cvar.wake();
     return error_type();
 }
+
 LRESULT WINAPI window_data::proc(const HWND hwnd, const UINT msg, const WPARAM wparam, const LPARAM lparam) noexcept
 {
     const auto window = reinterpret_cast<window_data*>(win32_get_window_longptr(hwnd, GWLP_USERDATA));
@@ -198,10 +233,73 @@ LRESULT WINAPI window_data::proc(const HWND hwnd, const UINT msg, const WPARAM w
         auto size = window_size{ uint32_t(rect.right - rect.left), uint32_t(rect.bottom - rect.top) };
         return event::post(window, event_type::window_resize, size);
     };
-    
+    const auto on_repaint = [window, hwnd]
+    {
+        auto render = shared_ptr<render_factory>(window->m_repaint.render);
+        if (!render || !window->m_repaint.device)
+            return error_type();
+
+        RECT rect;
+        if (!win32_get_client_rect(hwnd, &rect))
+            return last_system_error();
+
+        com_ptr<ID2D1Factory> factory;
+        window->m_repaint.device->GetFactory(&factory);
+
+        const auto pixel = D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED);
+
+        com_ptr<ID2D1DCRenderTarget> target;
+        ICY_COM_ERROR(factory->CreateDCRenderTarget(&D2D1::RenderTargetProperties(
+            D2D1_RENDER_TARGET_TYPE::D2D1_RENDER_TARGET_TYPE_DEFAULT, pixel), &target));
+
+        PAINTSTRUCT ps;
+        auto hdc = win32_begin_paint(hwnd, &ps);
+        if (!hdc)
+            return last_system_error();
+
+        auto end_paint_done = false;
+        ICY_SCOPE_EXIT{ if (!end_paint_done) win32_end_paint(hwnd, &ps); };
+
+        ICY_COM_ERROR(target->BindDC(hdc, &rect));
+        target->BeginDraw();
+
+        auto end_draw_done = false;
+        ICY_SCOPE_EXIT{ if (!end_draw_done) target->EndDraw(); };
+
+        target->Clear(D2D1::ColorF(0, 0, 0, 0));
+
+        for (const auto& layer : window->m_repaint.map)
+        {
+            for (auto&& cmd : layer.value)
+            {
+                target->SetTransform(reinterpret_cast<const D2D1_MATRIX_3X2_F*>(&cmd.transform));
+                if (cmd.geometry.data)
+                {
+                    ICY_ERROR(cmd.geometry.data->render(*target));
+                }
+                if (cmd.text)
+                {
+                    com_ptr<ID2D1SolidColorBrush> brush;
+                    ICY_COM_ERROR(target->CreateSolidColorBrush(D2D1::ColorF(cmd.color.to_rgb(), cmd.color.a / 255.0f), &brush));
+                    target->DrawTextLayout(D2D1::Point2F(), cmd.text, brush, D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+                }
+            }
+        }
+        end_draw_done = true;
+        ICY_COM_ERROR(target->EndDraw());
+
+        end_paint_done = true;
+        if (!win32_end_paint(hwnd, &ps))
+            return last_system_error();
+
+        return error_type();
+    };
+    ICY_LOCK_GUARD(window->m_lock);
+
     switch (msg)
     {
     case WM_PAINT:
+        window->m_error = on_repaint();
         break;
 
     case WM_MENUCHAR:
@@ -310,8 +408,6 @@ LRESULT WINAPI window_data::proc(const HWND hwnd, const UINT msg, const WPARAM w
 };
 error_type window_data::exec() noexcept
 {
-    ICY_ERROR(restyle(window_style::windowed));
-
     while (true)
     {
         event event;
@@ -341,17 +437,25 @@ error_type window_data::exec(event& event, const duration_type timeout) noexcept
             if (event->type != event_type::system_internal)
                 break;
 
-            auto& event_data = event->data<window_message>();
             if (shared_ptr<event_system>(event->source).get() == this)
             {
+                auto& event_data = event->data<window_message>();
                 if (event_data.type == window_message_type::rename)
                 {
                     if (!win32_set_window_text(m_hwnd, event_data.name))
                         return last_system_error();
                 }
+                else if (event_data.type == window_message_type::repaint)
+                {
+                    m_repaint = std::move(event_data.repaint);
+                    if (!win32_invalidate_rect(m_hwnd, nullptr, FALSE))
+                        return last_system_error();
+                }
                 else if (event_data.type == window_message_type::restyle)
                 {
-                    auto win32_style = (event_data.style & window_style::popup) ? win32_popup_style : win32_normal_style;
+                    const auto was_visible = win32_get_window_longptr(m_hwnd, GWL_STYLE) & WS_VISIBLE;
+                    const auto win32_style = (event_data.style & window_style::popup) ? win32_popup_style : win32_normal_style;
+                    
                     WINDOWPLACEMENT place{ sizeof(place) };
                     if (!win32_get_window_placement(m_hwnd, &place))
                         return last_system_error();
@@ -370,12 +474,15 @@ error_type window_data::exec(event& event, const duration_type timeout) noexcept
                         else
                             place.showCmd = SW_MAXIMIZE;
                     }
-                    else if (event_data.style & window_style::popup)
-                        win32_style |= WS_VISIBLE;
-
-                    win32_set_window_longptr(m_hwnd, GWL_STYLE, win32_style);
+                    win32_set_window_longptr(m_hwnd, GWL_STYLE, win32_style | was_visible);
                     if (!win32_set_window_placement(m_hwnd, &place))
                         return last_system_error();
+                }
+                else if (event_data.type == window_message_type::show)
+                {
+                    auto style = win32_get_window_longptr(m_hwnd, GWL_STYLE) & ~WS_VISIBLE;
+                    if (event_data.show) style |= WS_VISIBLE;
+                    win32_set_window_longptr(m_hwnd, GWL_STYLE, style);
                 }
             }
             continue;
@@ -397,7 +504,8 @@ error_type window_data::exec(event& event, const duration_type timeout) noexcept
                 win32_translate_message(&win32_msg);
                 win32_dispatch_message(&win32_msg);
             }
-            ICY_ERROR(m_error);
+            if (m_error)
+                return m_error;
         }
         else if (index == WAIT_TIMEOUT)
         {
@@ -414,7 +522,7 @@ error_type window_data::restyle(const window_style style) noexcept
 {
     window_message msg;
     msg.type = window_message_type::restyle;
-    new (&msg.style) window_style(style);
+    msg.style = window_style(style);
     return event_system::post(this, event_type::system_internal, std::move(msg));
 }
 error_type window_data::rename(const string_view name) noexcept
@@ -425,6 +533,34 @@ error_type window_data::rename(const string_view name) noexcept
     ICY_ERROR(name.to_utf16(msg.name, &size));
     return event_system::post(this, event_type::system_internal, std::move(msg));
 }
+error_type window_data::show(const bool value) noexcept
+{
+    window_message msg;
+    msg.type = window_message_type::show;
+    msg.show = value;
+    return event_system::post(this, event_type::system_internal, std::move(msg));
+}
+error_type window_data::wait(const duration_type timeout) noexcept
+{
+    while (true)
+    {
+        {
+            ICY_LOCK_GUARD(m_lock);
+            if (m_win32_flags & win32_flag::initialized)
+                return error_type();
+        }
+        ICY_ERROR(m_cvar.wait(m_lock, timeout));
+    }
+    return error_type();
+}
+error_type window_data::repaint(repaint_type&& data) noexcept
+{
+    window_message msg;
+    msg.type = window_message_type::repaint;
+    msg.repaint = std::move(data);
+    return event_system::post(this, event_type::system_internal, std::move(msg));
+}
+
 error_type icy::create_event_system(shared_ptr<window_system>& window, const window_flags flags) noexcept
 {
     auto event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
@@ -434,8 +570,9 @@ error_type icy::create_event_system(shared_ptr<window_system>& window, const win
 
     shared_ptr<window_data> new_ptr;
     ICY_ERROR(make_shared(new_ptr, flags, event));
+    ICY_ERROR(new_ptr->m_lock.initialize());
+
     event = nullptr;
-    ICY_ERROR(new_ptr->initialize());
     window = new_ptr;
     return error_type();
 }

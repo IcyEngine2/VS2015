@@ -13,8 +13,6 @@ struct tagMSG;
 
 namespace icy
 {
-	class window;
-
     enum class input_type : uint32_t
     {
         none,

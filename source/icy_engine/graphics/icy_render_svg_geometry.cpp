@@ -26,7 +26,7 @@ render_svg_geometry::~render_svg_geometry() noexcept
     }
 }
 
-error_type render_svg_geometry::data_type::render(ID2D1DeviceContext& context) noexcept
+error_type render_svg_geometry::data_type::render(ID2D1RenderTarget& context) noexcept
 {
     com_ptr<ID2D1Factory> factory;
     context.GetFactory(&factory);

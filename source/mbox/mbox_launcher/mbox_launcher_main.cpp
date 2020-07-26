@@ -4,6 +4,11 @@
 #include <icy_engine/core/icy_thread.hpp>
 #include <icy_engine/core/icy_set.hpp>
 #include <icy_engine/graphics/icy_remote_window.hpp>
+#include <icy_engine/graphics/icy_window.hpp>
+#include <icy_engine/graphics/icy_adapter.hpp>
+#include <icy_engine/graphics/icy_display.hpp>
+#include <icy_engine/graphics/icy_render.hpp>
+#include <icy_engine/graphics/icy_render_svg.hpp>
 #include <icy_engine/network/icy_network.hpp>
 #include <icy_engine/network/icy_http.hpp>
 #include <icy_qtgui/icy_xqtgui.hpp>
@@ -33,6 +38,27 @@ class network_thread : public thread
 {
 public:
     shared_ptr<network_system_udp_client> system;
+    error_type run() noexcept
+    {
+        ICY_SCOPE_EXIT{ event::post(nullptr, event_type::global_quit); };
+        return system->exec();
+    }
+};
+class overlay_thread : public thread
+{
+public:
+    shared_ptr<window_system> system;
+    error_type run() noexcept
+    {
+        ICY_SCOPE_EXIT{ event::post(nullptr, event_type::global_quit); };
+        ICY_ERROR(system->initialize());
+        return system->exec();
+    }
+};
+class remote_system_thread : public thread
+{
+public:
+    shared_ptr<remote_window_system> system;
     error_type run() noexcept
     {
         ICY_SCOPE_EXIT{ event::post(nullptr, event_type::global_quit); };
@@ -79,10 +105,24 @@ private:
 
 error_type application::run() noexcept
 {
+    global_gui.store(gui.get());
+
+    shared_ptr<event_queue> queue;
+    ICY_ERROR(create_event_system(queue, event_type::gui_any | event_type::network_any));
+
     shared_ptr<network_thread> network_thread;
-    ICY_SCOPE_EXIT{ if (network_thread) network_thread->wait(); };
+    shared_ptr<overlay_thread> overlay_thread;
+    shared_ptr<remote_system_thread> remote_thread;
+    ICY_SCOPE_EXIT
+    {
+        if (network_thread) network_thread->wait();
+        if (overlay_thread) overlay_thread->wait();
+        if (remote_thread) remote_thread->wait();
+    };
     ICY_SCOPE_EXIT{ event::post(nullptr, event_type::global_quit); };
     ICY_ERROR(make_shared(network_thread));
+    ICY_ERROR(make_shared(overlay_thread));
+    ICY_ERROR(make_shared(remote_thread));
 
     shared_ptr<network_system_udp_client> network;
     network_server_config network_config;
@@ -94,9 +134,51 @@ error_type application::run() noexcept
 
     network_thread->system = network;
     ICY_ERROR(network_thread->launch());
-    ICY_ERROR(network_thread->rename("Application thread"_s));
+    ICY_ERROR(network_thread->rename("Network thread"_s));
 
-    global_gui.store(gui.get());
+    shared_ptr<window_system> overlay;
+    ICY_ERROR(create_event_system(overlay, window_flags::layered));
+
+    overlay_thread->system = overlay;
+    ICY_ERROR(overlay_thread->launch());
+    ICY_ERROR(overlay_thread->rename("Overlay thread"_s));
+    ICY_ERROR(overlay->restyle(window_style::maximized | window_style::popup));
+    ICY_ERROR(overlay->show(true));
+    while (true)
+    {
+        ICY_ERROR(overlay_thread->error());
+        if (overlay->wait(std::chrono::seconds(1)) == error_type())
+            break;
+    }
+    
+ /*   shared_ptr<remote_window_system> remote;
+    ICY_ERROR(create_event_system(remote));
+    remote_thread->system = remote;
+    ICY_ERROR(remote_thread->launch());
+    ICY_ERROR(remote_thread->rename("Remote thread"_s));
+
+    array<adapter> adapters;
+    adapter::enumerate(adapter_flags::d3d10 | adapter_flags::hardware, adapters);
+    if (adapters.empty())
+        return last_system_error();
+
+    shared_ptr<render_factory> render;
+    ICY_ERROR(create_render_factory(render, adapters[0], render_flags::none));
+
+
+    render_svg_font font;
+    render_svg_font_data font_data;
+    ICY_ERROR(font_data.flags.push_back(render_svg_text_flag(render_svg_text_flag::font_size, 72)));
+    ICY_ERROR(render->create_svg_font(font_data, font));
+
+    render_svg_text text;
+    ICY_ERROR(render->create_svg_text("Hello World"_s, colors::white, window_size(), font, text));
+
+    render_commands_2d cmds;
+    ICY_ERROR(render->open_commands_2d(cmds));
+    ICY_ERROR(cmds.draw(text));
+    ICY_ERROR(render->close_commands_2d(cmds, *overlay));
+    */
     
     xgui_widget window;
     ICY_ERROR(window.initialize(gui_widget_type::window, gui_widget(), gui_widget_flag::layout_grid));
@@ -117,8 +199,6 @@ error_type application::run() noexcept
     ICY_ERROR(table.initialize(gui_widget_type::grid_view, window));
     ICY_ERROR(table.insert(gui_insert(0, 1, 2, 1)));
 
-    shared_ptr<event_queue> queue;
-    ICY_ERROR(create_event_system(queue, event_type::gui_any | event_type::network_any));
 
     ICY_ERROR(window.show(true));
     ICY_ERROR(btn_ping.enable(false));
@@ -228,14 +308,18 @@ error_type application::run() noexcept
                         continue;
 
                     const auto msg = input_message(input_type(type), icy::key(key), icy::key_mod(mods));
-                    if (find->value.window.send(msg))
+                    if (const auto error = find->value.window.send(msg, std::chrono::milliseconds(200)))
                     {
-                        if (find->value.window.hook(config.hook_lib, GetMessageHook))
+                        if (error == make_stdlib_error(std::errc::timed_out))
+                            ;
+                        else
+                            ICY_ERROR(error);
+                        /*if (find->value.window.hook(config.hook_lib, GetMessageHook))
                         {
                             find->value.window = remote_window();
                             ICY_ERROR(ping());
                             break;
-                        }
+                        }*/
                     }
                 }
             }
@@ -341,8 +425,11 @@ error_type application::run() noexcept
                     ICY_ERROR(file.append(jstr.bytes().data(), jstr.bytes().size()));
                 }
                 ICY_ERROR(output_window.hook(config.hook_lib, GetMessageHook));
+                //ICY_ERROR(remote->notify_on_close(output_window));
                 it->value.window = std::move(output_window);
                 ICY_ERROR(ping());
+
+                
             }
             else if (action == action_clear)
             {

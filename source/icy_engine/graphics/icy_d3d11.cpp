@@ -499,7 +499,7 @@ error_type render_commands_3d_data::create_d3d11(render_commands_3d_data*& ptr, 
     return error_type();
 }
 
-error_type render_factory_data::create_device(com_ptr<ID3D11Device>& device) noexcept
+error_type render_factory_data::create_device(com_ptr<ID3D11Device>& device) const noexcept
 {
     if (const auto func = ICY_FIND_FUNC(m_lib_d3d11, D3D11CreateDevice))
     {
@@ -521,7 +521,7 @@ error_type render_factory_data::create_device(com_ptr<ID3D11Device>& device) noe
     }
     return make_stdlib_error(std::errc::function_not_supported);
 }
-error_type render_factory_data::create_texture(ID3D11Device& device, const window_size size, render_texture& texture) noexcept
+error_type render_factory_data::create_texture(ID3D11Device& device, const window_size size, render_texture& texture) const noexcept
 {
     texture = render_texture();
     while (true)

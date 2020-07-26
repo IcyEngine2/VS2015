@@ -16,6 +16,7 @@ namespace icy
     {
         none            =   0x00,
         quit_on_close   =   0x01,
+        layered         =   0x02,
     };
 
     static constexpr auto default_window_flags = window_flags::quit_on_close;
@@ -43,6 +44,8 @@ namespace icy
         virtual error_type initialize() noexcept = 0;
         virtual error_type restyle(const window_style style) noexcept = 0;
         virtual error_type rename(const string_view name) noexcept = 0;
+        virtual error_type show(const bool value) noexcept = 0;
+        virtual error_type wait(const duration_type timeout = max_timeout) noexcept = 0;
         virtual HWND__* handle() const noexcept = 0;
         virtual window_flags flags() const noexcept = 0;
     };
