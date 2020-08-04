@@ -6,7 +6,6 @@ struct css_computed_style;
 
 namespace icy
 {
-    class css_sheet;
     class css_system;
     class html_document_css;
 

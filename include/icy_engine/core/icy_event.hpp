@@ -15,10 +15,10 @@ namespace icy
             bitcnt_global   =   0x04,
             bitcnt_system   =   0x01,
             bitcnt_fileio   =   0x02,
-            bitcnt_network  =   0x05,
+            bitcnt_network  =   0x04,
             bitcnt_console  =   0x03,
             bitcnt_window   =   0x05,
-            bitcnt_gui      =   0x04,
+            bitcnt_gui      =   0x06,
             bitcnt_render   =   0x01,
 
             bitcnt_user     =   0x20,
@@ -67,10 +67,8 @@ namespace icy
 
             network_connect         =   1ui64   <<  (offset_network + 0x00),
             network_disconnect      =   1ui64   <<  (offset_network + 0x01),
-            //network_shutdown        =   1ui64   <<  (offset_network + 0x02),
-            network_send            =   1ui64   <<  (offset_network + 0x03),
-            network_recv            =   1ui64   <<  (offset_network + 0x04),
-            //network_timeout         =   1ui64   <<  (offset_network + 0x04),
+            network_send            =   1ui64   <<  (offset_network + 0x02),
+            network_recv            =   1ui64   <<  (offset_network + 0x03),
             network_any             =   mask_network,
             
             console_write           =   1ui64   <<  (offset_console + 0x00),
@@ -83,13 +81,14 @@ namespace icy
             window_input            =   1ui64   <<  (offset_window + 0x02),
             window_active           =   1ui64   <<  (offset_window + 0x03),
             window_minimized        =   1ui64   <<  (offset_window + 0x04),
-            //window_repaint          =   1ui64   <<  (offset_window + 0x05),
             window_any              =   mask_window,
 
             gui_action              =   1ui64   <<  (offset_gui + 0x00),    //  action index
             gui_update              =   1ui64   <<  (offset_gui + 0x01),    //  widget index + variant
             gui_context             =   1ui64   <<  (offset_gui + 0x02),    //  widget(view) + node
             gui_select              =   1ui64   <<  (offset_gui + 0x03),    //  widget(view) + node
+            gui_double              =   1ui64   <<  (offset_gui + 0x04),    //  widget(view) + node
+            gui_dragdrop            =   1ui64   <<  (offset_gui + 0x05),    //  widget(target) + nodes[src, dst]
             gui_any                 =   mask_gui,
 
             render_frame            =   1ui64   <<  (offset_render + 0x00),

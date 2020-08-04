@@ -11,6 +11,10 @@
 #define SYSTEM_CACHE_ALIGNMENT_SIZE 64
 #endif
 
+#ifndef ICY_MAX_TRACE
+#define ICY_MAX_TRACE 64
+#endif
+
 namespace icy
 {
 	inline constexpr size_t operator""_kb(const uint64_t arg) noexcept
@@ -31,7 +35,6 @@ namespace icy
 	}
     size_t align_size(const size_t size) noexcept;
 
-    using realloc_func = void* (*)(const void* const old_ptr, const size_t new_size, void* user);
     using memsize_func = size_t(*)(const void* const ptr, void* user);
     struct global_heap_type
     {
@@ -63,7 +66,7 @@ namespace icy
             return init;
         }
         heap_init(const uint64_t capacity) noexcept : capacity(capacity), max_size(0), bit_pattern(1),
-            debug_trace(0), record_size(0), disable_sys(1), global_heap(0), multithread(0)
+            debug_trace(0), record_size(0), disable_sys(1), global_heap(0), multithread(0), debug_hash(0)
         {
 
         }
@@ -75,9 +78,12 @@ namespace icy
         uint64_t disable_sys    :   0x01;   //  no system calls (big allocations)
         uint64_t global_heap    :   0x01;   //  set as default heap for "realloc" calls
         uint64_t multithread    :   0x01;   //  enable multithread access
+        uint32_t debug_hash;
     };
+    struct heap_report;
     class heap
     {
+        friend heap_report;
     public:
         heap() noexcept = default;
         heap(heap&& rhs) noexcept : m_init(std::move(rhs.m_init)), m_ptr(rhs.m_ptr)
@@ -94,6 +100,7 @@ namespace icy
         }
         void shutdown() noexcept;
         error_type initialize(const heap_init init) noexcept;
+        error_type enable(const bool value) noexcept;
         void* realloc(const void* const old_ptr, const size_t new_size) noexcept;
         size_t memsize(const void* const ptr) noexcept;
     private:
@@ -102,18 +109,22 @@ namespace icy
     };
 	struct heap_report
 	{
-        heap_report(const heap& heap) noexcept;
+        struct trace_info
+        {
+            size_t index = 0;
+            void* address = nullptr;
+            size_t size = 0;
+            uint32_t hash = 0;
+            uint32_t count = 0;
+            const char* trace[ICY_MAX_TRACE];
+        };
+        static error_type create(heap_report& report, const heap& heap, void* user, error_type(*func)(void* user, const trace_info& info));
 		size_t memory_reserved  =   0;
 		size_t memory_passive   =   0;
 		size_t memory_active    =   0;
 		size_t threads_reserved =   0;
 		size_t threads_active   =   0;
 	};
-    struct heap_debug
-    {
-        error_type initialize(const heap& heap) noexcept;
-        virtual error_type operator()(const size_t index, const void* ptr, const char* func_name) noexcept;
-    };
 
     inline void* global_realloc(const void* const ptr, const size_t size, void*) noexcept
     {

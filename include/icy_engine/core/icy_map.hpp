@@ -204,7 +204,7 @@ namespace icy
         iterator find(const U& key) noexcept
         {
             const auto it = lower_bound(key);
-            if (it != end() && icy::compare(it->key, key) == 0)
+            if (it != end() && icy::compare<U>(it->key, key) == 0)
                 return it;
             return end();
         }

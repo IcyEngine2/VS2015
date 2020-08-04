@@ -8,7 +8,7 @@ struct icy::image::data_type
     {
         virtual error_type append(const uint8_t* const data, const size_t size) noexcept = 0;
     };
-    data_type(icy::global_heap_type heap) noexcept : heap(heap)
+    data_type(const realloc_func realloc, void* const user) noexcept : realloc(realloc), user(user)
     {
 
     }
@@ -19,9 +19,10 @@ struct icy::image::data_type
     virtual icy::error_type load(const icy::const_array_view<uint8_t> bytes) noexcept = 0;
     virtual icy::error_type save(const icy::const_matrix_view<icy::color> colors, write_stream& output) noexcept = 0;
     virtual icy::error_type view(const icy::image_size offset, icy::matrix_view<icy::color> colors) const noexcept = 0;
-    icy::global_heap_type heap;
+    icy::realloc_func realloc = nullptr;
+    void* user = nullptr;
     icy::image_size size;
 };
 
-extern icy::image::data_type* make_image_png(icy::global_heap_type heap) noexcept;
-extern icy::image::data_type* make_image_jpg(icy::global_heap_type heap) noexcept;
+extern icy::image::data_type* make_image_png(const icy::realloc_func realloc, void* const user) noexcept;
+extern icy::image::data_type* make_image_jpg(const icy::realloc_func realloc, void* const user) noexcept;

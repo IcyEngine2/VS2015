@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <system_error>
 #include <intrin.h>
+#include <atomic>
 
 namespace icy
 {
@@ -20,7 +21,7 @@ namespace icy
 }
 
 #pragma region ICY_MACRO
-#define ICY_ERROR(X) if (const auto error_ = (X)) return icy::detail::icy_error_func(error_)
+#define ICY_ERROR(X) { if (const auto error_ = (X)) return icy::detail::icy_error_func(error_); }
 #define ICY_ANONYMOUS_VARIABLE(str) _CRT_CONCATENATE(str, __COUNTER__)
 #define ICY_SCOPE_EXIT_EX auto ICY_ANONYMOUS_VARIABLE(ICY_SCOPE_EXIT_) = icy::detail::scope_guard_exit<void>{} + 
 #define ICY_SCOPE_FAIL_EX auto ICY_ANONYMOUS_VARIABLE(ICY_SCOPE_FAIL_) = icy::detail::scope_guard_conditional<void, true>{} + 
@@ -446,6 +447,8 @@ namespace icy
     class color;
     class cvar;
     class mutex;
+
+    using realloc_func = void* (*)(const void* const old_ptr, const size_t new_size, void* user);
     
     struct error_source
     {
@@ -454,6 +457,44 @@ namespace icy
         {
             return hash == rhs.hash;
         }
+    };
+    struct error_message
+    {
+    public:
+        static error_message* allocate(const realloc_func realloc, void* const user, const void* const data, const size_t size) noexcept
+        {
+            const auto new_ptr = static_cast<error_message*>(realloc(nullptr, sizeof(error_message) + size, user));
+            if (!new_ptr)
+                return nullptr;
+            new (new_ptr) error_message;
+            new_ptr->m_realloc = realloc;
+            new_ptr->m_user = user;
+            memcpy(new_ptr->m_data, data, new_ptr->m_size = size);
+            return new_ptr;
+        }
+        void add_ref() noexcept
+        {
+            m_ref.fetch_add(1, std::memory_order_release);
+        }
+        void release() noexcept
+        {
+            if (m_ref.fetch_sub(1, std::memory_order_acq_rel) == 1)
+                m_realloc(this, 0, m_user);
+        }
+        const void* data() const noexcept
+        {
+            return m_size ? m_data : nullptr;
+        }
+        size_t size() const noexcept
+        {
+            return m_size;
+        }
+    private:
+        std::atomic<uint32_t> m_ref = 1;
+        realloc_func m_realloc = nullptr;
+        void* m_user = nullptr;
+        size_t m_size = 0;
+        char m_data[1];
     };
     struct error_type
     {
@@ -465,8 +506,22 @@ namespace icy
         {
 
         }
-        error_type(const error_type& rhs) noexcept = default;
-        error_type& operator=(const error_type& rhs) noexcept = default;
+        error_type(const error_type& rhs) noexcept : code(rhs.code), source(rhs.source), message(rhs.message)
+        {
+            if (message)
+                message->add_ref();
+        }
+        error_type(error_type&& rhs) noexcept : code(rhs.code), source(rhs.source), message(std::move(rhs.message))
+        {
+            rhs.message = nullptr;
+        }
+        ~error_type() noexcept
+        {
+            if (message)
+                message->release();
+        }
+        ICY_DEFAULT_COPY_ASSIGN(error_type);
+        ICY_DEFAULT_MOVE_ASSIGN(error_type);
         explicit operator bool() const noexcept
         {
             return code && source.hash;
@@ -479,8 +534,10 @@ namespace icy
         {
             return !(*this == rhs);
         }
+        error_type text(const char* message) noexcept;
         unsigned code;
         error_source source;
+        error_message* message = nullptr;
     };
 
     error_source register_error_source(const string_view name, error_type(*func)(const unsigned code, const string_view locale, string& str));
@@ -630,6 +687,8 @@ namespace icy
 
  
     error_type win32_parse_cargs(array<string>& args) noexcept;
+    error_type win32_debug_print(const string_view str) noexcept;
+
     error_type computer_name(string& str) noexcept;
     error_type process_name(HINSTANCE__* module, string& str) noexcept;
     uint32_t process_index() noexcept;

@@ -70,7 +70,7 @@ error_type html_document_base::initialize(const const_array_view<char> parse) no
                 ICY_ERROR(new_node->m_attributes.insert(std::move(new_key), std::move(new_val)));
             }
             for (auto k = 0u; k < elem.children.length; ++k)
-                ICY_ERROR(func(self, *static_cast<const GumboNode*>(elem.children.data[k]), index));
+                ICY_ERROR(func(self, *static_cast<const GumboNode*>(elem.children.data[k]), uint32_t(index)));
             
             break;
         }

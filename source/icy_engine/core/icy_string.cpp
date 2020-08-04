@@ -410,47 +410,70 @@ error_type string::resize(const size_type size, const char symb) noexcept
 error_type icy::split(const string_view str, array<string_view>& substr) noexcept
 {
     substr.clear();
-    const char* ptr = str.bytes().data();
-    const char* beg = nullptr;
-    for (auto&& chr : str.bytes())
+    auto beg = str.end();
+    for (auto it = str.begin(); it != str.end(); ++it)
     {
+        char32_t chr = 0;
+        ICY_ERROR(it.to_char(chr));
         const auto is_space = chr > 0 && isspace(chr);
-        if (!beg) //  searching for first word (letter)
+        if (beg == str.end()) //  searching for first word (letter)
         {
             if (is_space)
                 continue;
             else
-                beg = &chr;
+                beg = it;
         }
         else // searching for last letter (before space)
         {
             if (is_space)
             {
-                ICY_ERROR(substr.push_back(string_view(beg, &chr)));
-                beg = nullptr;
+                ICY_ERROR(substr.push_back(string_view(beg, it)));
+                beg = str.end();
             }
         }
     }
-    if (beg)
-        ICY_ERROR(substr.push_back(string_view(beg, ptr + str.bytes().size())));
+    if (beg != str.end())
+        ICY_ERROR(substr.push_back(string_view(beg, str.end())));
     return error_type();
 }
-error_type icy::split(const string_view str, array<string_view>& substr, const char delim) noexcept
+error_type icy::split(const string_view str, array<string_view>& substr, const string_view delims) noexcept
 {
-    if (delim < 0)
-        return make_stdlib_error(std::errc::invalid_argument);
-
     substr.clear();
-    const char* ptr = str.bytes().data();
-    for (auto&& chr : str.bytes())
+    auto beg = str.end();
+    for (auto it = str.begin(); it != str.end(); ++it)
     {
-        if (chr == delim)
+        char32_t chr = 0;
+        ICY_ERROR(it.to_char(chr));
+
+        auto is_delim = false;
+        for (auto jt = delims.begin(); jt != delims.end(); ++jt)
         {
-            ICY_ERROR(substr.push_back(string_view(ptr, &chr)));
-            ptr = &chr + 1;
+            char32_t delim = 0;
+            ICY_ERROR(jt.to_char(delim));
+            if (chr == delim)
+            {
+                is_delim = true;
+                break;
+            }
+        }
+        if (beg == str.end()) //  searching for first word (letter)
+        {
+            if (is_delim)
+                continue;
+            else
+                beg = it;
+        }
+        else // searching for last letter (before space)
+        {
+            if (is_delim)
+            {
+                ICY_ERROR(substr.push_back(string_view(beg, it)));
+                beg = str.end();
+            }
         }
     }
-    ICY_ERROR(substr.push_back(string_view(ptr, str.bytes().data() + str.bytes().size())));
+    if (beg != str.end())
+        ICY_ERROR(substr.push_back(string_view(beg, str.end())));
     return error_type();
 }
 error_type string::append(const string_view rhs) noexcept

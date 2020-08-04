@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstdint>
+#include <icy_engine/core/icy_core.hpp>
 
 namespace icy
 {
@@ -132,7 +132,8 @@ namespace icy
 		quote = 0xDE,
 	};
 
-	inline int compare(const key lhs, const key rhs) noexcept
+	template<>
+	inline int compare<key>(const key& lhs, const key& rhs) noexcept
 	{
 		return int32_t(lhs) - int32_t(rhs);
 	}

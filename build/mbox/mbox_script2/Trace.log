@@ -1,0 +1,37 @@
+
+0 - Memory leak of size [176] at address (0x0000027DD110DEC0); Trace length = 35, hash = 1167585009
+  - icy::heap_realloc
+  - icy::array<icy::lua_variable>::_reserve
+  - icy::array<icy::lua_variable>::reserve
+  - icy::array<icy::lua_variable>::emplace_back<icy::lua_variable>
+  - icy::array<icy::lua_variable>::push_back
+  - icy::lua_system::data_type::exec
+  - <lambda_e54d6d18717d7e8d3bd77a9de8f4afc9>::operator()
+  - <lambda_e54d6d18717d7e8d3bd77a9de8f4afc9>::<lambda_invoker_cdecl>
+  - luaD_precall
+  - luaV_execute
+  - luaD_call
+  - luaD_callnoyield
+  - lua_callk
+  - <lambda_76cae3b73e2dba80c3bfcc1b18993e3e>::operator()
+  - <lambda_6c6cc3432b6ca5ead2d35f330399e12f>::operator()
+  - <lambda_6c6cc3432b6ca5ead2d35f330399e12f>::<lambda_invoker_cdecl>
+  - luaD_precall
+  - luaD_call
+  - luaD_callnoyield
+  - f_call
+  - luaD_rawrunprotected
+  - luaD_pcall
+  - lua_pcallk
+  - icy::lua_system::data_type::safe_call<<lambda_76cae3b73e2dba80c3bfcc1b18993e3e> >
+  - icy::lua_system::data_type::exec
+  - lua_function_data::operator()
+  - icy::detail::constexpr_log2
+  - main_func
+  - icy::lua_system::data_type::insert
+  - invoke_main
+  - __scrt_common_main_seh
+  - __scrt_common_main
+  - wWinMainCRTStartup
+  - BaseThreadInitThunk
+  - RtlUserThreadStart

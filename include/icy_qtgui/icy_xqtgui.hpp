@@ -4,7 +4,7 @@
 
 namespace icy
 {
-    extern std::atomic<icy::gui_queue*> global_gui;
+    extern weak_ptr<gui_queue> global_gui;
 
     class xgui_widget : public gui_widget
     {
@@ -18,7 +18,10 @@ namespace icy
         ~xgui_widget() noexcept
         {
             if (*this)
-                global_gui.load()->destroy(*this);
+            {
+                if (auto gui = shared_ptr<gui_queue>(global_gui))
+                    gui->destroy(*this);
+            }
         }
         explicit operator bool() const noexcept
         {
@@ -27,69 +30,115 @@ namespace icy
         error_type initialize(const gui_widget_type type, const gui_widget parent, const gui_widget_flag flags = gui_widget_flag::auto_insert) noexcept
         {
             gui_widget widget;
-            ICY_ERROR(global_gui.load()->create(widget, type, parent, flags));
-            if (*this)
-                global_gui.load()->destroy(*this);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+            {
+                ICY_ERROR(gui->create(widget, type, parent, flags));
+                if (*this)
+                    gui->destroy(*this);
+
+            }
             index = widget.index;
-            return {};            
+            return error_type();
         }
         error_type initialize(HWND__* const win32, const gui_widget parent, const gui_widget_flag flags = gui_widget_flag::auto_insert) noexcept
         {
+            error_type error;
             gui_widget widget;
-            ICY_ERROR(global_gui.load()->create(widget, win32, parent, flags));
-            if (*this)
-                global_gui.load()->destroy(*this);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+            {
+                ICY_ERROR(gui->create(widget, win32, parent, flags));
+                if (*this)
+                    error = gui->destroy(*this);
+            }
             index = widget.index;
-            return {};
+            return error;
         }
         error_type insert(const gui_insert args) noexcept
         {
-            return global_gui.load()->insert(*this, args);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->insert(*this, args);
+            return error_type();
         }
         error_type insert(const gui_action action) noexcept
         {
-            return global_gui.load()->insert(*this, action);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->insert(*this, action);
+            return error_type();
         }
         error_type show(const bool value) noexcept
         {
-            return global_gui.load()->show(*this, value);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->show(*this, value);
+            return error_type();
         }
         error_type text(const string_view text) noexcept
         {
-            return global_gui.load()->text(*this, text);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->text(*this, text);
+            return error_type();
         }
         error_type enable(const bool value) noexcept
         {
-            return global_gui.load()->enable(*this, value);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->enable(*this, value);
+            return error_type();
         }
         error_type icon(const gui_image icon) noexcept
         {
-            return global_gui.load()->icon(*this, icon);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->icon(*this, icon);
+            return error_type();
         }
         error_type bind(const gui_node node) noexcept
         {
-            return global_gui.load()->bind(*this, node);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->bind(*this, node);
+            return error_type();
         }
         error_type modify(const string_view args) noexcept
         {
-            return global_gui.load()->modify(*this, args);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->modify(*this, args);
+            return error_type();
         }
         //  for menu
         error_type exec(gui_action& action) noexcept
         {
-            return global_gui.load()->exec(*this, action);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->exec(*this, action);
+            return error_type();
         }
         error_type scroll(const gui_node node) noexcept
         {
-            return global_gui.load()->scroll(*this, node);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->scroll(*this, node);
+            return error_type();
         }
         error_type scroll(const gui_widget widget) noexcept
         {
-            return global_gui.load()->scroll(*this, widget);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->scroll(*this, widget);
+            return error_type();
         }
         error_type input(const input_message& msg) noexcept
         {
-            return global_gui.load()->input(*this, msg);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->input(*this, msg);
+            return error_type();
+        }
+    };
+    class xgui_text_edit : public xgui_widget
+    {
+    public:
+        error_type initialize(gui_widget parent, gui_widget_flag flags = gui_widget_flag::auto_insert) noexcept
+        {
+            return xgui_widget::initialize(gui_widget_type::text_edit, parent, flags);
+        }
+        error_type append(const string_view text) noexcept
+        {
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->append(*this, text);
+            return error_type();
         }
     };
     class xgui_image : public icy::gui_image
@@ -103,8 +152,11 @@ namespace icy
         ICY_DEFAULT_MOVE_ASSIGN(xgui_image);
         ~xgui_image() noexcept
         {
-            if (*this)
-                global_gui.load()->destroy(*this);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+            {
+                if (*this)
+                    gui->destroy(*this);
+            }
         }
         explicit operator bool() const noexcept
         {
@@ -112,12 +164,16 @@ namespace icy
         }
         error_type initialize(const const_matrix_view<color> colors) noexcept
         {
+            error_type error;
             gui_image image;
-            ICY_ERROR(global_gui.load()->create(image, colors));
-            if (*this)
-                global_gui.load()->destroy(*this);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+            {
+                ICY_ERROR(gui->create(image, colors));
+                if (*this)
+                    error = gui->destroy(*this);
+            }
             index = image.index;
-            return {};
+            return error;
         }
     };
     class xgui_action : public icy::gui_action
@@ -131,8 +187,11 @@ namespace icy
         ICY_DEFAULT_MOVE_ASSIGN(xgui_action);
         ~xgui_action() noexcept
         {
-            if (*this)
-                global_gui.load()->destroy(*this);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+            {
+                if (*this)
+                    gui->destroy(*this);
+            }
         }
         explicit operator bool() const noexcept
         {
@@ -141,19 +200,45 @@ namespace icy
         error_type initialize(const string_view text) noexcept
         {
             gui_action action;
-            ICY_ERROR(global_gui.load()->create(action, text));
-            if (*this)
-                global_gui.load()->destroy(*this);
+            error_type error;
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+            {
+                ICY_ERROR(gui->create(action, text));
+                if (*this)
+                    error = gui->destroy(*this);
+            }
             index = action.index;
-            return {};
+            return error;
         }
         error_type enable(const bool value) noexcept
         {
-            return global_gui.load()->enable(*this, value);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->enable(*this, value);
+            return error_type();
+        }
+        error_type icon(const gui_image value) noexcept
+        {
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->icon(*this, value);
+            return error_type();
         }
         error_type bind(const gui_widget menu) noexcept
         {
-            return global_gui.load()->bind(*this, menu);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->bind(*this, menu);
+            return error_type();
+        }
+        error_type keybind(const input_message& key) noexcept
+        {
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->keybind(*this, key);
+            return error_type();
+        }
+        error_type keybind(const gui_shortcut shortcut) noexcept
+        {
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->keybind(*this, shortcut);
+            return error_type();
         }
     };
     class xgui_node : public icy::gui_node
@@ -164,6 +249,16 @@ namespace icy
         {
 
         }
+        xgui_node(xgui_node&& rhs) noexcept : gui_node(std::move(rhs))
+        {
+
+        }
+        xgui_node(const xgui_node& rhs) noexcept : gui_node(rhs)
+        {
+
+        }
+        ICY_DEFAULT_COPY_ASSIGN(xgui_node);
+        ICY_DEFAULT_MOVE_ASSIGN(xgui_node);
         using gui_node::udata;
         explicit operator bool() const noexcept
         {
@@ -171,46 +266,67 @@ namespace icy
         }
         error_type insert_rows(const size_t offset, const size_t count) noexcept
         {
-            return global_gui.load()->insert_rows(*this, offset, count);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->insert_rows(*this, offset, count);
+            return error_type();
         }
         error_type insert_cols(const size_t offset, const size_t count) noexcept
         {
-            return global_gui.load()->insert_cols(*this, offset, count);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->insert_cols(*this, offset, count);
+            return error_type();
         }
         error_type remove_rows(const size_t offset, const size_t count) noexcept
         {
-            return global_gui.load()->remove_rows(*this, offset, count);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->remove_rows(*this, offset, count);
+            return error_type();
         }
         error_type remove_cols(const size_t offset, const size_t count) noexcept
         {
-            return global_gui.load()->remove_cols(*this, offset, count);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->remove_cols(*this, offset, count);
+            return error_type();
         }
         error_type move_rows(const size_t offset_src, const size_t count, const size_t offset_dst) noexcept
         {
-            return global_gui.load()->move_rows(*this, offset_src, count, *this, offset_dst);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->move_rows(*this, offset_src, count, *this, offset_dst);
+            return error_type();
         }
         error_type move_cols(const size_t offset_src, const size_t count, const size_t offset_dst) noexcept
         {
-            return global_gui.load()->move_cols(*this, offset_src, count, *this, offset_dst);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->move_cols(*this, offset_src, count, *this, offset_dst);
+            return error_type();
         }
         xgui_node node(const size_t row, const size_t col) const noexcept
         {
             xgui_node node;
-            auto find = global_gui.load()->node(*this, row, col);
-            static_cast<gui_node&>(node) = find;
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+            {
+                auto find = gui->node(*this, row, col);
+                static_cast<gui_node&>(node) = find;
+            }
             return node;
         }
         error_type text(const string_view text) noexcept
         {
-            return global_gui.load()->text(*this, text);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->text(*this, text);
+            return error_type();
         }
         error_type udata(const gui_variant& var) noexcept
         {
-            return global_gui.load()->udata(*this, var);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->udata(*this, var);
+            return error_type();
         }
         error_type icon(const gui_image image) noexcept
         {
-            return global_gui.load()->icon(*this, image);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->icon(*this, image);
+            return error_type();
         }
         xgui_node parent() const noexcept
         {
@@ -231,8 +347,11 @@ namespace icy
         ICY_DEFAULT_MOVE_ASSIGN(xgui_model);
         ~xgui_model() noexcept
         {
-            if (*this)
-                global_gui.load()->destroy(*this);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+            {
+                if (*this)
+                    gui->destroy(*this);
+            }
         }
         explicit operator bool() const noexcept
         {
@@ -241,23 +360,33 @@ namespace icy
         error_type initialize() noexcept
         {
             gui_node model;
-            ICY_ERROR(global_gui.load()->create(model));
-            if (*this)
-                global_gui.load()->destroy(*this);
+            error_type error;
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+            {
+                ICY_ERROR(gui->create(model));
+                if (*this)
+                    error = gui->destroy(*this);
+            }
             static_cast<gui_node&>(*this) = model;
-            return {};
+            return error;
         }
         error_type vheader(const uint32_t index, const string_view text) noexcept
         {
-            return global_gui.load()->vheader(*this, index, text);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->vheader(*this, index, text);
+            return error_type();
         }
         error_type hheader(const uint32_t index, const string_view text) noexcept
         {
-            return global_gui.load()->hheader(*this, index, text);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->hheader(*this, index, text);
+            return error_type();
         }
         error_type clear() noexcept
         {
-            return global_gui.load()->clear(*this);
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->clear(*this);
+            return error_type();
         }
         uint64_t model() const noexcept
         {
@@ -272,28 +401,59 @@ namespace icy
             ICY_ERROR(widget.initialize(gui_widget_type::menu, {}, gui_widget_flag::none));
             ICY_ERROR(action.initialize(text));
             ICY_ERROR(action.bind(widget));
-            return {};
+            return error_type();
         }
         xgui_widget widget;
         xgui_action action;
     };
+
+    inline error_type xgui_rename(string& str) noexcept
+    {
+        xgui_widget dialog;
+        ICY_ERROR(dialog.initialize(gui_widget_type::dialog_input_line, gui_widget()));
+        ICY_ERROR(dialog.text(str));
+        shared_ptr<event_queue> loop;
+        ICY_ERROR(create_event_system(loop, event_type::gui_update));
+        ICY_ERROR(dialog.show(true));
+        event event;
+        ICY_ERROR(loop->pop(event));
+        if (event->type == event_type::gui_update)
+        {
+            auto& event_data = event->data<gui_event>();
+            if (event_data.widget == dialog)
+            {
+                const auto new_str = event_data.data.as_string();
+                if (!new_str.empty())
+                    ICY_ERROR(to_string(new_str, str));
+            }
+        }
+        return error_type();
+    }
 }
 
 namespace icy
-{
+{  
     inline error_type show_error(const error_type error, const string_view text) noexcept
     {
         string msg;
-        ICY_ERROR(to_string("Error: %4 - %1 code [%2]: %3", msg, error.source, long(error.code), error, text));
-        if (global_gui.load())
+        if (error)
+        {
+            ICY_ERROR(to_string("Error: %4 - %1 code [%2]: %3", msg, error.source, long(error.code), error, text));
+        }
+        else
+        {
+            ICY_ERROR(to_string("Error: %1"_s, msg, text));
+        }
+
+        if (auto gui = shared_ptr<gui_queue>(global_gui))
         {
             xgui_widget window;
-            ICY_ERROR(window.initialize(gui_widget_type::message, {}));
+            ICY_ERROR(window.initialize(gui_widget_type::message, gui_widget()));
             ICY_ERROR(window.text(msg));
             ICY_ERROR(window.show(true));
             shared_ptr<event_queue> loop;
             ICY_ERROR(create_event_system(loop, event_type::gui_update | event_type::gui_action));
-            while (global_gui.load())
+            while (gui->is_running())
             {
                 event event;
                 const auto error = loop->pop(event, std::chrono::milliseconds(200));
@@ -302,17 +462,17 @@ namespace icy
                 ICY_ERROR(error);
 
                 if (event->type == event_type::global_quit)
-                    return{};
+                    return error_type();
 
                 if (event->type == event_type::gui_update || event->type == event_type::gui_action)
                 {
                     auto& event_data = event->data<gui_event>();
                     if (event_data.widget == window)
-                        return {};
+                        return error_type();
                 }
             }
         }
         ICY_ERROR(win32_message(msg, "Error"_s));
-        return {};
+        return error_type();
     }
 }

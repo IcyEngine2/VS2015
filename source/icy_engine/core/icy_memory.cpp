@@ -54,9 +54,10 @@ struct heap_node_tloc;
 struct debug_trace_unit
 {
     debug_trace_unit* prev = nullptr;
-    uint32_t hash = 0;
-    uint32_t size = 0;
+    uint64_t user_size = 0;
     void* user_data = nullptr;
+    uint32_t hash = 0;
+    uint32_t func_count = 0;
     void* func_data[1];
 };
 struct __declspec(align(SYSTEM_CACHE_ALIGNMENT_SIZE)) heap_init_data : public heap_init
@@ -71,6 +72,7 @@ struct __declspec(align(SYSTEM_CACHE_ALIGNMENT_SIZE)) heap_init_data : public he
     uint8_t* sizes = nullptr;
     heap_node_unit* units = nullptr;
     heap_node_tloc* tlocs = nullptr;
+    bool disabled = false;
 };
 struct __declspec(align(SYSTEM_CACHE_ALIGNMENT_SIZE)) heap_unit_data
 {
@@ -95,6 +97,7 @@ struct __declspec(align(SYSTEM_CACHE_ALIGNMENT_SIZE)) heap_trac_data
 };
 class heap_base
 {
+    friend heap_report;
     friend heap_node_list;
     friend heap_node_unit;
     friend heap_node_tloc;
@@ -107,6 +110,10 @@ public:
     error_type initialize(void* const base) noexcept;
     void* realloc(const void* const ptr, const size_t size) noexcept;
     size_t memsize(const void* const ptr) const noexcept;
+    void enable(const bool value) noexcept
+    {
+        m_init.disabled = !value;
+    }
 private:
     void* raw_alloc(const size_t size) noexcept;
     void* alloc(const size_t size) noexcept;
@@ -254,6 +261,13 @@ error_type heap::initialize(const heap_init init) noexcept
     }
     std::swap(mem, m_ptr);
     m_init = init;
+    return error_type();
+}
+error_type heap::enable(const bool value) noexcept
+{
+    if (!m_ptr || m_init.multithread)
+        return make_stdlib_error(std::errc::invalid_argument);
+    static_cast<heap_base*>(m_ptr)->enable(value);
     return error_type();
 }
 void* heap::realloc(const void* const old_ptr, const size_t new_size) noexcept
@@ -595,7 +609,7 @@ void heap_base::raw_free(const void* ptr) noexcept
 }
 void* heap_base::alloc(size_t size) noexcept
 {
-    if (size == 0)
+    if (size == 0 || m_init.disabled)
         return nullptr;
 
     auto data_ptr = static_cast<uint8_t*>(raw_alloc(size));
@@ -604,7 +618,7 @@ void* heap_base::alloc(size_t size) noexcept
 
     if (m_init.debug_trace)
     {
-        void* stack[0x20];
+        void* stack[ICY_MAX_TRACE];
         auto hash = 0ul;
         auto trace_len = RtlCaptureStackBackTrace(3, _countof(stack), stack, &hash);
         if (!trace_len)
@@ -619,18 +633,22 @@ void* heap_base::alloc(size_t size) noexcept
             return nullptr;
         }
         auto trace_ptr = new (trace_raw) debug_trace_unit;
-        trace_ptr->hash = hash;
-        trace_ptr->size = trace_len;
+        trace_ptr->user_size = size;
         trace_ptr->user_data = data_ptr;
+        trace_ptr->hash = hash;
+        trace_ptr->func_count = trace_len;
         memcpy(trace_ptr->func_data, stack, trace_len * sizeof(void*));
         ICY_LOCK_GUARD_WRITE(m_trace.lock);
         trace_ptr->prev = m_trace.units;
-        trace_ptr->size;
         m_trace.units = trace_ptr;
+
+        if (m_init.debug_hash && m_init.debug_hash == hash)
+            __debugbreak();
     }
 
     if (m_init.bit_pattern)
         memset64(data_ptr, bit_alloc, memsize(data_ptr));
+    
 
     return data_ptr;
 }
@@ -817,6 +835,73 @@ void detail::rw_spin_lock::unlock_read() noexcept
 void detail::rw_spin_lock::unlock_write() noexcept
 {
     ReleaseSRWLockExclusive(reinterpret_cast<SRWLOCK*>(this));
+}
+
+error_type heap_report::create(heap_report& report, const heap& heap, void* user, error_type(*func)(void* user, const trace_info& info))
+{
+    const auto multi = heap.m_init.multithread ? static_cast<heap_multi*>(heap.m_ptr) : nullptr;
+    heap_base* mem = multi;
+    if (!mem) mem = static_cast<heap_base*>(heap.m_ptr);
+
+    report.memory_active = mem->m_stats.bytes.load(std::memory_order_acquire);
+    report.memory_passive = mem->m_units.count.load(std::memory_order_acquire) * unit_data_size;
+    report.memory_reserved = mem->m_units.capacity * unit_data_size;
+    {
+        ICY_LOCK_GUARD_READ(mem->m_tlocs.lock);
+        report.threads_reserved = mem->m_tlocs.capacity;
+        report.threads_active = mem->m_tlocs.count;
+    }
+    if (func)
+    {
+        auto lib_debug = "dbghelp"_lib;
+        ICY_ERROR(lib_debug.initialize());
+        const auto sym_init = ICY_FIND_FUNC(lib_debug, SymInitialize);
+        const auto sym_exit = ICY_FIND_FUNC(lib_debug, SymCleanup);
+        const auto sym_proc = ICY_FIND_FUNC(lib_debug, SymFromAddr);
+        if (!sym_init || !sym_exit || !sym_proc)
+            return make_stdlib_error(std::errc::function_not_supported);
+        
+        if (!sym_init(GetCurrentProcess(), nullptr, TRUE))
+            return last_system_error();
+
+        ICY_SCOPE_EXIT{ sym_exit(GetCurrentProcess()); };
+
+        ICY_LOCK_GUARD_WRITE(mem->m_trace.lock);
+        const auto debug_trace = mem->m_init.debug_trace;
+        ICY_SCOPE_EXIT{ mem->m_init.debug_trace = debug_trace; };
+        mem->m_init.debug_trace = 0;
+
+        auto index = 0u;
+        auto unit = mem->m_trace.units;
+        while (unit)
+        {
+            trace_info info = {};
+            info.address = unit->user_data;
+            info.size = unit->user_size;
+            info.index = index++;
+            info.count = unit->func_count;
+            info.hash = unit->hash;
+            char buffer[ICY_MAX_TRACE][sizeof(SYMBOL_INFO) + MAX_SYM_NAME * sizeof(char)] = {};
+            for (auto k = 0u; k < unit->func_count; ++k)
+            {
+                auto symbol = reinterpret_cast<SYMBOL_INFO*>(buffer[k]);
+                auto offset = 0_z;
+                symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+                symbol->MaxNameLen = MAX_SYM_NAME;
+                if (sym_proc(GetCurrentProcess(), reinterpret_cast<DWORD64>(unit->func_data[k]), &offset, symbol))
+                {
+                    info.trace[k] = symbol->Name;
+                }
+                else
+                {
+                    return last_system_error();
+                }
+            }
+            ICY_ERROR(func(user, info));
+            unit = unit->prev;
+        }
+    }
+    return error_type();
 }
 
 icy::global_heap_type detail::global_heap;

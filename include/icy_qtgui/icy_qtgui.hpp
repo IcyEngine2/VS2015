@@ -112,6 +112,80 @@ namespace icy
         dialog_input_integer,
         dialog_input_double,
     };
+    enum class gui_shortcut : uint32_t
+    {
+        none,
+        help_contents,
+        whats_this,
+        open,
+        close,
+        save,
+        create, //  new
+        remove, //  delete
+        cut,
+        copy,
+        paste,
+        undo,
+        redo,
+        back,
+        forward,
+        refresh,
+        zoom_in,
+        zoom_out,
+        print,
+        add_tab,
+        next_child,
+        previous_child,
+        find,
+        find_next,
+        find_previous,
+        replace,
+        selectAll,
+        bold,
+        italic,
+        underline,
+        move_to_next_char,
+        move_to_previous_char,
+        move_to_next_word,
+        move_to_previous_word,
+        move_to_next_line,
+        move_to_previous_line,
+        move_to_next_page,
+        move_to_previous_page,
+        move_to_start_of_line,
+        move_to_end_of_line,
+        move_to_start_of_block,
+        move_to_end_of_block,
+        move_to_start_of_document,
+        move_to_end_of_document,
+        select_next_char,
+        select_previous_char,
+        select_next_word,
+        select_previous_word,
+        select_next_line,
+        select_previous_line,
+        select_next_page,
+        select_previous_page,
+        select_start_of_line,
+        select_end_of_line,
+        select_start_of_block,
+        select_end_of_block,
+        select_start_of_document,
+        select_end_of_document,
+        delete_start_of_word,
+        delete_end_of_word,
+        delete_end_of_line,
+        insert_paragraph_separator,
+        insert_line_separator,
+        save_as,
+        preferences,
+        quit,
+        full_screen,
+        deselect,
+        delete_complete_line,
+        backspace,
+        cancel
+    };
     
 
     class gui_variant;
@@ -137,11 +211,16 @@ namespace icy
             if (_ptr)
                 _ptr->add_ref();
         }
+        gui_node(gui_node&& rhs) noexcept : _ptr(rhs._ptr)
+        {
+            rhs._ptr = nullptr;
+        }
         ~gui_node() noexcept
         {
             if (_ptr)
                 _ptr->release();
         }
+        ICY_DEFAULT_MOVE_ASSIGN(gui_node);
         ICY_DEFAULT_COPY_ASSIGN(gui_node);
         explicit operator bool() const noexcept
         {
@@ -231,7 +310,13 @@ namespace icy
         }
         gui_variant(const gui_node value) noexcept : m_type(uint8_t(gui_variant_type::node)), m_size(0)
         {
-            new (m_data) decltype(value)(value);
+            new (m_data + sizeof(gui_node) * 0) gui_node(value);
+            new (m_data + sizeof(gui_node) * 1) gui_node;
+        }
+        gui_variant(const gui_node src, const gui_node dst) noexcept : m_type(uint8_t(gui_variant_type::node)), m_size(0)
+        {
+            new (m_data + sizeof(gui_node) * 0) gui_node(src);
+            new (m_data + sizeof(gui_node) * 1) gui_node(dst);
         }
         gui_variant(const input_message value) noexcept : m_type(uint8_t(gui_variant_type::input)), m_size(0)
         {
@@ -259,8 +344,9 @@ namespace icy
             switch (type())
             {
             case gui_variant_type::node:
-                if (m_node)
-                    m_node._ptr->add_ref();
+                for (auto&& node : m_node)
+                    if (node._ptr)
+                        node._ptr->add_ref();
                 break;
 
             case gui_variant_type::lstring:
@@ -283,7 +369,8 @@ namespace icy
             switch (type())
             {
             case gui_variant_type::node:
-                m_node.~gui_node();
+                m_node[0].~gui_node();
+                m_node[1].~gui_node();
                 break;
 
             case gui_variant_type::lstring:
@@ -396,10 +483,10 @@ namespace icy
             else
                 return guid();
         }
-        gui_node as_node() const noexcept
+        gui_node as_node(const size_t index = 0) const noexcept
         {
-            if (type() == gui_variant_type::node)
-                return m_node;
+            if (type() == gui_variant_type::node && index < 2)
+                return m_node[index];
             else
                 return gui_node();            
         }
@@ -494,7 +581,7 @@ namespace icy
             uinteger_type m_uinteger;
             floating_type m_floating;
             guid_type m_guid;
-            node_type m_node;
+            node_type m_node[2];
             input_message m_input;
             buffer_type* m_buffer;
         };
@@ -640,6 +727,7 @@ namespace icy
         virtual uint32_t text(const gui_node node, const string_view text) noexcept = 0;
         virtual uint32_t icon(const gui_node node, const gui_image icon) noexcept = 0;
         virtual uint32_t icon(const gui_widget widget, const gui_image icon) noexcept = 0;
+        virtual uint32_t icon(const gui_action action, const gui_image icon) noexcept = 0;
         virtual uint32_t udata(const gui_node node, const gui_variant& var) noexcept = 0;
         virtual uint32_t bind(const gui_action action, const gui_widget menu) noexcept = 0;
         virtual uint32_t bind(const gui_widget widget, const gui_node node) noexcept = 0;
@@ -656,64 +744,20 @@ namespace icy
         virtual uint32_t scroll(const gui_widget widget, const gui_node node) noexcept = 0;
         virtual uint32_t scroll(const gui_widget tabs, const gui_widget widget) noexcept = 0;
         virtual uint32_t input(const gui_widget widget, const input_message& msg) noexcept = 0;
+        virtual uint32_t keybind(const gui_action action, const input_message& input) noexcept = 0;
+        virtual uint32_t keybind(const gui_action action, const gui_shortcut shortcut) noexcept = 0;
+        virtual uint32_t resize_columns(const gui_widget widget) noexcept = 0;
+        virtual uint32_t undo(const gui_widget widget) noexcept = 0;
+        virtual uint32_t redo(const gui_widget widget) noexcept = 0;
+        virtual uint32_t append(const gui_widget widget, const string_view text) noexcept = 0;
     protected:
         ~gui_system() noexcept = default;
     };
-
-
 }
 
 #ifndef ICY_QTGUI_BUILD
 namespace icy
-{
-    /*struct gui_widget_args
-    {
-        error_type insert(const string_view key, gui_widget_args*& val) noexcept
-        {
-            string str;
-            auto it = map.end();
-            ICY_ERROR(to_string(key, str));
-            ICY_ERROR(map.insert(std::move(str), gui_widget_args(), &it));
-            val = &it->value;
-            return error_type();
-        }
-        error_type insert(const string_view key, const string_view value) noexcept
-        {
-            string str;
-            gui_widget_args val;
-            ICY_ERROR(to_string(key, str));
-            ICY_ERROR(to_string(value, val.value));
-            ICY_ERROR(map.insert(std::move(str), std::move(val)));
-            return error_type();
-        }
-        string value;
-        map<string, gui_widget_args> map;
-    };
-    inline error_type to_string(const gui_widget_args& args, string& str) noexcept
-    {
-        if (args.map.empty())
-        {
-            ICY_ERROR(str.appendf("\"%1\"", string_view(args.value)));
-        }
-        else
-        {
-            ICY_ERROR(str.append("{"_s));
-            auto first = true;
-            for (auto&& pair : args.map)
-            {
-                string val;
-                ICY_ERROR(to_string(pair.value, val));
-                ICY_ERROR(str.appendf("%1\"%2\": %3", first ? ""_s : ","_s, string_view(pair.key), string_view(val)));
-                first = false;
-            }
-            ICY_ERROR(str.append("}"_s));
-        }
-        return error_type();
-    }*/
-
-    class gui_queue;
-    //inline error_type create_gui(shared_ptr<gui_queue>& queue) noexcept;
-
+{  
     class gui_queue : public event_system
     {
         friend error_type create_event_system(shared_ptr<gui_queue>& queue) noexcept;
@@ -735,12 +779,18 @@ namespace icy
             m_library.shutdown();
 #endif
         }
+        bool is_running() const noexcept
+        {
+            return m_running.load();
+        }
         error_type signal(const event_data&) noexcept override
         {
             ICY_GUI_ERROR(m_system->wake());
         }
         error_type exec() noexcept override
         {
+            m_running = true;
+            ICY_SCOPE_EXIT{ m_running = false; };
             while (true)
             {
                 while (auto event = pop())
@@ -847,6 +897,10 @@ namespace icy
         {
             ICY_GUI_ERROR(m_system->icon(widget, image));
         }
+        error_type icon(const gui_action action, const gui_image image) noexcept
+        {
+            ICY_GUI_ERROR(m_system->icon(action, image));
+        }
         error_type enable(const gui_action action, const bool value) noexcept
         {
             ICY_GUI_ERROR(m_system->enable(action, value));
@@ -944,6 +998,30 @@ namespace icy
         {
             ICY_GUI_ERROR(m_system->input(widget, msg));
         }
+        error_type keybind(const gui_action action, const input_message& input) noexcept
+        {
+            ICY_GUI_ERROR(m_system->keybind(action, input));
+        }
+        error_type keybind(const gui_action action, const gui_shortcut shortcut) noexcept
+        {
+            ICY_GUI_ERROR(m_system->keybind(action, shortcut));
+        }
+        error_type resize_columns(const gui_widget widget) noexcept
+        {
+            ICY_GUI_ERROR(m_system->resize_columns(widget));
+        }
+        error_type undo(const gui_widget widget) noexcept
+        {
+            ICY_GUI_ERROR(m_system->undo(widget));
+        }
+        error_type redo(const gui_widget widget) noexcept
+        {
+            ICY_GUI_ERROR(m_system->redo(widget));
+        }
+        error_type append(const gui_widget widget, const string_view text) noexcept
+        {
+            ICY_GUI_ERROR(m_system->append(widget, text));
+        }
     private:
 #if ICY_QTGUI_STATIC
 
@@ -955,6 +1033,7 @@ namespace icy
 #endif
 #endif
         gui_system* m_system = nullptr;
+        std::atomic<bool> m_running = false;
     };
     static error_type create_event_system(shared_ptr<gui_queue>& queue) noexcept
     {

@@ -26,11 +26,13 @@ ICY_STATIC_NAMESPACE_END
 static const auto png_sig_size = 0x08;
 static void* png_malloc(png_structp png, const size_t size) noexcept
 {
-    return static_cast<heap*>(png_get_mem_ptr(png))->realloc(nullptr, size);
+    const auto image = static_cast<image_png*>(png_get_mem_ptr(png));
+    return image->realloc(nullptr, size, image->user);
 }
 static void png_free(png_structp png, png_voidp ptr) noexcept
 {
-    static_cast<heap*>(png_get_mem_ptr(png))->realloc(ptr, 0);
+    const auto image = static_cast<image_png*>(png_get_mem_ptr(png));
+    image->realloc(ptr, 0, image->user);
 }
 static void png_error(png_structp png, const char* text)
 {
@@ -53,7 +55,7 @@ error_type image_png::load(const_array_view<uint8_t> bytes) noexcept
         return make_stdlib_error(std::errc::illegal_byte_sequence);
     
     errno = 0;
-    png = png_create_read_struct_2(PNG_LIBPNG_VER_STRING, this, png_error, png_error, &heap, png_malloc, png_free);
+    png = png_create_read_struct_2(PNG_LIBPNG_VER_STRING, this, png_error, png_error, this, png_malloc, png_free);
     if (!png) 
         return png_make_error();
     
@@ -121,7 +123,7 @@ error_type image_png::save(const const_matrix_view<color> colors, write_stream& 
     ICY_SCOPE_EXIT{ png_destroy_write_struct(&png, &info); };
 
     errno = 0;
-    png = png_create_write_struct_2(PNG_LIBPNG_VER_STRING, this, png_error, png_error, &heap, png_malloc, png_free);
+    png = png_create_write_struct_2(PNG_LIBPNG_VER_STRING, this, png_error, png_error, this, png_malloc, png_free);
     if (!png)
         return png_make_error();
 
@@ -167,9 +169,9 @@ error_type image_png::save(const const_matrix_view<color> colors, write_stream& 
     return {};
 }
 
-extern image::data_type* make_image_png(global_heap_type heap) noexcept
+extern image::data_type* make_image_png(const realloc_func realloc, void* const user) noexcept
 {
-    if (const auto ptr = heap.realloc(nullptr, sizeof(image_png), heap.user))
-        return new (ptr) image_png(heap);
+    if (const auto ptr = realloc(nullptr, sizeof(image_png), user))
+        return new (ptr) image_png(realloc, user);
     return nullptr;
 }

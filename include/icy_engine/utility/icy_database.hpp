@@ -91,6 +91,12 @@ namespace icy
 		friend database_dbi;
         friend database_cursor_write;
 	public:
+		database_txn_write() noexcept = default;
+		database_txn_write(database_txn_write&& rhs) noexcept : database_txn_read(std::move(rhs))
+		{
+
+		}
+		ICY_DEFAULT_MOVE_ASSIGN(database_txn_write);
         error_type initialize(const database_system_write& base) noexcept;
 		error_type commit() noexcept;
 	};

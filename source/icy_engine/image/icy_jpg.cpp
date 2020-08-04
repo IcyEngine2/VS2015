@@ -15,7 +15,7 @@ public:
     using data_type::data_type;
     ~image_jpg() noexcept
     {
-        heap.realloc(data, 0, heap.user);
+        realloc(data, 0, user);
     }
     error_type save(const const_matrix_view<color> colors, write_stream& output) noexcept override;
     error_type load(const const_array_view<uint8_t> bytes) noexcept override;
@@ -27,7 +27,8 @@ ICY_STATIC_NAMESPACE_END
 
 void* jpeg_user_realloc(j_common_ptr ptr, void* object, size_t size)
 {
-    return static_cast<heap*>(ptr->client_data)->realloc(object, size);
+    const auto image = static_cast<image_jpg*>(ptr->client_data);
+    return image->realloc(object, size, image->user);
 }
 
 static error_type jpg_make_error() noexcept
@@ -48,7 +49,7 @@ error_type image_jpg::load(const_array_view<uint8_t> bytes) noexcept
         return jpg_make_error();
 
     jpeg_error_mgr err;    
-    info.client_data = &heap;
+    info.client_data = this;
     info.err = jpeg_std_error(&err);
     jpeg_create_decompress(&info);
 
@@ -76,7 +77,7 @@ error_type image_jpg::load(const_array_view<uint8_t> bytes) noexcept
     jpeg_start_decompress(&info);
 
     size = { info.output_width, info.output_height };
-    data = static_cast<uint8_t*>(heap.realloc(data, size.x * size.y * 3, heap.user));
+    data = static_cast<uint8_t*>(realloc(data, size.x * size.y * 3, user));
     if (!data)
         return make_stdlib_error(std::errc::not_enough_memory);
     
@@ -117,9 +118,9 @@ error_type image_jpg::save(const const_matrix_view<color> colors, write_stream& 
     return {};
 }
 
-extern image::data_type* make_image_jpg(global_heap_type heap) noexcept
+extern image::data_type* make_image_jpg(const icy::realloc_func realloc, void* const user) noexcept
 {
-    if (const auto ptr = heap.realloc(nullptr, sizeof(image_jpg), heap.user))
-        return new (ptr) image_jpg(heap);
+    if (const auto ptr = realloc(nullptr, sizeof(image_jpg), user))
+        return new (ptr) image_jpg(realloc, user);
     return nullptr;
 }

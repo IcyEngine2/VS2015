@@ -423,3 +423,10 @@ uint32_t icy::process_index() noexcept
 {
     return GetCurrentProcessId();
 }
+error_type icy::win32_debug_print(const string_view str) noexcept
+{
+    array<wchar_t> wstr;
+    ICY_ERROR(to_utf16(str, wstr));
+    OutputDebugStringW(wstr.data());
+    return error_type();
+}

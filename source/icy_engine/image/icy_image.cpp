@@ -7,21 +7,22 @@ static void release(image::data_type*& data) noexcept
 {
     if (data)
     {
-        auto& heap = data->heap;
-        data->~data_type();
-        heap.realloc(data, 0, heap.user);
+        const auto realloc = data->realloc;
+        const auto user = data->user;
+        allocator_type::destroy(data);
+        realloc(data, 0, user);
         data = nullptr;
     }
 }
-static error_type make_image_data(global_heap_type heap, const image_type type, icy::image::data_type*& data) noexcept
+static error_type make_image_data(const realloc_func realloc, void* const user, const image_type type, icy::image::data_type*& data) noexcept
 {
     switch (type)
     {
     case image_type::png:
-        data = make_image_png(heap);
+        data = make_image_png(realloc, user);
         break;
     case image_type::jpg:
-        data = make_image_jpg(heap);
+        data = make_image_jpg(realloc, user);
         break;
 
     default:
@@ -56,10 +57,10 @@ image_size image::size() const noexcept
 {
     return m_data ? m_data->size : image_size();
 }
-error_type image::save(global_heap_type heap, const const_matrix_view<color> colors, const image_type type, array<uint8_t>& buffer) noexcept
+error_type image::save(const realloc_func realloc, void* const user, const const_matrix_view<color> colors, const image_type type, array<uint8_t>& buffer) noexcept
 {
     data_type* new_data = nullptr;
-    ICY_ERROR(make_image_data(heap, type, new_data));
+    ICY_ERROR(make_image_data(realloc, user, type, new_data));
     ICY_SCOPE_EXIT{ release(new_data); };
     
     struct buffer_write : data_type::write_stream
@@ -74,13 +75,13 @@ error_type image::save(global_heap_type heap, const const_matrix_view<color> col
     ICY_ERROR(new_data->save(colors, write));
     return {};
 }
-error_type image::save(global_heap_type heap, const const_matrix_view<color> colors, const string_view file_name, image_type type)
+error_type image::save(const realloc_func realloc, void* const user, const const_matrix_view<color> colors, const string_view file_name, image_type type)
 {
     if (type == image_type::unknown)
         type = type_from_string(file_name);
     
     data_type* new_data = nullptr;
-    ICY_ERROR(make_image_data(heap, type, new_data));
+    ICY_ERROR(make_image_data(realloc, user, type, new_data));
     ICY_SCOPE_EXIT{ release(new_data); };
 
     struct file_write : data_type::write_stream
@@ -95,13 +96,13 @@ error_type image::save(global_heap_type heap, const const_matrix_view<color> col
     ICY_ERROR(new_data->save(colors, write));
     return {};
 }
-error_type image::load(global_heap_type heap, const const_array_view<uint8_t> buffer, image_type type) noexcept
+error_type image::load(const realloc_func realloc, void* const user, const const_array_view<uint8_t> buffer, image_type type) noexcept
 {
     if (type == image_type::unknown)
         type = type_from_buffer(buffer);
 
     data_type* new_data = nullptr;
-    ICY_ERROR(make_image_data(heap, type, new_data));
+    ICY_ERROR(make_image_data(realloc, user, type, new_data));
     ICY_SCOPE_EXIT{ release(new_data); };
     ICY_ERROR(new_data->load(buffer));
 
@@ -109,7 +110,7 @@ error_type image::load(global_heap_type heap, const const_array_view<uint8_t> bu
     std::swap(m_data, new_data);
     return {};
 }
-error_type image::load(global_heap_type heap, const string_view file_name, image_type type) noexcept
+error_type image::load(const realloc_func realloc, void* const user, const string_view file_name, image_type type) noexcept
 {
     if (type == image_type::unknown)
     {
@@ -126,7 +127,7 @@ error_type image::load(global_heap_type heap, const string_view file_name, image
     ICY_ERROR(file.read(bytes.data(), count));
     ICY_ERROR(bytes.resize(count));
 
-    return load(heap, bytes, type);
+    return load(realloc, user, bytes, type);
 }
 error_type image::view(const image_size offset, const matrix_view<color> colors) noexcept
 {

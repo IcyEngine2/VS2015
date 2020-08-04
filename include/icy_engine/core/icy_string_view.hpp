@@ -231,11 +231,15 @@ namespace icy
     uint32_t hash(const string_view string) noexcept;
     uint64_t hash64(const string_view string) noexcept;
 
-    //  split string by whitespace
-    error_type split(const string_view str, array<string_view>& words) noexcept;
     //  split string by specific delimiter
-    error_type split(const string_view str, array<string_view>& words, const char delim) noexcept;
-
+	error_type split(const string_view str, array<string_view>& words, const string_view delims) noexcept;
+	inline error_type split(const string_view str, array<string_view>& words, const char delim) noexcept
+	{
+		return split(str, words, string_view(&delim, 1));
+	}
+	//  split string by whitespace
+	error_type split(const string_view str, array<string_view>& words) noexcept;
+    
     static const char base64_alpha[] =
         "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
         "abcdefghijklmnopqrstuvwxyz"
