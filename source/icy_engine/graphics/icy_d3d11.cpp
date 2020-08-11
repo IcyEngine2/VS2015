@@ -164,8 +164,8 @@ error_type d3d11_display_system::resize(IDXGISwapChain& chain, const window_size
     ICY_COM_ERROR(chain.GetBuffer(0, IID_PPV_ARGS(&m_buffer)));
     ICY_COM_ERROR(m_device->CreateRenderTargetView(m_buffer, &CD3D11_RENDER_TARGET_VIEW_DESC(
         D3D11_RTV_DIMENSION_TEXTURE2D, DXGI_FORMAT_R8G8B8A8_UNORM), &m_view));
-    ICY_ERROR(rename(*m_buffer, "D3D11 Display Back Buffer Texture"));
-    ICY_ERROR(rename(*m_view, "D3D11 Display Back Buffer RTV"));
+    ICY_ERROR(rename(*m_buffer, "D3D11 Display Back Buffer Texture"_s));
+    ICY_ERROR(rename(*m_view, "D3D11 Display Back Buffer RTV"_s));
     m_size = size;
     return error_type();
 }

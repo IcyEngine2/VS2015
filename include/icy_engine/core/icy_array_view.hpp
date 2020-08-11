@@ -274,11 +274,11 @@ namespace icy
 		{
 			ICY_ASSERT(begin <= end, "INVALID ITERATOR RANGE (BEGIN > END)");
 		}
-		template<typename container_type>
+		template<typename container_type, typename = std::enable_if_t<!std::is_same<container_type, std::initializer_list<T>>::value>>
 		const_array_view(const container_type& container) noexcept :
 			const_array_view(std::data(container), std::size(container))
 		{
-
+			static_assert(!std::is_same<container_type, std::initializer_list<T>>::value, "INVALID CONTAINER");
 		}
 		const_array_view(const std::initializer_list<T> list) noexcept :
 			m_ptr{ const_cast<T*>(list.begin()) }, m_size{ list.size() }

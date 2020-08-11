@@ -85,9 +85,9 @@ namespace icy
             }
             return it;
         }
-        error_type erase(const T& key, iterator* it = nullptr) noexcept
+        error_type erase(const T& key, const_iterator* it = nullptr) noexcept
         {
-            auto search = find(key);
+            const_iterator search = find(key);
             if (search != end())
             {
                 search = erase(search);
@@ -120,6 +120,12 @@ namespace icy
         error_type insert(const value_type& key, const_iterator* it = nullptr) noexcept
         {
             return insert(value_type(key), it);
+        }
+        error_type try_insert(const value_type& key) noexcept
+        {
+            if (try_find(key))
+                return error_type();
+            return insert(key);
         }
         template<typename U>
         error_type assign(U&& rhs) noexcept

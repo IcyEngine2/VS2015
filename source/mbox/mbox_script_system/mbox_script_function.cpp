@@ -8,7 +8,7 @@ error_type mbox_function::initialize() LUA_NOEXCEPT
     {
         string name;
         ICY_ERROR(mbox_rpath(*m_objects, m_object->index, name));
-        ICY_ERROR(m_lua->parse(m_func, m_object->value, name.bytes().data()));
+        ICY_ERROR(m_lua->parse(m_func, string_view(m_object->value.data(), m_object->value.size()), name.bytes().data()));
     }
 
     lua_variable lua_mbox;
@@ -27,7 +27,9 @@ error_type mbox_function::initialize() LUA_NOEXCEPT
 
     const auto append = [&](lua_cfunction func, const mbox_reserved_name name)
     {
-        const auto str = string_view(mbox_reserved_names[uint32_t(name)]);
+        const auto str = icy::to_string(name);
+        if (str.empty())
+            return make_stdlib_error(std::errc::invalid_argument);
         lua_variable var_func;
         lua_variable var_str;
         ICY_ERROR(m_lua->make_function(var_func, func, this));
@@ -51,12 +53,12 @@ error_type mbox_function::initialize() LUA_NOEXCEPT
             new_action.type = mbox_action_type::add_character;
             ICY_ERROR(self->make_index(input[0], { mbox_type::character }, new_action.ref));
             new_action.slot = uint32_t(input[1].as_number());
-            ICY_ERROR(self->m_actions.push_back(std::move(new_action)));
+            ICY_ERROR(self->m_actions->push_back(std::move(new_action)));
             return error_type();
         };
         ICY_ERROR(append(add_character, mbox_reserved_name::add_character));
     }
-    if (m_object->type == mbox_type::action_script)
+    else if (m_object->type == mbox_type::action_script)
     {
         static const auto send_key_any = [](const mbox_action_type type, void* func, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
         {
@@ -69,21 +71,7 @@ error_type mbox_function::initialize() LUA_NOEXCEPT
             ICY_ERROR(self->make_input(input[0], new_action.input));
             if (input.size() >= 2)
                 ICY_ERROR(self->make_target(input[1], new_action.target));
-            ICY_ERROR(self->m_actions.push_back(std::move(new_action)));
-            return error_type();
-        };
-        static const auto send_macro_var = [](const mbox_action_type type, void* func, const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
-        {
-            const auto self = static_cast<mbox_function*>(func);
-            if (input.size() < 1)
-                return self->m_lua->post_error("SendVarMacro: expected 1 or more arguments"_s);
-
-            mbox_action new_action;
-            new_action.type = type;
-            ICY_ERROR(self->make_target(input[0], new_action.var_macro));
-            if (input.size() >= 2)
-                ICY_ERROR(self->make_target(input[1], new_action.target));
-            ICY_ERROR(self->m_actions.push_back(std::move(new_action)));
+            ICY_ERROR(self->m_actions->push_back(std::move(new_action)));
             return error_type();
         };
         const auto send_key_down = [](void* func, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
@@ -109,34 +97,29 @@ error_type mbox_function::initialize() LUA_NOEXCEPT
             ICY_ERROR(self->make_index(input[0], { mbox_type::action_macro }, new_action.ref));
             if (input.size() >= 2)
                 ICY_ERROR(self->make_target(input[1], new_action.target));
-            ICY_ERROR(self->m_actions.push_back(std::move(new_action)));
+            ICY_ERROR(self->m_actions->push_back(std::move(new_action)));
             return error_type();
         };
-        const auto send_macro_follow = [](void* func, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
+        const auto send_var_macro = [](void* func, const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
         {
-            return send_macro_var(mbox_action_type::send_macro_follow, func, input, output);
-        };
-        const auto send_macro_assist = [](void* func, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
-        {
-            return send_macro_var(mbox_action_type::send_macro_assist, func, input, output);
-        };
-        const auto send_macro_target = [](void* func, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
-        {
-            return send_macro_var(mbox_action_type::send_macro_target, func, input, output);
-        };
-        const auto send_macro_focus = [](void* func, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
-        {
-            return send_macro_var(mbox_action_type::send_macro_focus, func, input, output);
-        };
+            const auto self = static_cast<mbox_function*>(func);
+            if (input.size() < 2)
+                return self->m_lua->post_error("SendVarMacro: expected 2 or more arguments"_s);
 
+            mbox_action new_action;
+            new_action.type = mbox_action_type::send_var_macro;
+            ICY_ERROR(self->make_index(input[0], { mbox_type::action_var_macro }, new_action.ref));
+            ICY_ERROR(self->make_target(input[1], new_action.var_macro));
+            if (input.size() >= 3)
+                ICY_ERROR(self->make_target(input[2], new_action.target));
+            ICY_ERROR(self->m_actions->push_back(std::move(new_action)));
+            return error_type();
+        };
         ICY_ERROR(append(send_key_down, mbox_reserved_name::send_key_down));
         ICY_ERROR(append(send_key_up, mbox_reserved_name::send_key_up));
         ICY_ERROR(append(send_key_press, mbox_reserved_name::send_key_press));
         ICY_ERROR(append(send_macro, mbox_reserved_name::send_macro));
-        ICY_ERROR(append(send_macro_follow, mbox_reserved_name::follow));
-        ICY_ERROR(append(send_macro_assist, mbox_reserved_name::assist));
-        ICY_ERROR(append(send_macro_target, mbox_reserved_name::target));
-        ICY_ERROR(append(send_macro_focus, mbox_reserved_name::focus));
+        ICY_ERROR(append(send_var_macro, mbox_reserved_name::send_var_macro));
     }
     static const auto join_or_leave_group = [](const mbox_action_type type, void* func, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
     {
@@ -149,7 +132,7 @@ error_type mbox_function::initialize() LUA_NOEXCEPT
         ICY_ERROR(self->make_index(input[0], { mbox_type::group }, new_action.ref));
         if (input.size() >= 2)
             ICY_ERROR(self->make_target(input[1], new_action.target));
-        ICY_ERROR(self->m_actions.push_back(std::move(new_action)));
+        ICY_ERROR(self->m_actions->push_back(std::move(new_action)));
         return error_type();
     };
     const auto join_group = [](void* func, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
@@ -174,7 +157,7 @@ error_type mbox_function::initialize() LUA_NOEXCEPT
         ICY_ERROR(self->make_index(input[0], { mbox_type::action_script }, new_action.ref));
         if (input.size() >= 2)
             ICY_ERROR(self->make_target(input[1], new_action.target));
-        ICY_ERROR(self->m_actions.push_back(std::move(new_action)));
+        ICY_ERROR(self->m_actions->push_back(std::move(new_action)));
         return error_type();
     };
     ICY_ERROR(append(run_script, mbox_reserved_name::run_script));
@@ -190,7 +173,7 @@ error_type mbox_function::initialize() LUA_NOEXCEPT
         ICY_ERROR(self->make_index(input[0], { mbox_type::event }, new_action.ref));
         if (input.size() >= 2)
             ICY_ERROR(self->make_target(input[1], new_action.target));
-        ICY_ERROR(self->m_actions.push_back(std::move(new_action)));
+        ICY_ERROR(self->m_actions->push_back(std::move(new_action)));
         return error_type();
     };
     ICY_ERROR(append(run_script, mbox_reserved_name::run_script));
@@ -209,7 +192,7 @@ error_type mbox_function::initialize() LUA_NOEXCEPT
         ICY_ERROR(self->m_lua->copy(input[1], new_action.callback));
         if (input.size() >= 3)
             ICY_ERROR(self->make_target(input[2], new_action.target));
-        ICY_ERROR(self->m_actions.push_back(std::move(new_action)));
+        ICY_ERROR(self->m_actions->push_back(std::move(new_action)));
         return error_type();
     };
     const auto on_key_down = [](void* func, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
@@ -237,7 +220,7 @@ error_type mbox_function::initialize() LUA_NOEXCEPT
         ICY_ERROR(self->m_lua->copy(input[1], new_action.callback));
         if (input.size() >= 3)
             ICY_ERROR(self->make_target(input[2], new_action.target));
-        ICY_ERROR(self->m_actions.push_back(std::move(new_action)));
+        ICY_ERROR(self->m_actions->push_back(std::move(new_action)));
         return error_type();
     };
     ICY_ERROR(append(on_event, mbox_reserved_name::on_event));
@@ -258,28 +241,163 @@ error_type mbox_function::initialize() LUA_NOEXCEPT
     };
     ICY_ERROR(append(others, mbox_reserved_name::others));
 
+    for (auto&& pair : m_object->refs)
+    {
+        string str;
+        ICY_ERROR(copy(pair.key, str));
+        ICY_ERROR(m_names.insert(pair.value, std::move(str)));
+    }
+
     return error_type();
 }
-error_type mbox_function::operator()(icy::array<mbox_action>& actions) LUA_NOEXCEPT
+error_type mbox_function::operator()(icy::array<mbox_action>& actions) const LUA_NOEXCEPT
 {
     if (m_func.type() != lua_type::function)
         return make_stdlib_error(std::errc::invalid_argument);
-    if (const auto error = m_func())
+    m_actions = &actions;
+    ICY_SCOPE_EXIT{ m_actions = nullptr; };
+    return const_cast<lua_variable&>(m_func)();
+}
+error_type mbox_function::to_string(const string_view default_character, const mbox_action& action, string& str) const noexcept
+{
+    const auto to_string = [&default_character, this](const mbox_action_target& target, string& str)
     {
-        m_actions.clear();
-        return error;
+        switch (target.type)
+        {
+        case mbox_action_target::type_character:
+        {
+            ICY_ERROR(str.appendf("Character \"%1\""_s, name(target.index)));
+            break;
+        }
+        case mbox_action_target::type_party:
+        {
+            ICY_ERROR(icy::to_string("Party[%1]"_s, str, target.slot));
+            break;
+        }
+        case mbox_action_target::type_group:
+        {
+            if (target.mod == mbox_action_target::everyone)
+            {
+                ICY_ERROR(icy::to_string("Everyone in \"%1\""_s, str, name(target.index)));
+            }
+            else if (target.mod == mbox_action_target::others)
+            {
+                ICY_ERROR(icy::to_string("Others in \"%1\""_s, str, name(target.index)));
+            }
+            break;
+        }
+        }
+        if (str.empty())
+        {
+            if (!default_character.empty())
+            {
+                ICY_ERROR(copy(default_character, str));
+            }
+            else
+            {
+                ICY_ERROR(str.append("Unknown target"_s));
+            }
+        }
+
+        return error_type();
+    };
+    string str_target;
+    ICY_ERROR(to_string(action.target, str_target));
+    const auto target = string_view(str_target);
+
+    string_view event;
+    if (action.type == mbox_action_type::send_key_down ||
+        action.type == mbox_action_type::on_key_down)
+        event = "Key Down"_s;
+    else if (
+        action.type == mbox_action_type::send_key_up ||
+        action.type == mbox_action_type::on_key_up)
+        event = "Key Up"_s;
+    else if (action.type == mbox_action_type::send_key_press)
+        event = "Key Press"_s;
+
+    string_view ref_name = name(action.ref);
+    string ref_name_str;
+    if (ref_name.empty() && action.ref)
+    {
+        ICY_ERROR(mbox_rpath(*m_objects, action.ref, ref_name_str));
+        ref_name = ref_name_str;
     }
-    actions = std::move(m_actions);
+
+    switch (action.type)
+    {
+    case mbox_action_type::add_character:
+    {
+        ICY_ERROR(str.appendf("Add character \"%1\" as Party[%2]"_s, ref_name, action.slot));
+        break;
+    }
+    case mbox_action_type::join_group:
+    {
+        ICY_ERROR(str.appendf("%1: join group \"%2\""_s, target, ref_name));
+        break;
+    }
+    case mbox_action_type::leave_group:
+    {
+        ICY_ERROR(str.appendf("%1: leave group \"%2\""_s, target, ref_name));
+        break;
+    }
+    case mbox_action_type::run_script:
+    {
+        ICY_ERROR(str.appendf("%1: run script \"%2\""_s, target, ref_name));
+        break;
+    }
+    case mbox_action_type::send_key_down:
+    case mbox_action_type::send_key_up:
+    case mbox_action_type::send_key_press:
+    {
+        string str_input;
+        ICY_ERROR(icy::to_string(action.input, str_input));
+        ICY_ERROR(str.appendf("Send event=\"%1\", key=\"%2\" to %3"_s, event, string_view(str_input), target));
+        break;
+    }
+    case mbox_action_type::send_macro:
+    {
+        ICY_ERROR(str.appendf("%1: run macro \"%2\""_s, target, ref_name));
+        break;
+    }
+    case mbox_action_type::send_var_macro:
+    {
+        string var_target;
+        ICY_ERROR(to_string(action.var_macro, var_target));
+        ICY_ERROR(str.appendf("%1: run var macro \"%2\" with @mbox=%3"_s, target, ref_name, string_view(var_target)));
+        break;
+    }
+    case mbox_action_type::post_event:
+    {
+        ICY_ERROR(str.appendf("Post event \"%1\" to %2"_s, ref_name, target));
+        break;
+    }
+    case mbox_action_type::on_key_down:
+    case mbox_action_type::on_key_up:
+    {
+        string str_input;
+        ICY_ERROR(icy::to_string(action.input, str_input));
+        ICY_ERROR(str.appendf("%1: subscribe for event=\"On %2\", key=\"%3\""_s, target, event, string_view(str_input)));
+        break;
+    }
+    case mbox_action_type::on_event:
+    {
+        ICY_ERROR(str.appendf("%1: subscribe for event=\"%2\""_s, target, ref_name));
+        break;
+    }
+    }
     return error_type();
 }
+
+
 error_type mbox_function::make_target(const lua_variable& input, mbox_action_target& target) const LUA_NOEXCEPT
 {
     if (input.type() == lua_type::number)
     {
-        target.type = mbox_action_target::type_party;
+        if (input.as_number() < 0)
+            return m_lua->post_error("Target: expected party slot number >= 0"_s);
         target.slot = uint32_t(input.as_number());
-        if (target.slot == 0)
-            return m_lua->post_error("Target: expected party slot number > 0"_s);
+        target.type = target.slot ? mbox_action_target::type_party : mbox_action_target::type_none;
     }
     else if (input.type() == lua_type::pointer)
     {
@@ -399,7 +517,7 @@ error_type mbox_function::make_input(const lua_variable& input, input_message& m
         else
         {
             string msg_str(m_lua->realloc(), m_lua->user());
-            ICY_ERROR(to_string("ParseInput: unknown mod '%1'"_s, msg_str, words[k - 1]));
+            ICY_ERROR(icy::to_string("ParseInput: unknown mod '%1'"_s, msg_str, words[k - 1]));
             return m_lua->post_error(msg_str);
         }
     }
@@ -410,7 +528,7 @@ error_type mbox_function::make_input(const lua_variable& input, input_message& m
     for (auto k = 1u; k < 256u; ++k)
     {
         string lower_key(m_lua->realloc(), m_lua->user());
-        ICY_ERROR(to_lower(to_string(key(k)), lower_key));
+        ICY_ERROR(to_lower(icy::to_string(key(k)), lower_key));
         if (lower_key == lower_word)
         {
             msg = input_message(input_type::none, key(k), mod);
@@ -418,6 +536,6 @@ error_type mbox_function::make_input(const lua_variable& input, input_message& m
         }
     }
     string msg_str(m_lua->realloc(), m_lua->user());
-    ICY_ERROR(to_string("ParseInput: unknown key '%1'"_s, msg_str, words.back()));
+    ICY_ERROR(icy::to_string("ParseInput: unknown key '%1'"_s, msg_str, words.back()));
     return m_lua->post_error(msg_str);
 }

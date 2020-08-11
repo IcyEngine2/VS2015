@@ -21,13 +21,13 @@ namespace icy
         binary,
     };
     extern const error_type lua_error_execute;
-    extern const error_type lua_error_parse;
 
     class lua_system;
     class lua_object;
     class lua_variable;
     using lua_cfunction = error_type(*)(void* user, const const_array_view<lua_variable> input, array<lua_variable>* output);
-    
+    extern const char* lua_keywords;
+
     enum class lua_default_library
     {
         none,

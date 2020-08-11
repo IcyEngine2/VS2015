@@ -83,6 +83,12 @@ namespace icy
                 return gui->enable(*this, value);
             return error_type();
         }
+        error_type readonly(const bool value) noexcept
+        {
+            if (auto gui = shared_ptr<gui_queue>(global_gui))
+                return gui->readonly(*this, value);
+            return error_type();
+        }
         error_type icon(const gui_image icon) noexcept
         {
             if (auto gui = shared_ptr<gui_queue>(global_gui))
@@ -438,7 +444,7 @@ namespace icy
         string msg;
         if (error)
         {
-            ICY_ERROR(to_string("Error: %4 - %1 code [%2]: %3", msg, error.source, long(error.code), error, text));
+            ICY_ERROR(to_string("Error: %4 - %1 code [%2]: %3"_s, msg, error.source, long(error.code), error, text));
         }
         else
         {

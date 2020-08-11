@@ -811,7 +811,7 @@ error_type lua_system_data::print(int index, error_type(*func)(void* pdata, cons
     switch (::lua_type(lua, index))
     {
     case LUA_TBOOLEAN:
-        ICY_ERROR(func(pdata, lua_toboolean(lua, index) ? "true" : "false"));
+        ICY_ERROR(func(pdata, lua_toboolean(lua, index) ? "true"_s : "false"_s));
         break;
     case LUA_TNUMBER:
     {
@@ -861,7 +861,7 @@ error_type lua_system_data::print(int index, error_type(*func)(void* pdata, cons
                 ICY_ERROR(error);
             }
             ICY_ERROR(func(pdata, tabs));
-            ICY_ERROR(func(pdata, "}"));
+            ICY_ERROR(func(pdata, "}"_s));
         }
         break;
     }
@@ -917,11 +917,11 @@ error_type lua_system_data::print(int index, error_type(*func)(void* pdata, cons
             ICY_ERROR(error);
         }
         ICY_ERROR(func(pdata, tabs));
-        ICY_ERROR(func(pdata, "}"));
+        ICY_ERROR(func(pdata, "}"_s));
         break;
     }
     default:
-        ICY_ERROR(func(pdata, "null"));
+        ICY_ERROR(func(pdata, "null"_s));
         break;
     }
     return error_type();
@@ -1020,9 +1020,8 @@ static error_type lua_error_to_string(unsigned int code, string_view locale, str
     }
     return make_stdlib_error(std::errc::invalid_argument);
 }
-const error_source icy::error_source_lua = register_error_source("lua", ::lua_error_to_string);
+const error_source icy::error_source_lua = register_error_source("lua"_s, ::lua_error_to_string);
 const error_type icy::lua_error_execute = make_lua_error(LUA_ERRRUN);
-const error_type icy::lua_error_parse = make_lua_error(LUA_ERRSYNTAX);
 
 string_view icy::to_string(const lua_default_library lib) noexcept
 {
@@ -1055,7 +1054,7 @@ error_type icy::lua_error_to_string(const error_type& error, string& msg) noexce
     {
         auto error_msg = string_view(static_cast<const char*>(error.message->data()), error.message->size());
         array<string_view> lines;
-        ICY_ERROR(split(error_msg, lines, "\r\n"));
+        ICY_ERROR(split(error_msg, lines, "\r\n"_s));
 
         string new_error_msg;
         if (!lines.empty())
@@ -1063,15 +1062,15 @@ error_type icy::lua_error_to_string(const error_type& error, string& msg) noexce
             array<string_view> stack;
             for (auto k = 2u; k < lines.size(); ++k)
             {
-                if (lines[k] != "\t[C]: in ?")
+                if (lines[k] != "\t[C]: in ?"_s)
                     stack.push_back(lines[k]);
             }
             ICY_ERROR(new_error_msg.append(lines[0]));
             if (!stack.empty())
             {
-                ICY_ERROR(new_error_msg.append("\r\nLUA Stack trace:"));
+                ICY_ERROR(new_error_msg.append("\r\nLUA Stack trace:"_s));
                 for (auto&& line : stack)
-                    ICY_ERROR(new_error_msg.appendf("\r\n%1", line));
+                    ICY_ERROR(new_error_msg.appendf("\r\n%1"_s, line));
             }
             error_msg = new_error_msg;
         }
@@ -1091,3 +1090,6 @@ error_type icy::create_lua_system(shared_ptr<lua_system>& system, realloc_func r
     system = std::move(new_ptr);
     return error_type();
 }
+
+const char* icy::lua_keywords = "and break do else elseif end false for function goto"
+" if in ilocal nil not or repeat return then true until while";

@@ -145,14 +145,12 @@ string_view icy::to_string(const event_type type) noexcept
 {
     switch (type)
     {
-    case event_type::window_active:
-        return "window active"_s;
-    case event_type::window_close:
-        return "window _close"_s;
+    case event_type::window_data:
+        return "window data"_s;
+    case event_type::window_state:
+        return "window state"_s;
     case event_type::window_input:
         return "window input"_s;
-    case event_type::window_minimized:
-        return "window minimized"_s;
     case event_type::window_resize:
         return "window resize"_s;
     default:

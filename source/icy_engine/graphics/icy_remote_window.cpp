@@ -1,5 +1,6 @@
 #include <icy_engine/core/icy_string.hpp>
 #include <icy_engine/core/icy_map.hpp>
+#include <icy_engine/core/icy_thread.hpp>
 #include <icy_engine/graphics/icy_remote_window.hpp>
 #include <dwmapi.h>
 #include <Windows.h>
@@ -8,6 +9,7 @@ using namespace icy;
 
 #define ICY_WIN32_FUNC(X, Y) X = ICY_FIND_FUNC(lib, Y); if (!X) return make_stdlib_error(std::errc::function_not_supported) 
 
+ICY_STATIC_NAMESPACE_BEG
 static decltype(&::SetWindowTextW) win32_set_window_text;
 static decltype(&::GetWindowTextW) win32_get_window_text;
 static decltype(&::GetWindowTextLengthW) win32_get_window_text_length;
@@ -17,6 +19,45 @@ static decltype(&::SetWindowsHookExW) win32_set_windows_hook_ex;
 static decltype(&::UnhookWindowsHookEx) win32_unhook_windows_hook_ex;
 static decltype(&::SendMessageTimeoutW) win32_send_message_timeout;
 static decltype(&::SendMessageW) win32_send_message;
+class remote_window_system_data;
+class remote_window_thread : public icy::thread
+{
+public:
+    remote_window_system_data* system = nullptr;
+    error_type run() noexcept override;
+};
+struct internal_message
+{
+    HWND hwnd = nullptr;
+    uint32_t thread = 0;
+    uint32_t process = 0;
+};
+class remote_window_system_data : public remote_window_system
+{
+public:
+    error_type initialize() noexcept;
+    error_type exec() noexcept override;
+    ~remote_window_system_data() noexcept override;
+private:
+    const icy::thread& thread() const noexcept override
+    {
+        return *m_thread;
+    }
+    error_type signal(const event_data& event) noexcept override;
+    error_type notify_on_close(const remote_window window) noexcept override;
+private:
+    library m_lib = "user32"_lib;
+    decltype(&PostThreadMessageW) win32_post_thread_message = nullptr;
+    decltype(&SetWinEventHook) win32_set_win_event_hook = nullptr;
+    decltype(&UnhookWinEvent) win32_unhook_win_event = nullptr;
+    decltype(&MsgWaitForMultipleObjectsEx) win32_msg_wait_for_multiple_objects_ex = nullptr;
+    decltype(&PeekMessageW) win32_peek_message = nullptr;
+    decltype(&TranslateMessage) win32_translate_message = nullptr;
+    decltype(&DispatchMessageW) win32_dispatch_message = nullptr;
+    map<HWND__*, HWINEVENTHOOK> m_hooks;
+    shared_ptr<remote_window_thread> m_thread;
+};
+ICY_STATIC_NAMESPACE_END
 
 class remote_window::data_type
 {
@@ -112,27 +153,6 @@ error_type remote_window::enumerate(array<remote_window>& vec) noexcept
             if (!wlen)
                 return false;
 
-           /* auto hwnd_walk = HWND(nullptr);
-            auto hwnd_try = self->win32_get_ancestor(hwnd, GA_ROOTOWNER);
-            while (hwnd_try != hwnd_walk)
-            {
-                hwnd_walk = hwnd_try;
-                hwnd_try = self->win32_get_last_active_popup(hwnd_walk);
-                if (self->win32_is_window_visible(hwnd_try))
-                    break;
-            }
-            if (hwnd_walk != hwnd)
-                return false;*/
-
-            // the following removes some task tray programs and "Program Manager"
-
-            /*TITLEBARINFO ti = { sizeof(ti) };
-            self->win32_title_bar_info(hwnd, &ti);
-            if (ti.rgstate[0] & STATE_SYSTEM_INVISIBLE)
-                return false;*/
-
-            // Tool windows should not be displayed either, these do not appear in the
-            // task bar.
             if (self->win32_get_window_long(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW)
                return false;
 
@@ -305,39 +325,13 @@ error_type remote_window::rename(const string_view name) noexcept
     return error_type();
 }
 
-class remote_window_system_data : public remote_window_system
-{
-public:
-    error_type initialize() noexcept;
-    ~remote_window_system_data() noexcept override;
-private:
-    struct message_type
-    {
-        HWND hwnd = nullptr;
-        uint32_t thread = 0;
-        uint32_t process = 0;
-    };
-private:
-    error_type signal(const event_data& event) noexcept override;
-    error_type exec() noexcept override;
-    error_type notify_on_close(const remote_window window) noexcept override;    
-private:
-    library m_lib = "user32"_lib;
-    decltype(&PostThreadMessageW) win32_post_thread_message = nullptr;
-    decltype(&SetWinEventHook) win32_set_win_event_hook = nullptr;
-    decltype(&UnhookWinEvent) win32_unhook_win_event = nullptr;
-    decltype(&MsgWaitForMultipleObjectsEx) win32_msg_wait_for_multiple_objects_ex = nullptr;
-    decltype(&PeekMessageW) win32_peek_message = nullptr;
-    decltype(&TranslateMessage) win32_translate_message = nullptr;
-    decltype(&DispatchMessageW) win32_dispatch_message = nullptr;
-    std::atomic<uint32_t> m_thread = 0;
-    map<HWND__*, HWINEVENTHOOK> m_hooks;
-};
-
 remote_window_system_data::~remote_window_system_data() noexcept
 {
+    if (m_thread)
+        m_thread->wait();
     for (auto&& pair : m_hooks)
         win32_unhook_win_event(pair.value);
+    filter(0);
 }
 error_type remote_window_system_data::initialize() noexcept
 {
@@ -350,13 +344,16 @@ error_type remote_window_system_data::initialize() noexcept
     ICY_WIN32_FUNC(win32_peek_message, PeekMessageW);
     ICY_WIN32_FUNC(win32_translate_message, TranslateMessage);
     ICY_WIN32_FUNC(win32_dispatch_message, DispatchMessageW);
+    ICY_ERROR(make_shared(m_thread));
+    m_thread->system = this;
+    filter(event_type::global_quit);
     return error_type();
 }
 error_type remote_window_system_data::signal(const event_data& event) noexcept
 {
-    if (auto thread = m_thread.load())
+    if (auto thread = m_thread->index())
     {
-        if (!win32_post_thread_message(thread, WM_NULL, 0, 0))
+        if (!win32_post_thread_message(thread, WM_USER, 0, 0))
             return last_system_error();
     }
     else
@@ -367,7 +364,6 @@ error_type remote_window_system_data::signal(const event_data& event) noexcept
 }
 error_type remote_window_system_data::exec() noexcept
 {
-    m_thread.store(GetCurrentThreadId());
     const auto timeout = max_timeout;
 
     static thread_local remote_window_system_data* g_instance = this;
@@ -381,48 +377,47 @@ error_type remote_window_system_data::exec() noexcept
 
             if (event->type == event_type::system_internal)
             {
-                if (shared_ptr<event_system>(event->source).get() == this)
+                const auto& msg = event->data<internal_message>();
+                const auto it = m_hooks.find(msg.hwnd);
+                if (it == m_hooks.end() && msg.process && msg.thread)
                 {
-                    const auto& msg = event->data<message_type>();
-                    const auto it = m_hooks.find(msg.hwnd);
-                    if (it == m_hooks.end() && msg.process && msg.thread)
+                    const WINEVENTPROC proc = [](HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD idEventThread, DWORD dwmsEventTime)
                     {
-                        const WINEVENTPROC proc = [](HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD idEventThread, DWORD dwmsEventTime)
+                        if (event == EVENT_OBJECT_DESTROY && idObject == OBJID_WINDOW && idChild == INDEXID_CONTAINER)
                         {
-                            if (event == EVENT_OBJECT_DESTROY && idObject == OBJID_WINDOW && idChild == INDEXID_CONTAINER)
+                            const auto find = g_instance->m_hooks.find(hwnd);
+                            if (find != g_instance->m_hooks.end())
                             {
-                                const auto find = g_instance->m_hooks.find(hwnd);
-                                if (find != g_instance->m_hooks.end())
-                                {
-                                    message_type msg;
-                                    msg.hwnd = hwnd;
-                                    g_instance->post(g_instance, event_type::system_internal, std::move(msg));
-                                }
+                                internal_message msg;
+                                msg.hwnd = hwnd;
+                                g_instance->post(g_instance, event_type::system_internal, std::move(msg));
                             }
-                        };
+                        }
+                    };
 
-                        auto new_hook = win32_set_win_event_hook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_DESTROY, nullptr, 
-                            proc, msg.process, msg.thread, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
-                        if (!new_hook)
-                            return make_stdlib_error(std::errc::invalid_argument);
-                        ICY_SCOPE_EXIT{ if (new_hook) win32_unhook_win_event(new_hook); };
-                        
-                        ICY_ERROR(m_hooks.insert(msg.hwnd, new_hook));
-                        new_hook = nullptr;
-                    }
-                    else if (it != m_hooks.end() && msg.process == 0 && msg.thread == 0)
-                    {
-                        error_type error;
-                        if (!win32_unhook_win_event(it->value))
-                            error = last_system_error();
+                    auto new_hook = win32_set_win_event_hook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_DESTROY, nullptr,
+                        proc, msg.process, msg.thread, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+                    if (!new_hook)
+                        return make_stdlib_error(std::errc::invalid_argument);
+                    ICY_SCOPE_EXIT{ if (new_hook) win32_unhook_win_event(new_hook); };
 
-                        m_hooks.erase(it);
-                        ICY_ERROR(error);
-                    }
+                    ICY_ERROR(m_hooks.insert(msg.hwnd, new_hook));
+                    new_hook = nullptr;
                 }
-                continue;
+                else if (it != m_hooks.end() && msg.process == 0 && msg.thread == 0)
+                {
+                    error_type error;
+                    if (!win32_unhook_win_event(it->value))
+                        error = last_system_error();
+
+                    m_hooks.erase(it);
+                    const auto error2 = event::post(this, remote_window_event_type, HWND(msg.hwnd));
+                    ICY_ERROR(error);
+                    ICY_ERROR(error2);
+                }
             }
-            return make_stdlib_error(std::errc::invalid_argument);
+            else 
+                return make_stdlib_error(std::errc::invalid_argument);
         }
         const auto index = win32_msg_wait_for_multiple_objects_ex(0, nullptr, ms_timeout(timeout), QS_POSTMESSAGE, MWMO_ALERTABLE);
         if (index == 0)
@@ -438,22 +433,32 @@ error_type remote_window_system_data::exec() noexcept
         {
             return make_stdlib_error(std::errc::timed_out);
         }
+        else if (index == WAIT_ABANDONED)
+        {
+            return error_type();
+        }
         else //if (index == WAIT_FAILED)
         {
             return last_system_error();
         }
     }
+    return error_type();
 }
 error_type remote_window_system_data::notify_on_close(const remote_window window) noexcept
 {
     if (!window.handle())
         return make_stdlib_error(std::errc::invalid_argument);
 
-    message_type msg;
+    internal_message msg;
     msg.hwnd = window.handle();
     msg.process = window.process();
     msg.thread = window.thread();
     return event_system::post(this, event_type::system_internal, std::move(msg));
+}
+
+error_type remote_window_thread::run() noexcept
+{
+    return system->exec();
 }
 
 error_type icy::create_event_system(shared_ptr<remote_window_system>& system) noexcept
@@ -464,3 +469,5 @@ error_type icy::create_event_system(shared_ptr<remote_window_system>& system) no
     system = std::move(new_ptr);
     return error_type();
 }
+
+const event_type icy::remote_window_event_type = icy::next_event_user();

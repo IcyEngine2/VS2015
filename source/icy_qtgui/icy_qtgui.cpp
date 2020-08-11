@@ -181,6 +181,7 @@ enum class qtgui_event_type : uint32_t
     undo,
     redo,
     append,
+    readonly,
 };
 
 class qtgui_event_create_widget : public QEvent
@@ -711,6 +712,19 @@ public:
     const gui_widget widget;
     const QString text;
 };
+class qtgui_event_readonly : public QEvent
+{
+public:
+    qtgui_event_readonly(const gui_widget widget, const bool value) :
+        QEvent(static_cast<QEvent::Type>(QEvent::User + uint32_t(qtgui_event_type::readonly))),
+        widget(widget), value(value)
+    {
+
+    }
+public:
+    const gui_widget widget;
+    const bool value;
+};
 class qtgui_splitter : public QSplitter
 {
 public:
@@ -879,6 +893,7 @@ private:
     uint32_t undo(const gui_widget widget) noexcept override;
     uint32_t redo(const gui_widget widget) noexcept override;
     uint32_t append(const gui_widget widget, const string_view text) noexcept override;
+    uint32_t readonly(const gui_widget widget, const bool value) noexcept override;
 private:
     std::errc process(const qtgui_event_create_widget& event);
     std::errc process(const qtgui_event_create_win32& event);
@@ -920,6 +935,7 @@ private:
     std::errc process(const qtgui_event_undo& event);
     std::errc process(const qtgui_event_redo& event);
     std::errc process(const qtgui_event_append& event);
+    std::errc process(const qtgui_event_readonly& event);
 private:
     detail::intrusive_mpsc_queue m_queue;
     QWidget m_root;
@@ -1238,6 +1254,9 @@ bool qtgui_system::notify(QObject* object, QEvent* event) noexcept
                     break;
                 case qtgui_event_type::append:
                     error = process(*static_cast<qtgui_event_append*>(event));
+                    break;
+                case qtgui_event_type::readonly:
+                    error = process(*static_cast<qtgui_event_readonly*>(event));
                     break;
                 default:
                     error = std::errc::function_not_supported;
@@ -1819,7 +1838,16 @@ uint32_t qtgui_system::append(const gui_widget widget, const string_view text) n
     }
     ICY_CATCH;
     return 0;
-
+}
+uint32_t qtgui_system::readonly(const gui_widget widget, const bool value) noexcept
+{
+    try
+    {
+        const auto event = new qtgui_event_readonly(widget, value);
+        qApp->postEvent(this, event);
+    }
+    ICY_CATCH;
+    return 0;
 }
 
 std::errc qtgui_system::process(const qtgui_event_create_widget& event)
@@ -2894,11 +2922,11 @@ std::errc qtgui_system::process(const qtgui_event_scroll& event)
     }
     else if (const auto combo = qobject_cast<QComboBox*>(widget))
     {
-        const auto index = combo->findData(qIndex.data(Qt::UserRole));
+        //const auto index = combo->findData(qIndex.data(Qt::UserRole));
         //combo->view()->selectionModel()->select(qIndex, QItemSelectionModel::SelectionFlag::Select);
         //auto oText = combo->currentText();
         //combo->blockSignals(true);
-        combo->setCurrentIndex(index);
+        combo->setCurrentIndex(qIndex.row());
         //combo->blockSignals(false);
         //auto nText = combo->currentText();
         //combo->setEditText(combo->currentText());
@@ -3126,6 +3154,29 @@ std::errc qtgui_system::process(const qtgui_event_append& event)
         text->moveCursor(QTextCursor::End);
         text->insertPlainText(event.text);
         text->moveCursor(QTextCursor::End);
+    }
+    else
+    {
+        return std::errc::invalid_argument;
+    }
+    return std::errc(0);
+}
+std::errc qtgui_system::process(const qtgui_event_readonly& event)
+{
+    if (event.widget.index >= m_widgets.size())
+        return std::errc::invalid_argument;
+
+    const auto widget = m_widgets[event.widget.index];
+    if (!widget)
+        return std::errc::invalid_argument;
+
+    if (const auto text = qobject_cast<QTextEdit*>(widget))
+    {
+        text->setReadOnly(event.value);
+    }
+    else if (const auto lineEdit = qobject_cast<QLineEdit*>(widget))
+    {
+        lineEdit->setReadOnly(event.value);
     }
     else
     {

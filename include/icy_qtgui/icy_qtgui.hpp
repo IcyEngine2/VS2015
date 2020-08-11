@@ -750,6 +750,7 @@ namespace icy
         virtual uint32_t undo(const gui_widget widget) noexcept = 0;
         virtual uint32_t redo(const gui_widget widget) noexcept = 0;
         virtual uint32_t append(const gui_widget widget, const string_view text) noexcept = 0;
+        virtual uint32_t readonly(const gui_widget widget, const bool value) noexcept = 0;
     protected:
         ~gui_system() noexcept = default;
     };
@@ -804,10 +805,7 @@ namespace icy
                 if (const auto error = m_system->loop(type, args))
                     return make_stdlib_error(static_cast<std::errc>(error));
 
-                if (type == event_type::window_close || 
-                    type == event_type::window_input ||
-                    type == event_type::window_active ||
-                    (type & event_type::gui_any))
+                if (type & event_type::gui_any)
                 {
                     ICY_ERROR(event::post(this, type, args));
                 }
@@ -1021,6 +1019,10 @@ namespace icy
         error_type append(const gui_widget widget, const string_view text) noexcept
         {
             ICY_GUI_ERROR(m_system->append(widget, text));
+        }
+        error_type readonly(const gui_widget widget, const bool value) noexcept
+        {
+            ICY_GUI_ERROR(m_system->readonly(widget, value));
         }
     private:
 #if ICY_QTGUI_STATIC

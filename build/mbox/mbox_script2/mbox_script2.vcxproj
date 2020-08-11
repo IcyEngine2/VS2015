@@ -80,10 +80,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\..\source\icy_engine\utility\icy_text_edit.cpp" />
     <ClCompile Include="..\..\..\source\mbox\mbox_script2\mbox_script_dbase.cpp" />
     <ClCompile Include="..\..\..\source\mbox\mbox_script2\mbox_script_main.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\..\include\icy_engine\utility\icy_text_edit.hpp" />
     <ClInclude Include="..\..\..\source\mbox\mbox_script2\mbox_script_dbase.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

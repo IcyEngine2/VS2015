@@ -153,9 +153,9 @@ error_type render_factory_data::close_commands_2d(render_commands_2d& commands, 
     d3d11_context->Flush();
     return error_type();
 }
-error_type render_factory_data::close_commands_2d(render_commands_2d& commands, window_system& window) const noexcept
+error_type render_factory_data::close_commands_2d(render_commands_2d& commands, window& window) const noexcept
 {
-    window_data::repaint_type repaint;
+    window_repaint_type repaint;
     if (commands.data)
     {
         ICY_ERROR(init_commands_2d(commands, repaint.map));
@@ -163,7 +163,7 @@ error_type render_factory_data::close_commands_2d(render_commands_2d& commands, 
         repaint.device = commands.data->device;
     }
     commands = render_commands_2d();
-    return static_cast<window_data&>(window).repaint(std::move(repaint));
+    return window.data->repaint(std::move(repaint));
 }
 
 error_type icy::create_render_factory(shared_ptr<render_factory>& system, const adapter& adapter, const render_flags flags) noexcept

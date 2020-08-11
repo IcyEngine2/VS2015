@@ -15,6 +15,10 @@
 #define ICY_MAX_TRACE 64
 #endif
 
+#ifndef _DECLSPEC_ALLOCATOR
+#define _DECLSPEC_ALLOCATOR __declspec(allocator)
+#endif
+
 namespace icy
 {
 	inline constexpr size_t operator""_kb(const uint64_t arg) noexcept

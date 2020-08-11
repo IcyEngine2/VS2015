@@ -271,6 +271,14 @@ namespace icy
                 return &it->value;
             return nullptr;
         }
+        template<typename U>
+        value_type* try_find(const U& key) noexcept
+        {
+            const auto it = find(key);
+            if (it != cend())
+                return &it->value;
+            return nullptr;
+        }
 	public:
 		error_type reserve(const size_type capacity) noexcept
 		{

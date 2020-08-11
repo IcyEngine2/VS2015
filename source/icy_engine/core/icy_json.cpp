@@ -382,6 +382,88 @@ const_array_view<json> json::vals() const noexcept
     return const_array_view<json>();
 }
 
+static error_type json_fix_string(const string_view str, string& new_str) noexcept
+{
+    for (auto it = str.begin(); it != str.end(); ++it)
+    {
+        char32_t chr = 0;
+        ICY_ERROR(it.to_char(chr));
+        //const char32_t escape_chr[] = { '\\', '\"', '\r', '\n', '\t', '\f', '\v', '\b' };
+
+        string_view esc;
+        auto is_pair = false;
+        switch (chr)
+        {
+        case '\\':
+        {
+            esc = "\\"_s;
+            if (it + 1 != str.end())
+            {
+                char32_t next = 0;
+                ICY_ERROR((it + 1).to_char(next));
+                switch (next)
+                {
+                case '\\':
+                case '\"':
+                case 'r':
+                case 'n':
+                case 't':
+                case 'f':
+                case 'v':
+                case 'b':
+                    is_pair = true;
+                    break;
+                }
+            }
+            break;
+        }
+
+        case '\"':
+            esc = "\""_s;
+            break;
+
+        case '\r':
+            esc = "r"_s;
+            break;
+
+        case '\n':
+            esc = "n"_s;
+            break;
+
+        case '\t':
+            esc = "t"_s;
+            break;
+
+        case '\f':
+            esc = "f"_s;
+            break;
+
+        case '\v':
+            esc = "v"_s;
+            break;
+
+        case '\b':
+            esc = "b"_s;
+            break;
+        }
+       
+        if (is_pair)
+        {
+            ICY_ERROR(new_str.append(string_view(it, it + 2)));
+            ++it;
+        }
+        else if (!esc.empty())
+        {
+            ICY_ERROR(new_str.append("\\"_s));
+            ICY_ERROR(new_str.append(esc));
+        }
+        else
+        {
+            ICY_ERROR(new_str.append(string_view(it, it + 1)));
+        }
+    }
+    return error_type();
+}
 static error_type to_string(const json& json, string& str, const string_view tab, const string_view prefix) noexcept
 {
     switch (json.type())
@@ -421,7 +503,9 @@ static error_type to_string(const json& json, string& str, const string_view tab
     case json_type::string:
     {
         ICY_ERROR(str.append("\""_s));
-        ICY_ERROR(str.append(json.get()));
+        string new_str;
+        ICY_ERROR(json_fix_string(json.get(), new_str));
+        ICY_ERROR(str.append(new_str));
         ICY_ERROR(str.append("\""_s));
         break;
     }
@@ -464,9 +548,12 @@ static error_type to_string(const json& json, string& str, const string_view tab
             {
                 ICY_ERROR(::to_string(val, substr, {}, {}));
             }
-            ICY_ERROR(str.appendf("%1\"%2\": %3%4"_s, string_view(new_prefix), string_view(key), string_view(substr), k + 1 == json.size()? ""_s : ","_s));
+
+            string new_str;
+            ICY_ERROR(json_fix_string(key, new_str));
+            ICY_ERROR(str.appendf("%1\"%2\": %3%4"_s, string_view(new_prefix), string_view(new_str), string_view(substr), k + 1 == json.size()? ""_s : ","_s));
         }
-        ICY_ERROR(str.appendf("%1%2", prefix, "}"_s));
+        ICY_ERROR(str.appendf("%1%2"_s, prefix, "}"_s));
         break;
     }
 

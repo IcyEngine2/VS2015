@@ -149,7 +149,7 @@ namespace icy
 		{
 
 		}
-		string_view(const_pointer ptr) noexcept :
+		/*string_view(const_pointer ptr) noexcept :
 			m_ptr{ const_cast<pointer>(ptr) }, m_size{ 0 }
 		{
 			while (ptr && *ptr)
@@ -157,7 +157,7 @@ namespace icy
 				++ptr;
 				++m_size;
 			}
-		}
+		}*/
 		string_view(const const_pointer begin, const const_pointer end) noexcept :
 			m_ptr{ const_cast<pointer>(begin) }, m_size{ size_type(end - begin) }
 		{

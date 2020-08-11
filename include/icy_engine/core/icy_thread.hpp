@@ -41,6 +41,7 @@ namespace icy
         unsigned index() const noexcept;
         thread_state state() const noexcept;
         error_type error() const noexcept;
+        void* handle() const noexcept;
         void exit(const error_type error) noexcept;
         void quit() noexcept
         {
@@ -49,12 +50,9 @@ namespace icy
         error_type launch() noexcept;
         error_type wait() noexcept;
         error_type rename(const string_view name) noexcept;
+        virtual void cancel() noexcept;
     protected:
         virtual error_type run() = 0;
-        virtual void cancel() noexcept
-        {
-
-        }
     private:
         struct data_type;
         data_type* m_data = nullptr;

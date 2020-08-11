@@ -181,7 +181,7 @@ error_type file::text(const size_t max, array<string>& lines) noexcept
 				buffers[beg_index].bytes + buffer_size)));
 			
 			for (auto n = beg_index + 1; n < cur_index; ++n)
-				ICY_ERROR(line.append(buffers[n].bytes));
+				ICY_ERROR(line.append(string_view(buffers[n].bytes, buffer_size)));
 			
 			ICY_ERROR(line.append(string_view(
 				buffers[cur_index].bytes,

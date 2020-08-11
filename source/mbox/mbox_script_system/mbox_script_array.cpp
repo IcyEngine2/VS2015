@@ -22,56 +22,26 @@ public:
 };
 ICY_STATIC_NAMESPACE_END
 
-const char* mbox::mbox_reserved_names[uint32_t(mbox_reserved_name::_count)] =
-{
-    "AddCharacter",
-    "JoinGroup",
-    "LeaveGroup",
-    "RunScript",
-    "SendKeyDown",
-    "SendKeyUp",
-    "SendKeyPress",
-    "SendMacro",
-    "PostEvent",
-    "OnKeyDown",
-    "OnKeyUp",
-    "OnEvent",
-    "Everyone",
-    "Others",
-    "Follow",
-    "Assist",
-    "Target"
-    "Focus",
-    "",
-};
+const char* const mbox::mbox_keywords =
+"AddCharacter "
+"JoinGroup "
+"LeaveGroup "
+"RunScript "
+"SendKeyDown "
+"SendKeyUp "
+"SendKeyPress "
+"SendMacro "
+"SendVarMacro "
+"PostEvent "
+"OnKeyDown "
+"OnKeyUp "
+"OnEvent "
+"Others ";
 
-
-static const char* lua_reserved_names[] =
-{
-    "and",
-    "break",
-    "do",
-    "else",
-    "elseif",
-    "end",
-    "false",
-    "for",
-    "function",
-    "goto",
-    "if",
-    "in",
-    "local",
-    "nil",
-    "not",
-    "or",
-    "repeat",
-    "return",
-    "then",
-    "true",
-    "until",
-    "while",
-};
-
+static const auto mbox_dbi_macros = "macros"_s;
+static const auto mbox_dbi_object = "object"_s;
+static const auto mbox_dbi_string = "string"_s;
+static const auto mbox_dbi_macros_key_general = "general"_s;
 
 error_type mbox::mbox_rpath(const map<mbox_index, mbox_object>& objects, const mbox_index& index, string& str)
 {
@@ -101,15 +71,15 @@ error_type mbox::mbox_rpath(const map<mbox_index, mbox_object>& objects, const m
 }
 error_type mbox_array::path(const mbox_index& index, string& str) const noexcept
 {
-    auto ptr = find(index);
-    if (!ptr)
+    auto ptr = &find(index);
+    if (!*ptr)
         return make_mbox_error(mbox_error::invalid_object_index);
 
     ICY_ERROR(icy::to_string(ptr->name, str));
     while (true)
     {
-        ptr = find(ptr->parent);
-        if (!ptr)
+        ptr = &find(ptr->parent);
+        if (!*ptr)
             break;
         ICY_ERROR(str.append("/"_s));
         ICY_ERROR(str.append(ptr->name));
@@ -147,6 +117,39 @@ error_type mbox_array::enum_children(const mbox_index& parent, array<const mbox_
     {
         if (pair.value.parent == parent)
             ICY_ERROR(objects.push_back(&pair.value));
+    }
+    return error_type();
+}
+error_type mbox_array::enum_dependencies(const mbox_object& object, set<const mbox_object*>& tree) const noexcept
+{
+    if (!object)
+        return error_type();
+
+    if (tree.try_find(&object))
+        return error_type();
+
+    ICY_ERROR(tree.insert(&object));
+
+    if (object.type == mbox_type::character)
+    {
+        auto parent = &find(object.parent);
+        while (*parent)
+        {
+            if (parent->type == mbox_type::account || parent->type == mbox_type::profile)
+                ICY_ERROR(enum_dependencies(*parent, tree));
+            parent = &find(parent->parent);
+        }
+    }
+    for (auto&& pair : object.refs)
+    {
+        const auto& ref = find(pair.value);
+        if (ref
+            && ref.type != mbox_type::character
+            && ref.type != mbox_type::account
+            && ref.type != mbox_type::profile)
+        {
+            ICY_ERROR(enum_dependencies(ref, tree));
+        }
     }
     return error_type();
 }
@@ -263,16 +266,22 @@ error_type mbox_array::validate(const mbox_object& obj, array<error_type>& error
 
     if (!obj.refs.empty())
     {
-        const auto valid_ref = [this, &obj](const string_view key, const mbox_index& index, bool& success)
+        array<string_view> mbox_words;
+        ICY_ERROR(split(string_view(mbox_keywords, strlen(mbox_keywords)), mbox_words));
+
+        array<string_view> lua_words;
+        ICY_ERROR(split(string_view(lua_keywords, strlen(lua_keywords)), lua_words));
+
+
+        const auto valid_ref = [&](const string_view key, const mbox_index& index, bool& success)
         {
             if (key.empty() || index == obj.index)  // empty key or self reference
                 return error_type();
+            
+            if (std::find(mbox_words.begin(), mbox_words.end(), key) != mbox_words.end() ||
+                std::find(lua_words.begin(), lua_words.end(), key) != lua_words.end())
+                return error_type();
 
-            for (auto&& name : mbox_reserved_names)
-            {
-                if (key == string_view(name, strlen(name)))
-                    return error_type();
-            }
             for (auto it = key.begin(); it != key.end(); ++it)
             {
                 char32_t chr = 0;
@@ -301,7 +310,7 @@ error_type mbox_array::validate(const mbox_object& obj, array<error_type>& error
                 return error_type();
             }
 
-            const auto ref_object = find(index);
+            const auto& ref_object = find(index);
             if (!ref_object)                        //  invalid reference
                 return error_type();
 
@@ -327,6 +336,7 @@ error_type mbox_array::validate(const mbox_object& obj, array<error_type>& error
             {
                 ICY_ERROR(valid_types.push_back(mbox_type::action_script));
                 ICY_ERROR(valid_types.push_back(mbox_type::action_macro));
+                ICY_ERROR(valid_types.push_back(mbox_type::action_var_macro));
                 ICY_ERROR(valid_types.push_back(mbox_type::action_timer));
                 ICY_ERROR(valid_types.push_back(mbox_type::group));
                 ICY_ERROR(valid_types.push_back(mbox_type::layout));
@@ -347,7 +357,7 @@ error_type mbox_array::validate(const mbox_object& obj, array<error_type>& error
             default:
                 return error_type();
             }
-            if (std::find(valid_types.begin(), valid_types.end(), ref_object->type) == valid_types.end())
+            if (std::find(valid_types.begin(), valid_types.end(), ref_object.type) == valid_types.end())
                 return error_type();
 
             success = true;
@@ -387,13 +397,20 @@ error_type mbox_array::initialize(const database_txn_read& txn, mbox_errors& err
 {
     database_dbi dbi_string;
     database_dbi dbi_object;
-    if (const auto error = dbi_string.initialize_open_int_key(txn, "string"_s))
+    database_dbi dbi_macros;
+    if (const auto error = dbi_string.initialize_open_int_key(txn, mbox_dbi_string))
     {
         if (error == database_error_not_found)
             return make_mbox_error(mbox_error::database_corrupted);
         return error;
     }
-    if (const auto error = dbi_object.initialize_open_any_key(txn, "object"_s))
+    if (const auto error = dbi_object.initialize_open_any_key(txn, mbox_dbi_object))
+    {
+        if (error == database_error_not_found)
+            return make_mbox_error(mbox_error::database_corrupted);
+        return error;
+    }
+    if (const auto error = dbi_macros.initialize_open_any_key(txn, mbox_dbi_macros))
     {
         if (error == database_error_not_found)
             return make_mbox_error(mbox_error::database_corrupted);
@@ -402,9 +419,21 @@ error_type mbox_array::initialize(const database_txn_read& txn, mbox_errors& err
 
     database_cursor_read cur_string;
     database_cursor_read cur_object;
+    database_cursor_read cur_macros;
     ICY_ERROR(cur_string.initialize(txn, dbi_string));
     ICY_ERROR(cur_object.initialize(txn, dbi_object));
+    ICY_ERROR(cur_macros.initialize(txn, dbi_macros));
 
+    array<mbox_macro> macros;
+    {
+        const_array_view<uint8_t> key_macros = mbox_dbi_macros_key_general.ubytes();
+        const_array_view<uint8_t> val_macros;
+        if (const auto error = cur_macros.get_var_by_var(key_macros, val_macros, database_oper_read::none))
+            return make_mbox_error(mbox_error::database_corrupted);
+
+        ICY_ERROR(macros.resize(val_macros.size() / sizeof(mbox_macro)));
+        memcpy(macros.data(), val_macros.data(), val_macros.size());
+    }
     map<mbox_index, mbox_object> data;
     while (true)
     {
@@ -449,7 +478,7 @@ error_type mbox_array::initialize(const database_txn_read& txn, mbox_errors& err
                 else
                     return error;
             }
-            ICY_ERROR(copy(value_str, new_obj.value));
+            ICY_ERROR(copy(value_str.bytes(), new_obj.value));
         }
 
         if (val.refs)
@@ -492,10 +521,20 @@ error_type mbox_array::initialize(const database_txn_read& txn, mbox_errors& err
         ICY_ERROR(data.insert(new_obj.index, std::move(new_obj)));
     }
     auto saved_objects = std::move(m_objects);
+    auto saved_macros = std::move(m_macros);
+
     auto success = false;
-    ICY_SCOPE_EXIT{ if (!success) m_objects = std::move(saved_objects); };
+    ICY_SCOPE_EXIT
+    { 
+        if (!success)
+        {
+            m_objects = std::move(saved_objects);
+            m_macros = std::move(saved_macros);
+        }
+    };
 
     m_objects = std::move(data);
+    m_macros = std::move(macros);
     for (auto&& pair : data)
     {
         array<error_type> obj_errors;
@@ -509,6 +548,17 @@ error_type mbox_array::initialize(const database_txn_read& txn, mbox_errors& err
         if (!obj_errors.empty())
             ICY_ERROR(errors.insert(pair.key, std::move(obj_errors)));
     }
+    for (auto&& macro : m_macros)
+    {
+        for (auto&& other : m_macros)
+        {
+            if (&other == &macro)
+                continue;
+            if (other.key == macro.key && other.mods == macro.mods)
+                return make_mbox_error(mbox_error::database_corrupted);
+        }
+    }
+
     if (!errors.empty())
         return make_mbox_error(mbox_error::database_corrupted);
 
@@ -525,8 +575,10 @@ error_type mbox_array::save(const string_view path, const size_t max_size) const
 
     database_dbi dbi_string;
     database_dbi dbi_object;
-    ICY_ERROR(dbi_string.initialize_create_int_key(txn, "string"_s));
-    ICY_ERROR(dbi_object.initialize_create_any_key(txn, "object"_s));
+    database_dbi dbi_macros;
+    ICY_ERROR(dbi_string.initialize_create_int_key(txn, mbox_dbi_string));
+    ICY_ERROR(dbi_object.initialize_create_any_key(txn, mbox_dbi_object));
+    ICY_ERROR(dbi_macros.initialize_create_any_key(txn, mbox_dbi_macros));
 
     mbox_array old_data;
     mbox_errors errors;
@@ -534,9 +586,10 @@ error_type mbox_array::save(const string_view path, const size_t max_size) const
 
     database_cursor_write cur_string;
     database_cursor_write cur_object;
+    database_cursor_write cur_macros;
     ICY_ERROR(cur_string.initialize(txn, dbi_string));
     ICY_ERROR(cur_object.initialize(txn, dbi_object));
-
+    ICY_ERROR(cur_macros.initialize(txn, dbi_macros));
 
     for (auto&& pair : old_data.m_objects)
     {
@@ -559,7 +612,7 @@ error_type mbox_array::save(const string_view path, const size_t max_size) const
         dbase_object.name = hash64(new_object.name);
 
         if (!new_object.value.empty())
-            dbase_object.value = hash64(new_object.value);
+            dbase_object.value = hash64(string_view(new_object.value.data(), new_object.value.size()));
 
         auto changed = false;
         if (old_object.name != new_object.name)
@@ -588,7 +641,8 @@ error_type mbox_array::save(const string_view path, const size_t max_size) const
         }
         if (old_object.value != new_object.value)
         {
-            ICY_ERROR(cur_string.put_str_by_type(dbase_object.value, database_oper_write::none, new_object.value));
+            ICY_ERROR(cur_string.put_str_by_type(dbase_object.value, database_oper_write::none, 
+                string_view(new_object.value.data(), new_object.value.size())));
             changed = true;
         }
         if (old_object.parent != new_object.parent)
@@ -601,162 +655,15 @@ error_type mbox_array::save(const string_view path, const size_t max_size) const
                 old_object.index ? database_oper_write::none : database_oper_write::unique, dbase_object));
         }
     }
+
+    array_view<uint8_t> val;
+    ICY_ERROR(cur_macros.put_var_by_var(mbox_dbi_macros_key_general.ubytes(),
+        m_macros.size() * sizeof(mbox_macro), database_oper_write::none, val));
+    ::memcpy(val.data(), m_macros.data(), val.size());
+
     ICY_ERROR(txn.commit());
     return error_type();
 }
-error_type mbox_array::to_string(const mbox_index context, const mbox_action& action, string& str) const noexcept
-{
-    string name_str;
-    if (action.ref)
-    {
-        ICY_ERROR(rpath(action.ref, name_str));
-    }
-    const auto name = string_view(name_str);
-    const auto to_string = [&context, this](const mbox_action_target& target, string& str)
-    {
-        switch (target.type)
-        {
-        case mbox_action_target::type_character:
-        {
-            ICY_ERROR(rpath(target.index, str));
-            ICY_ERROR(str.insert(str.begin(), "Character \""_s));
-            ICY_ERROR(str.append("\""));
-            break;
-        }
-        case mbox_action_target::type_party:
-        {
-            ICY_ERROR(icy::to_string("Party[%1]"_s, str, target.slot));
-            break;
-        }
-        case mbox_action_target::type_group:
-        {
-            string str_index;
-            ICY_ERROR(rpath(target.index, str_index));
-            if (target.mod == mbox_action_target::everyone)
-            {
-                ICY_ERROR(icy::to_string("Everyone in \"%1\""_s, str, string_view(str_index)));
-            }
-            else if (target.mod == mbox_action_target::others)
-            {
-                ICY_ERROR(icy::to_string("Others in \"%1\""_s, str, string_view(str_index)));
-            }
-            break;
-        }
-        }
-        if (str.empty())
-        {
-            if (context)
-            {
-                ICY_ERROR(rpath(context, str));
-            }
-            else
-            {
-                ICY_ERROR(str.append("Unknown target"_s));
-            }
-        }
-
-        return error_type();
-    };
-    string str_target;
-    ICY_ERROR(to_string(action.target, str_target));
-    const auto target = string_view(str_target);
-
-    string_view event;
-    if (action.type == mbox_action_type::send_key_down ||
-        action.type == mbox_action_type::on_key_down)
-        event = "Key Down"_s;
-    else if (
-        action.type == mbox_action_type::send_key_up ||
-        action.type == mbox_action_type::on_key_up)
-        event = "Key Up"_s;
-    else if (action.type == mbox_action_type::send_key_press)
-        event = "Key Press"_s;
-
-    switch (action.type)
-    {
-    case mbox_action_type::add_character:
-    {
-        ICY_ERROR(str.appendf("Add character \"%1\" as Party[%2]"_s, name, action.slot));
-        break;
-    }
-    case mbox_action_type::join_group:
-    {
-        ICY_ERROR(str.appendf("%1: join group \"%2\""_s, target, name));
-        break;
-    }
-    case mbox_action_type::leave_group:
-    {
-        ICY_ERROR(str.appendf("%1: leave group \"%2\""_s, target, name));
-        break;
-    }
-    case mbox_action_type::run_script:
-    {
-        ICY_ERROR(str.appendf("%1: run script \"%2\""_s, target, name));
-        break;
-    }
-    case mbox_action_type::send_key_down:
-    case mbox_action_type::send_key_up:
-    case mbox_action_type::send_key_press:
-    {
-        string str_input;
-        ICY_ERROR(icy::to_string(action.input, str_input));
-        ICY_ERROR(str.appendf("Send event=\"%1\", key=\"%2\" to %3"_s, event, string_view(str_input), target));
-        break;
-    }
-    case mbox_action_type::send_macro:
-    {
-        ICY_ERROR(str.appendf("%1: run macro \"%2\""_s, target, name));
-        break;
-    }
-    case mbox_action_type::send_macro_assist:
-    case mbox_action_type::send_macro_focus:
-    case mbox_action_type::send_macro_follow:
-    case mbox_action_type::send_macro_target:
-    {
-        string_view var;
-        switch (action.type)
-        {
-        case mbox_action_type::send_macro_assist:
-            var = "assist"_s;
-            break;
-        case mbox_action_type::send_macro_focus:
-            var = "focus"_s;
-            break;
-        case mbox_action_type::send_macro_follow:
-            var = "follow"_s;
-            break;
-        case mbox_action_type::send_macro_target:
-            var = "target"_s;
-            break;
-        }
-        string var_target;
-        ICY_ERROR(to_string(action.var_macro, var_target));
-        ICY_ERROR(str.appendf("%1: %2 %3"_s, target, var, string_view(var_target)));
-        break;
-    }
-    case mbox_action_type::post_event:
-    {
-        ICY_ERROR(str.appendf("Post event \"%1\" to %2"_s, name, target));
-        break;
-    }
-    case mbox_action_type::on_key_down:
-    case mbox_action_type::on_key_up:
-    {
-        string str_input;
-        ICY_ERROR(icy::to_string(action.input, str_input));
-        ICY_ERROR(str.appendf("%1: register for event=\"On %2\", key=\"%3\""_s, target, event, string_view(str_input)));
-        break;
-    }
-    case mbox_action_type::on_event:
-    {
-        ICY_ERROR(str.appendf("%1: register for event=\"%2\""_s, target, name));
-        break;
-
-    }
-    }
-    return error_type();
-}
-
 
 string_view icy::to_string(const mbox::mbox_type type) noexcept
 {
@@ -797,6 +704,9 @@ string_view icy::to_string(const mbox::mbox_type type) noexcept
 
     case mbox_type::event:
         return "Event"_s;
+
+    case mbox_type::action_var_macro:
+        return "Var Macro"_s;
     }
     return ""_s;
 }
@@ -829,7 +739,42 @@ static error_type mbox_error_to_string(unsigned int code, string_view locale, st
 
     case mbox_error::invalid_parent_type:
         return to_string("Invalid parent type"_s, str);
+
+
+    case mbox_error::execute_lua:
+        return to_string("Execute LUA"_s, str);
+
+    case mbox_error::not_enough_macros:
+        return to_string("Not enough macro slots"_s, str);
+
+    case mbox_error::stack_recursion:
+        return to_string("Stack overflow (recursive)"_s, str);
+
+    case mbox_error::too_many_actions:
+        return to_string("Too many actions"_s, str);
+
+    case mbox_error::too_many_operations:
+        return to_string("Too many LUA operations"_s, str);
+
     }
     return make_stdlib_error(std::errc::invalid_argument);
 }
-const error_source icy::error_source_mbox = register_error_source("mbox", mbox_error_to_string);
+const error_source icy::error_source_mbox = register_error_source("mbox"_s, mbox_error_to_string);
+
+string_view icy::to_string(const mbox::mbox_reserved_name name) noexcept
+{
+    auto str = string_view(mbox_keywords, strlen(mbox_keywords));
+    for (auto k = 0u; k <= uint32_t(name); ++k)
+    {
+        auto it = str.find(" "_s);
+        
+        if (k == uint32_t(name))
+            return string_view(str.begin(), it);
+
+        if (it == str.end())
+            break;
+        
+        str = string_view(it + 1, str.end());
+    }
+    return ""_s;
+}

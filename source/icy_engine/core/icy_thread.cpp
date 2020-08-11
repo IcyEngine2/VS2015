@@ -153,7 +153,7 @@ struct thread::data_type
     }
     ~data_type() noexcept
     {
-        wait(std::chrono::seconds(1));
+        wait(std::chrono::seconds(5));
     }
     mutex lock;
     cvar cvar;
@@ -173,14 +173,11 @@ void icy::sleep(const clock_type::duration duration) noexcept
     const auto ms = ms_timeout(duration);
     if (!ms)
     {
-        _Thrd_yield();
+        std::this_thread::yield();
     }
     else
     {
-        xtime tm;
-        tm.sec = time_t(std::chrono::duration_cast<std::chrono::seconds>(duration).count());
-        tm.nsec = long(std::chrono::duration_cast<std::chrono::nanoseconds>(duration - std::chrono::seconds(tm.sec)).count());
-        _Thrd_sleep(&tm);
+        std::this_thread::sleep_for(duration);
     }
     //SleepEx(ms, TRUE);
 }
@@ -210,6 +207,15 @@ error_type thread::error() const noexcept
         return m_data->error;
     }
     return error_type();
+}
+void* thread::handle() const noexcept
+{
+    if (m_data)
+    {
+        ICY_LOCK_GUARD(m_data->lock);
+        return m_data->handle;
+    }
+    return nullptr;
 }
 void thread::exit(const error_type error) noexcept
 {
@@ -296,6 +302,11 @@ error_type thread::rename(const string_view name) noexcept
     if (FAILED(hr))
         return make_system_error(hr);
     return error_type();
+}
+void thread::cancel() noexcept
+{
+    const auto proc = [](ULONG_PTR ptr) { reinterpret_cast<thread*>(ptr)->exit(error_type()); };
+    QueueUserAPC(proc, handle(), reinterpret_cast<ULONG_PTR>(this));
 }
 
 thread::~thread() noexcept

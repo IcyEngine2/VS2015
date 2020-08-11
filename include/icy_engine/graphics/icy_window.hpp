@@ -1,6 +1,7 @@
 #pragma once
 
 #include <icy_engine/core/icy_event.hpp>
+#include <icy_engine/core/icy_input.hpp>
 
 struct HWND__;
 
@@ -38,18 +39,60 @@ namespace icy
         return window_style(uint32_t(lhs) | uint32_t(rhs));
     }
 
+    class window
+    {
+    public:
+        window() noexcept = default;
+        window(const window&) noexcept;
+        ICY_DEFAULT_COPY_ASSIGN(window);
+        ~window() noexcept;
+    public:
+        error_type restyle(const window_style style) noexcept;
+        error_type rename(const string_view name) noexcept;
+        error_type show(const bool value) noexcept;
+        HWND__* handle() const noexcept;
+        window_flags flags() const noexcept;
+    public:
+        class data_type;
+        data_type* data = nullptr;
+    };
+
+    class thread;
+
+    enum class window_state : uint32_t
+    {
+        none        =   0x00,
+        closing     =   0x01,
+        minimized   =   0x02,
+        inactive    =   0x04,
+    };
+    inline window_state operator|(const window_state lhs, const window_state rhs) noexcept
+    {
+        return window_state(uint32_t(lhs) | uint32_t(rhs));
+    }
+
+    struct window_message
+    {
+        uint32_t index = 0u;
+        window_state state = window_state::none;
+        window_size size;
+        struct
+        {
+            uint64_t user;
+            array<uint8_t> bytes;
+        } data = {};
+        input_message input;
+    };
     class window_system : public event_system
     {
     public:
-        virtual error_type initialize() noexcept = 0;
-        virtual error_type restyle(const window_style style) noexcept = 0;
-        virtual error_type rename(const string_view name) noexcept = 0;
-        virtual error_type show(const bool value) noexcept = 0;
-        virtual error_type wait(const duration_type timeout = max_timeout) noexcept = 0;
-        virtual HWND__* handle() const noexcept = 0;
-        virtual window_flags flags() const noexcept = 0;
+        virtual const icy::thread& thread() const noexcept = 0;
+        virtual icy::thread& thread() noexcept
+        {
+            return const_cast<icy::thread&>(static_cast<const window_system*>(this)->thread());
+        }
+        virtual error_type create(window& window, const window_flags flags = default_window_flags) const noexcept = 0;        
     };
 
-    error_type create_event_system(shared_ptr<window_system>& window, const window_flags flags = default_window_flags) noexcept;
-
+    error_type create_event_system(shared_ptr<window_system>& system) noexcept;
 }

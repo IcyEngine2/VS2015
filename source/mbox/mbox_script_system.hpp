@@ -5,6 +5,7 @@
 #include <icy_engine/core/icy_event.hpp>
 #include <icy_engine/core/icy_input.hpp>
 #include <icy_engine/core/icy_map.hpp>
+#include <icy_engine/core/icy_set.hpp>
 #include <icy_engine/utility/icy_lua.hpp>
 
 namespace mbox
@@ -17,6 +18,7 @@ namespace icy
     template<> inline int compare<mbox::mbox_object>(const mbox::mbox_object& lhs, const mbox::mbox_object& rhs) noexcept;
     template<> inline int compare<mbox::mbox_type>(const mbox::mbox_type& lhs, const mbox::mbox_type& rhs) noexcept;
     class database_txn_read;
+    class thread;
 }
 
 namespace mbox
@@ -38,6 +40,10 @@ namespace mbox
         invalid_parent_type,
 
         execute_lua,
+        not_enough_macros,
+        stack_recursion,
+        too_many_actions,
+        too_many_operations,        
     };
 
     extern const icy::event_type mbox_event_type_send_input;
@@ -46,11 +52,6 @@ namespace mbox
     {
         mbox_index character;
         icy::array<icy::input_message> messages;
-    };
-    struct mbox_event_print_debug
-    {
-        mbox_index character;
-        icy::string message;
     };
 
     enum class mbox_type : uint32_t
@@ -68,17 +69,22 @@ namespace mbox
         action_macro,
         action_script,
         event,
+        action_var_macro,
         _last,
     };
     class mbox_object
     {
     public:
         rel_ops(mbox_object);
+        explicit operator bool() const noexcept
+        {
+            return index != mbox_index() && type != mbox_type::none;
+        }
         mbox_index index;
         mbox_type type = mbox_type::none;
         mbox_index parent;
         icy::string name;
-        icy::string value;
+        icy::array<char> value;
         icy::map<icy::string, mbox_index> refs;
     }; 
 
@@ -113,10 +119,7 @@ namespace mbox
         send_key_up,        //  exec: script|   args: "Mods+Key", [target] 
         send_key_press,     //  exec: script|   args: "Mods+Key", [target] 
         send_macro,         //  exec: script|   args: macro, [target]
-        send_macro_follow,  //  exec: script|   args: mbox.Follow, who, [target]
-        send_macro_assist,  //  exec: script|   args: mbox.Assist, who, [target]
-        send_macro_target,  //  exec: script|   args: mbox.Target, who, [target]
-        send_macro_focus,   //  exec: script|   args: mbox.Focus, who, [target]
+        send_var_macro,     //  exec: script|   args: var_macro, character/slot, [target]
         post_event,         //  exec: any   |   args: event, [target]
         on_key_down,        //  exec: any   |   args: "Mods+Key", LUA function, [target]
         on_key_up,          //  exec: any   |   args: "Mods+Key", LUA function, [target]
@@ -132,19 +135,15 @@ namespace mbox
         send_key_up,
         send_key_press,
         send_macro,
+        send_var_macro,
         post_event,
         on_key_down,
         on_key_up,
         on_event,
-        everyone,
         others,
-        follow,
-        assist,
-        target,
-        focus,
         _count,
     };
-    extern const char* mbox_reserved_names[uint32_t(mbox_reserved_name::_count)];
+    extern const char* const mbox_keywords;
 
     struct mbox_action
     {
@@ -158,18 +157,25 @@ namespace mbox
     };
 
     using mbox_errors = icy::map<mbox_index, icy::array<icy::error_type>>;
-
+    struct mbox_macro
+    {
+        icy::key key = icy::key::none;
+        icy::key_mod mods = icy::key_mod::none;
+    };
     class mbox_array
     {
     public:
-        const mbox_object* find(const mbox_index& index) const noexcept
+        const mbox_object& find(const mbox_index& index) const noexcept
         {
-            return m_objects.try_find(index);
+            static const mbox_object null;
+            const auto ptr = m_objects.try_find(index);
+            return ptr ? *ptr : null;
         }
         icy::error_type path(const mbox_index& index, icy::string& str) const noexcept;
         icy::error_type rpath(const mbox_index& index, icy::string& str) const noexcept;
         icy::error_type enum_by_type(const mbox_index& parent, const mbox_type type, icy::array<const mbox_object*>& objects) const noexcept;
         icy::error_type enum_children(const mbox_index& parent, icy::array<const mbox_object*>& objects) const noexcept;
+        icy::error_type enum_dependencies(const mbox_object& object, icy::set<const mbox_object*>& tree) const noexcept;
         icy::error_type validate(const mbox_object& object, bool& valid) const noexcept;
         icy::error_type validate(const mbox_object& object, icy::array<icy::error_type>& errors) const noexcept;
         icy::error_type initialize(const icy::string_view file_path, mbox_errors& errors) noexcept;
@@ -177,12 +183,16 @@ namespace mbox
         {
             return m_objects;
         }
-        icy::error_type to_string(const mbox_index context, const mbox_action& action, icy::string& str) const noexcept;
+        const icy::const_array_view<mbox_macro> macros() const noexcept
+        {
+            return m_macros;
+        }
     protected:
         icy::error_type initialize(const icy::database_txn_read& txn, mbox_errors& errors) noexcept;
         icy::error_type save(const icy::string_view path, const size_t max_size) const noexcept;
     protected:
         icy::map<mbox_index, mbox_object> m_objects;
+        icy::array<mbox_macro> m_macros;
     };
     class mbox_function
     {
@@ -200,15 +210,26 @@ namespace mbox
         }
         ICY_DEFAULT_MOVE_ASSIGN(mbox_function);
         icy::error_type initialize() LUA_NOEXCEPT;
-        icy::error_type operator()(icy::array<mbox_action>& actions) LUA_NOEXCEPT;
+        icy::error_type operator()(icy::array<mbox_action>& actions) const LUA_NOEXCEPT;
         explicit operator bool() const noexcept
         {
             return m_func.type() != icy::lua_type::none;
+        }
+        const icy::map<mbox_index, mbox_object>* objects() const noexcept 
+        {
+            return m_objects;
         }
         const mbox_object& object() const noexcept
         {
             return *m_object;
         }
+        icy::string_view name(const mbox_index index) const noexcept
+        {
+            if (const auto ptr = m_names.try_find(index))
+                return *ptr;
+            return icy::string_view();
+        }
+        icy::error_type to_string(const icy::string_view default_character, const mbox_action& action, icy::string& str) const noexcept;
     private:
         icy::error_type make_target(const icy::lua_variable& input, mbox_action_target& target) const LUA_NOEXCEPT;
         icy::error_type make_index(const icy::lua_variable& input, const icy::const_array_view<mbox_type> types, mbox_index& index) const LUA_NOEXCEPT;
@@ -218,7 +239,8 @@ namespace mbox
         const mbox_object* const m_object = nullptr;
         const icy::lua_system* const m_lua = nullptr;
         icy::lua_variable m_func;
-        icy::array<mbox_action> m_actions;
+        mutable icy::array<mbox_action>* m_actions = nullptr;
+        icy::map<mbox_index, icy::string> m_names;
     };
 
     struct mbox_system_info
@@ -226,17 +248,26 @@ namespace mbox
         struct character_data
         {
             mbox_index index;
-            uint32_t position = 0;
+            uint32_t slot = 0;
+            icy::string name;
+            icy::array<icy::string> macros;
         };
         icy::array<character_data> characters;
+        icy::error_type update_wow_addon(const mbox_array& data, const icy::string_view path) const noexcept;
     };
 
     using mbox_print_func = icy::error_type(*)(void* pdata, const icy::string_view str);
+
+
     class mbox_system : public icy::event_system
     {
     public:
         virtual const mbox_system_info& info() const noexcept = 0;
-        virtual icy::error_type cancel() noexcept = 0;
+        virtual const icy::thread& thread() const noexcept = 0;
+        virtual icy::thread& thread() noexcept
+        {
+            return const_cast<icy::thread&>(static_cast<const mbox_system*>(this)->thread());
+        }
         virtual icy::error_type post(const mbox_index& character, const icy::input_message& input) noexcept = 0;
     };
 
@@ -300,8 +331,13 @@ namespace icy
     {
         return icy::compare<uint32_t>(uint32_t(lhs), uint32_t(rhs));
     }
+    template<> inline int compare<const mbox::mbox_object*>(const mbox::mbox_object* const& lhs, const mbox::mbox_object* const& rhs) noexcept
+    {
+        return icy::compare<size_t>(size_t(lhs), size_t(rhs));
+    }
 
     error_type create_event_system(shared_ptr<mbox::mbox_system>& system, const mbox::mbox_array& data,
         const mbox::mbox_index& party, const mbox::mbox_print_func pfunc = nullptr, void* const pdata = nullptr) noexcept;
     string_view to_string(const mbox::mbox_type type) noexcept;
+    string_view to_string(const mbox::mbox_reserved_name name) noexcept;
 }

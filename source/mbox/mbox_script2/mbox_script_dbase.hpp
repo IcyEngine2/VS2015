@@ -1,6 +1,7 @@
 #pragma once
 
 #include <icy_engine/utility/icy_database.hpp>
+#include <icy_engine/utility/icy_text_edit.hpp>
 #include <icy_qtgui/icy_xqtgui.hpp>
 #include "../mbox_script_system.hpp"
 
@@ -9,13 +10,14 @@ namespace mbox
     class mbox_database : public mbox_array
     {
     public:
-        mbox_database(const icy::gui_widget window) noexcept : m_window(window)
+        mbox_database(const icy::text_edit_system& text_edit, const icy::gui_widget window) noexcept : m_text_edit(text_edit), m_window(window)
         {
 
         }
         mbox_database(const mbox_database&) = delete;
         icy::error_type initialize() noexcept;
         icy::error_type exec(const icy::event_type type, const icy::gui_event& event) noexcept;
+        icy::error_type exec(const icy::text_edit_event& event) noexcept;
         icy::error_type close(bool& cancel) noexcept;
     private:
         enum class open_mode
@@ -35,6 +37,7 @@ namespace mbox
             icy::xgui_action action_close;
             icy::xgui_action action_undo;
             icy::xgui_action action_redo;
+            icy::xgui_action action_macros;
         };
         enum class tool_type
         {
@@ -65,22 +68,24 @@ namespace mbox
             icy::error_type execute(mbox_object& action) noexcept;
             icy::error_type close(bool& cancel) noexcept;
             icy::error_type compile() noexcept;
-            icy::error_type on_focus(const icy::gui_widget new_focus) noexcept;
 
             mbox_database& self;
             mbox_object object;
             icy::array<mbox_object> refs_actions;
             size_t refs_action = 0;
+            bool can_undo = false;
+            bool can_redo = false;
 
             icy::xgui_model refs_model;
             icy::xgui_widget window;
             icy::xgui_widget toolbar;
             icy::xgui_widget tabs;
-            icy::xgui_text_edit tab_text;
+            icy::xgui_widget tab_text_view;
+            icy::text_edit_window tab_text_data;
             icy::xgui_widget tab_refs;
             icy::xgui_text_edit tab_debug;
             icy::gui_widget focus;
-
+            
             icy::array<std::pair<tool_type, icy::xgui_widget>> tools;            
         };
     private:
@@ -96,7 +101,10 @@ namespace mbox
         icy::error_type redo() noexcept;
         icy::error_type push(icy::array<mbox_object>&& actions) noexcept;
         icy::error_type execute(mbox_object& action) noexcept;        
+        icy::error_type macros() noexcept;
+        icy::error_type edit_macro(icy::array<mbox_macro>& new_macros, const size_t row, bool& success) noexcept;
     private:
+        const icy::text_edit_system& m_text_edit;
         const icy::gui_widget m_window;
         icy::map<mbox_type, icy::xgui_image> m_icons;
         icy::xgui_model m_model;
@@ -106,5 +114,6 @@ namespace mbox
         icy::array<icy::array<mbox_object>> m_actions;
         size_t m_action = 0;
         icy::map<mbox_index, window_type> m_windows;
+        bool m_change = false;
     };
 }

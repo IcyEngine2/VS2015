@@ -54,7 +54,7 @@ private:
     icy::error_type create_texture(const icy::const_array_view<uint8_t> bytes, icy::render_texture& texture) const noexcept override;
     icy::error_type create_texture(const icy::const_matrix_view<icy::color> bytes, icy::render_texture& texture) const noexcept override;
     icy::error_type close_commands_2d(icy::render_commands_2d& commands, const icy::window_size& size, icy::render_texture& texture) const noexcept override;
-    icy::error_type close_commands_2d(icy::render_commands_2d& commands, icy::window_system& window) const noexcept override;
+    icy::error_type close_commands_2d(icy::render_commands_2d& commands, icy::window& window) const noexcept override;
     icy::error_type init_commands_2d(icy::render_commands_2d& commands, icy::map<float, icy::array<render_command_2d>>& map) const noexcept;
 private:
     icy::adapter m_adapter;

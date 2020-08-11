@@ -69,7 +69,7 @@ css_handler::css_handler() noexcept
 
 		const auto pair = static_cast<pair_type*>(pw);
 		const auto cnode = static_cast<const html_node_css*>(node);
-		const auto str = cnode->find("class");
+		const auto str = cnode->find("class"_s);
 
 		array<string_view> vec(pair->ctx->realloc, pair->ctx->user);
 		if (split(str, vec))
@@ -106,7 +106,7 @@ css_handler::css_handler() noexcept
 		const auto pair = static_cast<pair_type*>(pw);
 		const auto cnode = static_cast<const html_node_css*>(node);
 
-		const auto str = cnode->find("id");
+		const auto str = cnode->find("id"_s);
 		if (!str.empty())
 		{
 			if (lwc_intern_string(pair->ctx, str.bytes().data(), str.bytes().size(), id))
@@ -244,7 +244,7 @@ css_handler::css_handler() noexcept
 		const auto cnode = static_cast<const html_node_css*>(node);
 		const auto sname = string_view(lwc_string_data(name), strlen(lwc_string_data(name)));
 
-		const auto str = cnode->find("class");
+		const auto str = cnode->find("class"_s);
 		array<string_view> vec(pair->ctx->realloc, pair->ctx->user);
 		if (split(str, vec))
 			return CSS_NOMEM;
@@ -262,7 +262,7 @@ css_handler::css_handler() noexcept
 		const auto cnode = static_cast<const html_node_css*>(node);
 		const auto sname = string_view(lwc_string_data(name), strlen(lwc_string_data(name)));
 
-		const auto id = cnode->find("id");
+		const auto id = cnode->find("id"_s);
 		if (id == sname)
 			*match = true;
 
@@ -516,7 +516,7 @@ css_handler::css_handler() noexcept
 		const auto pair = static_cast<pair_type*>(pw);
 		const auto cnode = static_cast<const html_node_css*>(node);
 		const auto slang = string_view(lwc_string_data(lang), strlen(lwc_string_data(lang)));
-		const auto vlang = cnode->find("lang");
+		const auto vlang = cnode->find("lang"_s);
 		if (vlang == slang)
 			*match = true;
 

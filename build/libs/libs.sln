@@ -37,6 +37,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "css", "css\css.vcxproj", "{
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "gumbo", "gumbo\gumbo.vcxproj", "{9756BBF4-A4C6-496A-836D-2F3DD733A899}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "scintilla", "scintilla\scintilla.vcxproj", "{5AC992B9-A9BD-4CC6-94C3-19CE176D5B06}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -129,6 +131,12 @@ Global
 		{9756BBF4-A4C6-496A-836D-2F3DD733A899}.Release|x64.ActiveCfg = Release|x64
 		{9756BBF4-A4C6-496A-836D-2F3DD733A899}.Release|x64.Build.0 = Release|x64
 		{9756BBF4-A4C6-496A-836D-2F3DD733A899}.Release|x86.ActiveCfg = Release|x64
+		{5AC992B9-A9BD-4CC6-94C3-19CE176D5B06}.Debug|x64.ActiveCfg = Debug|x64
+		{5AC992B9-A9BD-4CC6-94C3-19CE176D5B06}.Debug|x64.Build.0 = Debug|x64
+		{5AC992B9-A9BD-4CC6-94C3-19CE176D5B06}.Debug|x86.ActiveCfg = Debug|x64
+		{5AC992B9-A9BD-4CC6-94C3-19CE176D5B06}.Release|x64.ActiveCfg = Release|x64
+		{5AC992B9-A9BD-4CC6-94C3-19CE176D5B06}.Release|x64.Build.0 = Release|x64
+		{5AC992B9-A9BD-4CC6-94C3-19CE176D5B06}.Release|x86.ActiveCfg = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

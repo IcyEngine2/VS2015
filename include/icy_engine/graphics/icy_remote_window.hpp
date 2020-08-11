@@ -20,6 +20,10 @@ namespace icy
         ICY_DEFAULT_COPY_ASSIGN(remote_window);
         ~remote_window() noexcept;
     public:
+        explicit operator bool() const noexcept
+        {
+            return handle();
+        }
         error_type name(string& str) const noexcept;
         uint32_t thread() const noexcept;
         uint32_t process() const noexcept;
@@ -34,9 +38,17 @@ namespace icy
         data_type* data = nullptr;
     };
 
+    class thread;
+    extern const event_type remote_window_event_type;
+
     class remote_window_system : public event_system
     {
     public:
+        virtual const icy::thread& thread() const noexcept = 0;
+        virtual icy::thread& thread() noexcept
+        {
+            return const_cast<icy::thread&>(static_cast<const remote_window_system*>(this)->thread());
+        }
         virtual error_type notify_on_close(const remote_window window) noexcept = 0;
     };
     error_type create_event_system(shared_ptr<remote_window_system>& system) noexcept;

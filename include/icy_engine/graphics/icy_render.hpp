@@ -75,7 +75,7 @@ namespace icy
     class render_svg_geometry;
     class render_commands_2d;
     class render_commands_3d;
-    class window_system;
+    class window;
 
     class render_factory
     {
@@ -92,7 +92,7 @@ namespace icy
         virtual error_type create_texture(const const_array_view<uint8_t> bytes, render_texture& texture) const noexcept = 0;
         virtual error_type create_texture(const const_matrix_view<color> bytes, render_texture& texture) const noexcept = 0;
         virtual error_type close_commands_2d(render_commands_2d& commands, const window_size& size, render_texture& texture) const noexcept = 0;
-        virtual error_type close_commands_2d(render_commands_2d& commands, window_system& window) const noexcept = 0;
+        virtual error_type close_commands_2d(render_commands_2d& commands, window& window) const noexcept = 0;
 
     };
     class render_texture

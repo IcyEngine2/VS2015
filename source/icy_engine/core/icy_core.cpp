@@ -189,7 +189,7 @@ error_type icy::to_string(const error_source source, string& str) noexcept
         if (error_source_array()[k].hash != source.hash)
             continue;
 
-        return to_string(string_view(error_source_array()[k].name), str);
+        return to_string(string_view(error_source_array()[k].name, strlen(error_source_array()[k].name)), str);
     }
     return make_stdlib_error(std::errc::invalid_argument);
 }
@@ -350,6 +350,8 @@ error_type icy::win32_message(const string_view text, const string_view header, 
     ICY_ERROR(lib.initialize());
     if (const auto func = ICY_FIND_FUNC(lib, MessageBoxW))
     {
+        Sleep(500);
+
         array<wchar_t> wtxt;
         array<wchar_t> whdr;
         ICY_ERROR(to_utf16(text, wtxt));

@@ -343,7 +343,7 @@ namespace icy
                 c[2] = 0x80 | (char)((chr >> 6) & 0x3f);
                 c[3] = 0x80 | (char)(chr & 0x3f);
             }
-            ICY_ERROR(output.append(string_view(c)));
+            ICY_ERROR(output.append(string_view(c, strlen(c))));
         }
         return error_type();
     }

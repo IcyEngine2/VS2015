@@ -80,7 +80,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\..\source\mbox\mbox_launcher\mbox_launcher_app.cpp" />
+    <ClCompile Include="..\..\..\source\mbox\mbox_launcher\mbox_launcher_config.cpp" />
     <ClCompile Include="..\..\..\source\mbox\mbox_launcher\mbox_launcher_main.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\..\source\mbox\mbox_launcher\mbox_launcher_app.hpp" />
+    <ClInclude Include="..\..\..\source\mbox\mbox_launcher\mbox_launcher_config.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

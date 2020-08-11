@@ -17,7 +17,7 @@ namespace icy
             bitcnt_fileio   =   0x02,
             bitcnt_network  =   0x04,
             bitcnt_console  =   0x03,
-            bitcnt_window   =   0x05,
+            bitcnt_window   =   0x04,
             bitcnt_gui      =   0x06,
             bitcnt_render   =   0x01,
 
@@ -76,11 +76,10 @@ namespace icy
             console_read_line       =   1ui64   <<  (offset_console + 0x02),
             console_any             =   mask_console,
             
-            window_close            =   1ui64   <<  (offset_window + 0x00),
+            window_state            =   1ui64   <<  (offset_window + 0x00),
             window_resize           =   1ui64   <<  (offset_window + 0x01),
             window_input            =   1ui64   <<  (offset_window + 0x02),
-            window_active           =   1ui64   <<  (offset_window + 0x03),
-            window_minimized        =   1ui64   <<  (offset_window + 0x04),
+            window_data             =   1ui64   <<  (offset_window + 0x03),
             window_any              =   mask_window,
 
             gui_action              =   1ui64   <<  (offset_gui + 0x00),    //  action index

@@ -69,7 +69,8 @@ static error_type save_changes(const gui_widget parent, bool& save, bool& cancel
     return error_type();
 }
 static error_type mbox_model_create(xgui_model& model, const mbox_array& data, const map<mbox_type, xgui_image>& icons, const map<mbox_index, bool>* const filter = nullptr) noexcept;
-static error_type mbox_model_find(xgui_node& node, const mbox_object* const object, const gui_node root, const mbox_array& data, const map<mbox_index, bool>* const filter) noexcept;
+static error_type mbox_model_find(xgui_node& node, const mbox_object& object, const gui_node root, const mbox_array& data, const map<mbox_index, bool>* const filter) noexcept;
+
 class mbox_model_filter
 {
 public:
@@ -120,6 +121,9 @@ error_type mbox_database::initialize() noexcept
     ICY_ERROR(m_menu.menu_edit.widget.insert(m_menu.action_undo));
     ICY_ERROR(m_menu.menu_edit.widget.insert(m_menu.action_redo));
 
+    ICY_ERROR(m_menu.action_macros.initialize("Macros"_s));
+    ICY_ERROR(m_menu.menu_main.insert(m_menu.action_macros));
+
     auto cancel = false;
     ICY_ERROR(close(cancel));
 
@@ -159,6 +163,10 @@ error_type mbox_database::exec(const event_type type, const gui_event& event) no
         {
             ICY_ERROR(redo());
         }
+        else if (action == m_menu.action_macros)
+        {
+            ICY_ERROR(macros());
+        }
     }
     else if (type == event_type::gui_context)
     {
@@ -186,7 +194,11 @@ error_type mbox_database::exec(const event_type type, const gui_event& event) no
             {
                 gui_widget widget;
                 widget.index = event.data.as_uinteger();
-                ICY_ERROR(it->value.on_focus(widget));
+                if (widget.index)
+                {
+                    it->value.focus = widget;
+                    ICY_ERROR(it->value.update());
+                }
                 break;
             }
         }
@@ -203,11 +215,6 @@ error_type mbox_database::exec(const event_type type, const gui_event& event) no
                     break;
                 m_windows.erase(it);
                 break;
-            }
-            else if (event.widget == it->value.tab_text)
-            {
-                ICY_ERROR(copy(event.data.as_string(), it->value.object.value));
-                ICY_ERROR(it->value.update());
             }
             else
             {
@@ -270,9 +277,48 @@ error_type mbox_database::exec(const event_type type, const gui_event& event) no
     }
     return error_type();
 }
+error_type mbox_database::exec(const text_edit_event& event) noexcept
+{
+    for (auto&& pair : m_windows) 
+    {
+        if (pair.value.tab_text_data.index() == event.window)
+        {
+            auto& dst = pair.value.object.value;
+            array<char> vec;
+            if (event.type == text_edit_event::type::insert)
+            {
+                ICY_ERROR(vec.append(const_array_view<char>{ dst.data(), event.offset }));
+                ICY_ERROR(vec.append(event.text));
+                ICY_ERROR(vec.append(const_array_view<char>{ dst.data() + event.offset, dst.size() - event.offset }));
+            }
+            else if (event.type == text_edit_event::type::remove)
+            {
+                ICY_ERROR(vec.append(const_array_view<char>{ dst.data(), event.offset }));
+                ICY_ERROR(vec.append(const_array_view<char>{ dst.data() + event.offset + event.length, dst.size() - (event.offset + event.length) }))
+            }
+            else
+            {
+                break;
+            }
+            dst = std::move(vec);
+            pair.value.can_redo = event.can_redo;
+            pair.value.can_undo = event.can_undo;
+            ICY_ERROR(pair.value.update());
+            break;
+        }
+    }
+    return error_type();
+}
 error_type mbox_database::close(bool& cancel) noexcept
 {
-    if (m_action)
+    for (auto it = m_windows.begin(); it != m_windows.end();)
+    {
+        ICY_ERROR(it->value.close(cancel));
+        if (cancel)
+            return error_type();
+        it = m_windows.erase(it);
+    }
+    if (m_action || m_change)
     {
         auto yes_save = false;
         ICY_ERROR(save_changes(m_window, yes_save, cancel));
@@ -283,9 +329,11 @@ error_type mbox_database::close(bool& cancel) noexcept
     }
 
     m_action = 0;
+    m_change = false;
     m_actions.clear();
     m_model.clear();
     m_objects.clear();
+    m_macros.clear();
     m_path.clear();
     ICY_ERROR(m_menu.action_close.enable(false));
     ICY_ERROR(update());
@@ -296,14 +344,18 @@ error_type mbox_database::reset(const string_view file_path, const open_mode mod
     if (mode == open_mode::open)
     {
         auto saved_objects = std::move(m_objects);
+        auto saved_macros = std::move(m_macros);
         mbox_errors errors;
         ICY_ERROR(mbox_array::initialize(file_path, errors));
         std::swap(m_objects, saved_objects);
+        std::swap(m_macros, saved_macros);
+
         auto cancel = false;
         ICY_ERROR(close(cancel));
         if (cancel)
             return error_type();
         std::swap(m_objects, saved_objects);
+        std::swap(m_macros, saved_macros);
     }
     else
     {
@@ -323,41 +375,45 @@ error_type mbox_database::reset(const string_view file_path, const open_mode mod
 }
 error_type mbox_database::launch(const mbox_index& party) noexcept
 {
+    auto gui = shared_ptr<gui_queue>(global_gui);
+    if (!gui)
+        return error_type();
+
     xgui_widget window;
     ICY_ERROR(window.initialize(gui_widget_type::dialog, m_window, gui_widget_flag::layout_grid));
 
     xgui_text_edit main_widget;
     ICY_ERROR(main_widget.initialize(window));
-    ICY_ERROR(main_widget.enable(false));
+    ICY_ERROR(main_widget.readonly(true));
 
     const auto print = [](void* ptr, const string_view str)
     {
         const auto text = static_cast<xgui_text_edit*>(ptr);
         
-        if (str.find("\r\n") == str.begin())
+        if (str.find("\r\n"_s) == str.begin())
         {
             string time_str;
             ICY_ERROR(icy::to_string(clock_type::now(), time_str));
             string msg;
-            ICY_ERROR(icy::to_string("\r\n[%1]: %2", msg, string_view(time_str), string_view(str.begin() + 2, str.end())));
+            ICY_ERROR(icy::to_string("\r\n[%1]: %2"_s, msg, string_view(time_str), string_view(str.begin() + 2, str.end())));
             ICY_ERROR(text->append(msg));
         }
         else
         {
             ICY_ERROR(text->append(str));
         }
-
         return error_type();
     };
+
     {
         string time_str;
         ICY_ERROR(icy::to_string(clock_type::now(), time_str));
         string name;
         ICY_ERROR(rpath(party, name));
         string msg;
-        ICY_ERROR(icy::to_string("[%1]: Launch party \"%2\"", msg, string_view(time_str), string_view(name)));
+        ICY_ERROR(icy::to_string("[%1]: Launch party \"%2\""_s, msg, string_view(time_str), string_view(name)));
         ICY_ERROR(main_widget.append(msg));
-    }
+    };
 
     shared_ptr<mbox_system> system;
     if (const auto error = create_event_system(system, *this, party, print, &main_widget))
@@ -376,7 +432,7 @@ error_type mbox_database::launch(const mbox_index& party) noexcept
     for (auto&& chr : info->characters)
     {
         string label;
-        ICY_ERROR(icy::to_string("[%1] %2"_s, label, chr.position, string_view(m_objects.try_find(chr.index)->name)));
+        ICY_ERROR(icy::to_string("[%1] %2"_s, label, chr.slot, string_view(chr.name)));
 
         xgui_widget new_label;
         ICY_ERROR(new_label.initialize(gui_widget_type::label, window));
@@ -386,6 +442,17 @@ error_type mbox_database::launch(const mbox_index& party) noexcept
 
         xgui_widget new_widget;
         ICY_ERROR(new_widget.initialize(gui_widget_type::text_edit, window));
+
+        for (auto k = 0u; k < chr.macros.size(); ++k)
+        {
+            const auto input = input_message(input_type::key_press, m_macros[k].key, m_macros[k].mods);
+            string str_input;
+            ICY_ERROR(to_string(input, str_input));
+            string msg;
+            ICY_ERROR(msg.appendf("\r\n[Macro \"%1\"]: \"%2\""_s, string_view(str_input), string_view(chr.macros[k])));
+            ICY_ERROR(gui->append(new_widget, msg));
+        }
+
         ICY_ERROR(new_widget.insert(gui_insert(column, 1)));
         ICY_ERROR(widgets.push_back(std::move(new_widget)));
 
@@ -395,8 +462,11 @@ error_type mbox_database::launch(const mbox_index& party) noexcept
 
     shared_ptr<event_queue> loop;
     ICY_ERROR(create_event_system(loop, event_type::gui_update | event_type::gui_select));
-
     ICY_ERROR(window.show(true));
+    ICY_ERROR(info->update_wow_addon(*this, "D:/World of Warcraft/_classic_/Interface/AddOns/"_s));
+
+    ICY_ERROR(system->thread().launch());
+    ICY_ERROR(system->thread().rename("MBox System"_s));
 
     while (true)
     {
@@ -414,7 +484,37 @@ error_type mbox_database::launch(const mbox_index& party) noexcept
         }
         else if (event->type == mbox_event_type_send_input)
         {
+            const auto& event_data = event->data<mbox_event_send_input>();
+            auto row = 0u;
+            for (auto&& chr : info->characters)
+            {
+                if (chr.index == event_data.character)
+                {
+                    string str_time;
+                    ICY_ERROR(to_string(clock_type::now(), str_time));
 
+                    for (auto&& input : event_data.messages)
+                    {
+                        string str_input;
+                        ICY_ERROR(to_string(input, str_input));
+                        string msg;
+                        ICY_ERROR(msg.appendf("\r\n[%1]: %2 %3"_s, string_view(str_time), to_string(input.type), string_view(str_input)));
+
+                        if (input.type == input_type::key_press)
+                        {
+                            for (auto k = 0u; k < chr.macros.size(); ++k)
+                            {
+                                if (m_macros[k].key == input.key && m_macros[k].mods == key_mod(input.mods))
+                                {
+                                    ICY_ERROR(msg.appendf(" (Macro \"%1\")"_s, string_view(chr.macros[k])));
+                                    break;
+                                }
+                            }
+                        }
+                        ICY_ERROR(gui->append(widgets[row], msg));
+                    }
+                }
+            }
         }
     }
     return error_type();
@@ -431,14 +531,14 @@ error_type mbox_database::on_move(mbox_object& object) noexcept
                 object.type == mbox_type::character)
             {
                 const mbox_object* parent_ptr = &object;
-                while (parent_ptr)
+                while (*parent_ptr)
                 {
                     if (parent_ptr->type == mbox_type::profile)
                     {
                         old_profile = parent_ptr->index;
                         break;
                     }
-                    parent_ptr = self.find(parent_ptr->parent);
+                    parent_ptr = &self.find(parent_ptr->parent);
                 }
             }
         }
@@ -451,12 +551,12 @@ error_type mbox_database::on_move(mbox_object& object) noexcept
             mbox_index new_profile;
             {
                 auto parent_ptr = &modify_with;                
-                while (parent_ptr)
+                while (*parent_ptr)
                 {
                     if (parent_ptr->type == mbox_type::profile)
                         new_profile = parent_ptr->index;
                     ICY_ERROR(parent_indices.insert(parent_ptr->index));
-                    parent_ptr = self.find(parent_ptr->parent);
+                    parent_ptr = &self.find(parent_ptr->parent);
                 }
             }
             if (parent_indices.try_find(source_copy.index))
@@ -911,7 +1011,7 @@ error_type mbox_database::update() noexcept
     {
         const file_name fname(m_path);
         string window_name;
-        ICY_ERROR(icy::to_string("%1%2 (%3)"_s, window_name, m_action == 0 ? ""_s : "* "_s, fname.name, string_view(m_path)));
+        ICY_ERROR(icy::to_string("%1%2 (%3)"_s, window_name, m_action == 0 && m_change == false ? ""_s : "* "_s, fname.name, string_view(m_path)));
 
         auto gui = shared_ptr<gui_queue>(global_gui);
         if (gui)
@@ -926,17 +1026,18 @@ error_type mbox_database::update() noexcept
 
     ICY_ERROR(m_menu.action_undo.enable(m_action > 0));
     ICY_ERROR(m_menu.action_redo.enable(m_action < m_actions.size()));
-    ICY_ERROR(m_menu.action_save.enable(m_action > 0));
+    ICY_ERROR(m_menu.action_save.enable(m_action > 0 || m_change));
     return error_type();
 }
 error_type mbox_database::save() noexcept
 {
-    if (m_actions.empty())
+    if (m_actions.empty() && m_change == false)
         return error_type();
 
     ICY_ERROR(mbox_array::save(m_path, 64_mb));
     m_actions.clear();
     m_action = 0;
+    m_change = false;
     ICY_ERROR(update());
 
     return error_type();
@@ -986,7 +1087,7 @@ error_type mbox_database::execute(mbox_object& action) noexcept
         const auto& object = find_object->value;
 
         xgui_node node;
-        ICY_ERROR(mbox_model_find(node, &object, m_model, *this, nullptr));
+        ICY_ERROR(mbox_model_find(node, object, m_model, *this, nullptr));
 
         if (action.name.empty())
         {
@@ -997,7 +1098,7 @@ error_type mbox_database::execute(mbox_object& action) noexcept
         else if (action.name != object.name)
         {
             xgui_node new_node;
-            ICY_ERROR(mbox_model_find(new_node, &action, m_model, *this, nullptr));
+            ICY_ERROR(mbox_model_find(new_node, action, m_model, *this, nullptr));
 
             if (new_node.row() != node.row())
                 ICY_ERROR(node.parent().move_rows(node.row(), 1, new_node.row()));
@@ -1009,7 +1110,7 @@ error_type mbox_database::execute(mbox_object& action) noexcept
         {
             auto gui = shared_ptr<gui_queue>(global_gui);
             xgui_node new_node;
-            ICY_ERROR(mbox_model_find(new_node, &action, m_model, *this, nullptr));
+            ICY_ERROR(mbox_model_find(new_node, action, m_model, *this, nullptr));
 
             if (gui)
                 ICY_ERROR(gui->move_rows(node.parent(), node.row(), 1, new_node.parent(), new_node.row()));
@@ -1027,7 +1128,7 @@ error_type mbox_database::execute(mbox_object& action) noexcept
     else
     {
         xgui_node node;
-        ICY_ERROR(mbox_model_find(node, &action, m_model, *this, nullptr));
+        ICY_ERROR(mbox_model_find(node, action, m_model, *this, nullptr));
         
         ICY_ERROR(node.parent().insert_rows(node.row(), 1));
         ICY_ERROR(node.udata(action.index));
@@ -1043,20 +1144,496 @@ error_type mbox_database::execute(mbox_object& action) noexcept
     }
     return error_type();
 }
+error_type mbox_database::macros() noexcept
+{
+    xgui_widget window;
+    ICY_ERROR(window.initialize(gui_widget_type::dialog, m_window, gui_widget_flag::layout_vbox));
+
+    xgui_model model;
+    ICY_ERROR(model.initialize());
+    ICY_ERROR(model.hheader(0, ""_s));
+    
+    array<mbox_macro> new_macros;
+    ICY_ERROR(copy(m_macros, new_macros));
+
+    xgui_widget table;
+    ICY_ERROR(table.initialize(gui_widget_type::grid_view, window));
+    
+    ICY_ERROR(table.bind(model));
+
+    const auto remodel = [&]
+    {
+        ICY_ERROR(model.clear());
+        ICY_ERROR(model.insert_cols(0, 1));
+        ICY_ERROR(model.insert_rows(0, new_macros.size()));
+
+        ICY_ERROR(model.hheader(0, "Index"_s));
+        ICY_ERROR(model.hheader(1, "Key"_s));
+
+        auto row = 0u;
+        for (auto&& macro : new_macros)
+        {
+            string str_index;
+            ICY_ERROR(to_string(row + 1, str_index));
+            ICY_ERROR(model.node(row, 0).text(str_index));
+            string str_input;
+            ICY_ERROR(to_string(input_message(input_type::key_press, macro.key, macro.mods), str_input));
+            ICY_ERROR(model.node(row, 1).text(str_input));
+            ++row;
+        }
+        auto gui = shared_ptr<gui_queue>(global_gui);
+        ICY_ERROR(gui->resize_columns(table));
+        return error_type();
+    };
+
+    ICY_ERROR(remodel());
+
+    xgui_widget buttons;
+    xgui_widget button_save;
+    xgui_widget button_exit;
+    ICY_ERROR(buttons.initialize(gui_widget_type::none, window, gui_widget_flag::layout_hbox | gui_widget_flag::auto_insert));
+    ICY_ERROR(button_save.initialize(gui_widget_type::text_button, buttons));
+    ICY_ERROR(button_exit.initialize(gui_widget_type::text_button, buttons));
+
+    ICY_ERROR(button_save.text("Save"_s));
+    ICY_ERROR(button_exit.text("Close"_s));
+    ICY_ERROR(button_save.enable(false));
+
+    shared_ptr<event_queue> loop;
+    ICY_ERROR(create_event_system(loop, event_type::gui_update | event_type::gui_context));
+    ICY_ERROR(window.show(true));
+
+    while (true)
+    {
+        event event;
+        ICY_ERROR(loop->pop(event));
+        if (event->type == event_type::global_quit)
+            return error_type();
+
+        const auto& event_data = event->data<gui_event>();
+        if (event->type == event_type::gui_update)
+        {
+            if (event_data.widget == button_exit ||
+                event_data.widget == window)
+                return error_type();
+            else if (event_data.widget == button_save)
+                break;
+        }
+        else if (event->type == event_type::gui_context)
+        {
+            xgui_widget menu;
+            menu.initialize(gui_widget_type::menu, window);
+
+            xgui_action action_create;
+            xgui_action action_edit;
+            xgui_action action_destroy;
+            xgui_action action_default;
+            xgui_action action_clear;
+            if (const auto node = event_data.data.as_node())
+            {
+                ICY_ERROR(action_edit.initialize("Change"_s));
+                ICY_ERROR(action_destroy.initialize("Destroy"_s));
+                ICY_ERROR(menu.insert(action_edit));
+                ICY_ERROR(menu.insert(action_destroy));
+            }
+            else
+            {
+                ICY_ERROR(action_create.initialize("Create"_s));
+                ICY_ERROR(action_default.initialize("Default"_s));
+                ICY_ERROR(action_clear.initialize("Clear"_s));
+                ICY_ERROR(action_clear.enable(!new_macros.empty()));
+                ICY_ERROR(menu.insert(action_create));
+                ICY_ERROR(menu.insert(action_default));
+                ICY_ERROR(menu.insert(action_clear));
+            }
+            gui_action action;
+            ICY_ERROR(menu.exec(action));
+            if (!action.index)
+                continue;
+
+            if (action == action_create || action == action_edit)
+            {
+                auto row = event_data.data.as_node().row();
+                
+                if (action == action_create)
+                    row = new_macros.size();
+
+                auto success = false;
+                ICY_ERROR(edit_macro(new_macros, row, success));
+                if (success)
+                {
+                    ICY_ERROR(button_save.enable(true));
+                    ICY_ERROR(remodel());
+                }
+            }
+            else if (action == action_default)
+            {
+                m_macros.clear();
+                const key hint_keys[] =
+                {
+                    key::num_0,
+                    key::num_1,
+                    key::num_2,
+                    key::num_3,
+                    key::num_4,
+                    key::num_5,
+                    key::num_6,
+                    key::num_7,
+                    key::num_8,
+                    key::num_9,
+                    key::F1,
+                    key::F2,
+                    key::F3,
+                    key::F5,
+                    key::F6,
+                    key::F7,
+                    key::F8,
+                    key::F9,
+                    key::F10,
+                    key::F11,
+                    key::F12,
+                };
+                const key_mod hint_mods[] = { key_mod::lctrl, key_mod::rctrl, key_mod::lalt, key_mod::ralt, key_mod::lshift, key_mod::rshift };
+
+                for (auto&& key : hint_keys)
+                {
+                    for (auto&& mod : hint_mods)
+                    {
+                        if (key >= key::num_0 && key <= key::num_9 && (mod == key_mod::lshift || mod == key_mod::rshift))
+                            continue;
+                        mbox_macro macro;
+                        macro.key = key;
+                        macro.mods = mod;
+                        ICY_ERROR(m_macros.push_back(macro));
+                    }
+                }
+                ICY_ERROR(button_save.enable(true));
+                ICY_ERROR(remodel());
+            }
+            else if (action == action_destroy)
+            {
+                const auto row = event_data.data.as_node().row();
+                array<mbox_macro> tmp;
+                for (auto k = 0u; k < row; ++k)
+                    ICY_ERROR(tmp.push_back(new_macros[k]));
+                for (auto k = row + 1; k < new_macros.size(); ++k)
+                    ICY_ERROR(tmp.push_back(new_macros[k]));
+                new_macros = std::move(tmp);
+                ICY_ERROR(button_save.enable(true));
+                ICY_ERROR(remodel());
+            }
+            else if (action == action_clear)
+            {
+                new_macros.clear();
+                ICY_ERROR(button_save.enable(true));
+                ICY_ERROR(remodel());
+            }
+        }
+    }
+
+    m_macros = std::move(new_macros);
+    m_change = true;
+    ICY_ERROR(update());
+
+    return error_type();
+}
+error_type mbox_database::edit_macro(array<mbox_macro>& new_macros, const size_t row, bool& success) noexcept
+{
+    xgui_widget window;
+    ICY_ERROR(window.initialize(gui_widget_type::dialog, gui_widget(), gui_widget_flag::layout_grid));
+
+    const auto old_macro = row < new_macros.size() ? &new_macros[row] : nullptr;
+
+    xgui_widget combo_key;
+    xgui_widget label_key;
+    xgui_widget combo_mod_ctrl;
+    xgui_widget combo_mod_alt;
+    xgui_widget combo_mod_shift;
+    xgui_widget label_mod_ctrl;
+    xgui_widget label_mod_alt;
+    xgui_widget label_mod_shift;
+    xgui_widget buttons;
+    xgui_widget button_ok;
+    xgui_widget button_cancel;
+
+    ICY_ERROR(combo_key.initialize(gui_widget_type::combo_box, window));
+    ICY_ERROR(combo_mod_ctrl.initialize(gui_widget_type::combo_box, window));
+    ICY_ERROR(combo_mod_alt.initialize(gui_widget_type::combo_box, window));
+    ICY_ERROR(combo_mod_shift.initialize(gui_widget_type::combo_box, window));
+
+    ICY_ERROR(label_key.initialize(gui_widget_type::label, window));
+    ICY_ERROR(label_mod_ctrl.initialize(gui_widget_type::label, window));
+    ICY_ERROR(label_mod_alt.initialize(gui_widget_type::label, window));
+    ICY_ERROR(label_mod_shift.initialize(gui_widget_type::label, window));
+
+    ICY_ERROR(label_key.insert(gui_insert(0, 0)));
+    ICY_ERROR(combo_key.insert(gui_insert(1, 0)));
+    ICY_ERROR(label_mod_ctrl.insert(gui_insert(0, 1)));
+    ICY_ERROR(combo_mod_ctrl.insert(gui_insert(1, 1)));
+    ICY_ERROR(label_mod_alt.insert(gui_insert(0, 2)));
+    ICY_ERROR(combo_mod_alt.insert(gui_insert(1, 2)));
+    ICY_ERROR(label_mod_shift.insert(gui_insert(0, 3)));
+    ICY_ERROR(combo_mod_shift.insert(gui_insert(1, 3)));
+    ICY_ERROR(label_key.text("Key"_s));
+    ICY_ERROR(label_mod_ctrl.text("Control"_s));
+    ICY_ERROR(label_mod_alt.text("Alt"_s));
+    ICY_ERROR(label_mod_shift.text("Shift"_s));
+
+    ICY_ERROR(buttons.initialize(gui_widget_type::none, window, gui_widget_flag::layout_hbox));
+    ICY_ERROR(buttons.insert(gui_insert(0, 4, 2, 1)));
+
+    ICY_ERROR(button_ok.initialize(gui_widget_type::text_button, buttons));
+    ICY_ERROR(button_cancel.initialize(gui_widget_type::text_button, buttons));
+    ICY_ERROR(button_ok.text(row == new_macros.size() ? "Create"_s : "Change"_s));
+    ICY_ERROR(button_cancel.text("Cancel"_s));
+
+    shared_ptr<event_queue> loop;
+    ICY_ERROR(create_event_system(loop, event_type::gui_update | event_type::gui_select));
+    ICY_ERROR(window.show(true));
+
+    xgui_model model_keys;
+    ICY_ERROR(model_keys.initialize());
+    map<string, key> data_keys;
+    for (auto k = 0x08; k < 0x100; ++k)
+    {
+        if (to_string(key(k)).empty())
+            continue;
+        const key hint_keys[] =
+        {
+            key::F4,
+            key::left_shift,
+            key::right_shift,
+            key::left_alt,
+            key::right_alt,
+            key::left_ctrl,
+            key::right_ctrl,
+        };
+        if (std::find(std::begin(hint_keys), std::end(hint_keys), key(k)) != std::end(hint_keys))
+            continue;
+
+        string str_key;
+        ICY_ERROR(copy(to_string(key(k)), str_key));
+        ICY_ERROR(data_keys.insert(std::move(str_key), key(k)));
+    }
+    ICY_ERROR(model_keys.insert_rows(0, data_keys.size()));
+    ICY_ERROR(combo_key.bind(model_keys));
+    auto model_row = 0u;
+
+    ICY_ERROR(button_ok.enable(false));
+
+    mbox_macro new_macro;
+    if (old_macro)
+    {
+        new_macro = *old_macro;
+    }
+    else
+    {
+        const key hint_keys[] =
+        {
+            key::num_0,
+            key::num_1,
+            key::num_2,
+            key::num_3,
+            key::num_4,
+            key::num_5,
+            key::num_6,
+            key::num_7,
+            key::num_8,
+            key::num_9,
+            key::F1,
+            key::F2,
+            key::F3,
+            key::F5,
+            key::F6,
+            key::F7,
+            key::F8,
+            key::F9,
+            key::F10,
+            key::F11,
+            key::F12,
+        };
+        const key_mod hint_mods[] = { key_mod::lctrl, key_mod::rctrl, key_mod::lalt, key_mod::ralt, key_mod::lshift, key_mod::rshift };
+        const auto error = [&]
+        {
+            for (auto&& mod : hint_mods)
+            {
+                for (auto&& key : hint_keys)
+                {
+                    auto found = false;
+                    for (auto&& macro : new_macros)
+                    {
+                        if (macro.key == key && macro.mods == mod)
+                        {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found)
+                    {
+                        if (key >= key::num_0 && key <= key::num_9 && (mod == key_mod::lshift || mod == key_mod::rshift))
+                            continue;
+                        new_macro.key = key;
+                        new_macro.mods = mod;
+                        ICY_ERROR(button_ok.enable(true));
+                        return error_type();
+                    }
+                }
+            }
+            return error_type();
+        }();
+        ICY_ERROR(error);
+    }
+
+    for (auto&& pair : data_keys)
+    {
+        ICY_ERROR(model_keys.node(model_row, 0).udata(uint64_t(pair.value)));
+        ICY_ERROR(model_keys.node(model_row, 0).text(pair.key));
+
+        if (pair.value == new_macro.key)
+            ICY_ERROR(combo_key.scroll(model_keys.node(model_row, 0)));
+        ++model_row;
+    }
+
+    xgui_model model_ctrl;
+    xgui_model model_alt;
+    xgui_model model_shift;
+
+    const auto init_mods = [new_macro](xgui_model& model, xgui_widget& combo, const key_mod lhs, const key_mod rhs)
+    {
+        ICY_ERROR(model.initialize());
+        ICY_ERROR(model.insert_rows(0, 3));
+        ICY_ERROR(model.node(0, 0).text("None"_s));
+        ICY_ERROR(model.node(0, 0).udata(uint64_t(key_mod::none)));
+        ICY_ERROR(model.node(1, 0).text("Left"_s));
+        ICY_ERROR(model.node(1, 0).udata(uint64_t(lhs)));
+        ICY_ERROR(model.node(2, 0).text("Right"_s));
+        ICY_ERROR(model.node(2, 0).udata(uint64_t(rhs)));
+        ICY_ERROR(combo.bind(model));
+        if (new_macro.mods & (lhs))
+        {
+            ICY_ERROR(combo.scroll(model.node(1, 0)));
+        }
+        else if (new_macro.mods & (rhs))
+        {
+            ICY_ERROR(combo.scroll(model.node(2, 0)));
+        }
+        return error_type();
+    };
+    ICY_ERROR(init_mods(model_ctrl, combo_mod_ctrl, key_mod::lctrl, key_mod::rctrl));
+    ICY_ERROR(init_mods(model_alt, combo_mod_alt, key_mod::lalt, key_mod::ralt));
+    ICY_ERROR(init_mods(model_shift, combo_mod_shift, key_mod::lshift, key_mod::rshift));
+
+
+    const auto validate = [&new_macros]
+    {
+        for (auto&& macro : new_macros)
+        {
+            for (auto&& other : new_macros)
+            {
+                if (&other == &macro)
+                    continue;
+                if (other.key == macro.key && other.mods == macro.mods)
+                    return false;
+            }
+        }
+        return true;
+    };
+    
+    const auto try_apply = [&](bool& is_valid)
+    {
+        if (old_macro)
+        {
+            const auto cache = *old_macro;
+            *old_macro = new_macro;
+            is_valid = validate();
+            *old_macro = cache;
+        }
+        else if (new_macro.key != key::none)
+        {
+            ICY_ERROR(new_macros.push_back(new_macro));
+            is_valid = validate();
+            new_macros.pop_back();
+        }
+        return error_type();
+    };
+    
+    while (true)
+    {
+        event event;
+        ICY_ERROR(loop->pop(event));
+        if (event->type == event_type::global_quit)
+            return error_type();
+
+        const auto& event_data = event->data<gui_event>();
+        if (event->type == event_type::gui_update)
+        {
+            if (event_data.widget == button_cancel ||
+                event_data.widget == window)
+                return error_type();
+            else if (event_data.widget == button_ok)
+            {
+                auto is_valid = false;
+                ICY_ERROR(try_apply(is_valid));
+                if (is_valid)
+                {
+                    if (old_macro)
+                    {
+                        *old_macro = new_macro;
+                    }
+                    else
+                    {
+                        ICY_ERROR(new_macros.push_back(new_macro));
+                    }
+                    success = true;
+                    break;
+                }
+            }
+        }
+        else if (event->type == event_type::gui_select)
+        {
+            if (event_data.widget == combo_key)
+            {
+                new_macro.key = key(event_data.data.as_node().udata().as_uinteger());
+            }
+            else if (event_data.widget == combo_mod_ctrl)
+            {
+                new_macro.mods = key_mod(uint32_t(new_macro.mods) & ~uint32_t(key_mod::lctrl | key_mod::rctrl)) |
+                    key_mod(event_data.data.as_node().udata().as_uinteger());
+            }
+            else if (event_data.widget == combo_mod_alt)
+            {
+                new_macro.mods = key_mod(uint32_t(new_macro.mods) & ~uint32_t(key_mod::lalt | key_mod::ralt)) |
+                    key_mod(event_data.data.as_node().udata().as_uinteger());
+            }
+            else if (event_data.widget == combo_mod_shift)
+            {
+                new_macro.mods = key_mod(uint32_t(new_macro.mods) & ~uint32_t(key_mod::lshift | key_mod::rshift)) |
+                    key_mod(event_data.data.as_node().udata().as_uinteger());
+            }
+            auto is_valid = false;
+            ICY_ERROR(try_apply(is_valid));
+            ICY_ERROR(button_ok.enable(is_valid));
+        }
+    }
+
+    return error_type();
+}
 
 error_type mbox_database::window_type::initialize(const mbox_object& object) noexcept
 {
     ICY_ERROR(refs_model.initialize());
     ICY_ERROR(refs_model.hheader(0, "Name"_s));
 
+    ICY_ERROR(self.m_text_edit.create(tab_text_data));
+
     ICY_ERROR(window.initialize(gui_widget_type::window, gui_widget(), gui_widget_flag::layout_vbox));
     ICY_ERROR(toolbar.initialize(gui_widget_type::none, window, gui_widget_flag::layout_hbox | gui_widget_flag::auto_insert));
     ICY_ERROR(tabs.initialize(gui_widget_type::tabs, window));
-    ICY_ERROR(tab_text.initialize(tabs));
+    ICY_ERROR(tab_text_view.initialize(tab_text_data.hwnd(), tabs));
     ICY_ERROR(tab_refs.initialize(gui_widget_type::grid_view, tabs));
     ICY_ERROR(tab_debug.initialize(tabs));
     ICY_ERROR(tab_refs.bind(refs_model));
-    ICY_ERROR(tab_debug.enable(false));
+    ICY_ERROR(tab_debug.readonly(true));
     
     auto gui = shared_ptr<gui_queue>(global_gui);
     ICY_ERROR(gui->text(tabs, tab_refs, "Refs"_s));
@@ -1097,6 +1674,10 @@ error_type mbox_database::window_type::initialize(const mbox_object& object) noe
         text = "Text Macro"_s;
         break;
 
+    case mbox_type::action_var_macro:
+        text = "Text Var Macro"_s;
+        break;
+
     case mbox_type::layout:
         text = "HTML Document"_s;
         break;
@@ -1109,44 +1690,38 @@ error_type mbox_database::window_type::initialize(const mbox_object& object) noe
         return make_stdlib_error(std::errc::invalid_argument);
     }
 
-    ICY_ERROR(gui->text(tabs, tab_text, text));
+    ICY_ERROR(gui->text(tabs, tab_text_view, text));
     ICY_ERROR(copy(object, this->object));
-    ICY_ERROR(tab_text.text(object.value));
-        
+
+    ICY_ERROR(tab_text_data.text(string_view(object.value.data(), object.value.size())));     
+
     ICY_ERROR(remodel());
-    ICY_ERROR(on_focus(tab_text));
     
-    return error_type();
-}
-error_type mbox_database::window_type::on_focus(gui_widget new_focus) noexcept
-{
-    tools.clear();
 
     xgui_widget tool_save;
     ICY_ERROR(tool_save.initialize(gui_widget_type::text_button, toolbar));
     ICY_ERROR(tool_save.text("Save"_s));
     ICY_ERROR(tools.push_back(std::make_pair(tool_type::save, std::move(tool_save))));
-    if (new_focus == tab_refs)
-    {
-        xgui_widget tool_undo;
-        ICY_ERROR(tool_undo.initialize(gui_widget_type::text_button, toolbar));
-        ICY_ERROR(tool_undo.text("Undo"_s));
-        ICY_ERROR(tools.push_back(std::make_pair(tool_type::undo, std::move(tool_undo))));
 
-        xgui_widget tool_redo;
-        ICY_ERROR(tool_redo.initialize(gui_widget_type::text_button, toolbar));
-        ICY_ERROR(tool_redo.text("Redo"_s));
-        ICY_ERROR(tools.push_back(std::make_pair(tool_type::redo, std::move(tool_redo))));
-    }
-    else if (new_focus == tab_text || new_focus == tab_debug)
-    {
-        xgui_widget tool_compile;
-        ICY_ERROR(tool_compile.initialize(gui_widget_type::text_button, toolbar));
-        ICY_ERROR(tool_compile.text("Compile"_s));
-        ICY_ERROR(tools.push_back(std::make_pair(tool_type::compile, std::move(tool_compile))));
-    }
-    focus = new_focus;
+
+    xgui_widget tool_undo;
+    ICY_ERROR(tool_undo.initialize(gui_widget_type::text_button, toolbar));
+    ICY_ERROR(tool_undo.text("Undo"_s));
+    ICY_ERROR(tools.push_back(std::make_pair(tool_type::undo, std::move(tool_undo))));
+
+    xgui_widget tool_redo;
+    ICY_ERROR(tool_redo.initialize(gui_widget_type::text_button, toolbar));
+    ICY_ERROR(tool_redo.text("Redo"_s));
+    ICY_ERROR(tools.push_back(std::make_pair(tool_type::redo, std::move(tool_redo))));
+
+    xgui_widget tool_compile;
+    ICY_ERROR(tool_compile.initialize(gui_widget_type::text_button, toolbar));
+    ICY_ERROR(tool_compile.text("Compile"_s));
+    ICY_ERROR(tools.push_back(std::make_pair(tool_type::compile, std::move(tool_compile))));
+
+    focus = tab_text_view;
     ICY_ERROR(update());
+
     return error_type();
 }
 error_type mbox_database::window_type::remodel() noexcept
@@ -1170,6 +1745,30 @@ error_type mbox_database::window_type::remodel() noexcept
     }
     auto gui = shared_ptr<gui_queue>(global_gui);
     ICY_ERROR(gui->resize_columns(tab_refs));
+
+
+    text_edit_lexer lexer;
+    ICY_ERROR(lexer.initialize("lua"_s));
+    ICY_ERROR(copy(string_view(lua_keywords, strlen(lua_keywords)), lexer.keywords[0]));
+    
+    array<string_view> words;
+    ICY_ERROR(split(string_view(mbox_keywords, strlen(mbox_keywords)), words));
+    ICY_ERROR(lexer.keywords[1].append("mbox"_s));
+    for (auto&& word : words)
+        ICY_ERROR(lexer.keywords[1].appendf(" mbox.%1"_s, word));
+
+    ICY_ERROR(lexer.keywords[2].append("mbox"_s));
+    for (auto&& pair : object.refs)
+        ICY_ERROR(lexer.keywords[2].appendf(" mbox.%1"_s, string_view(pair.key)));
+
+    text_edit_style default_style;
+    ICY_ERROR(copy("Consolas"_s, default_style.font));
+    ICY_ERROR(lexer.styles.insert(SCE_LUA_DEFAULT, std::move(default_style)));
+    ICY_ERROR(lexer.add_style(SCE_LUA_WORD, colors::blue));
+    ICY_ERROR(lexer.add_style(SCE_LUA_WORD2, colors::dark_green));
+    ICY_ERROR(lexer.add_style(SCE_LUA_WORD3, colors::dark_red));
+    ICY_ERROR(tab_text_data.lexer(std::move(lexer)));
+
 
     return error_type();
 
@@ -1236,7 +1835,7 @@ error_type mbox_database::window_type::on_edit(const string_view name) noexcept
         event event;
         ICY_ERROR(loop->pop(event));
         if (event->type == event_type::global_quit)
-            break;
+            return error_type();
 
         const auto& event_data = event->data<gui_event>();
         if (event->type == event_type::gui_update)
@@ -1370,11 +1969,11 @@ error_type mbox_database::window_type::context(const size_t index) noexcept
 }
 error_type mbox_database::window_type::update() noexcept
 {
-    const auto object_ptr = self.find(object.index);
+    const auto& object_ptr = self.find(object.index);
     if (!object_ptr)
         return make_mbox_error(mbox_error::invalid_object_index);
 
-    const auto changed = refs_action || object.value != object_ptr->value;
+    auto changed = refs_action || can_undo;
     string path;
     ICY_ERROR(self.rpath(object.index, path));
     if (object.parent != mbox_index())
@@ -1397,12 +1996,20 @@ error_type mbox_database::window_type::update() noexcept
             {
                 ICY_ERROR(pair.second.enable(refs_action > 0));
             }
+            else if (focus == tab_text_view)
+            {
+                ICY_ERROR(pair.second.enable(can_undo));
+            }
         }
         else if (pair.first == tool_type::redo)
         {
             if (focus == tab_refs)
             {
                 ICY_ERROR(pair.second.enable(refs_action < refs_actions.size()));
+            }
+            else if (focus == tab_text_view)
+            {
+                ICY_ERROR(pair.second.enable(can_redo));
             }
         }
         else if (pair.first == tool_type::compile)
@@ -1418,7 +2025,12 @@ error_type mbox_database::window_type::save() noexcept
     //text_action = 0;
     refs_actions.clear();
     refs_action = 0;
-    if (const auto old_object = self.find(object.index))
+    can_undo = false;
+    can_redo = false;
+    ICY_ERROR(tab_text_data.save());
+
+    const auto old_object = &self.find(object.index);
+    if (*old_object)
     {
         mbox_object new_action_refs;
         mbox_object new_action_val;
@@ -1458,23 +2070,9 @@ error_type mbox_database::window_type::save() noexcept
 }
 error_type mbox_database::window_type::undo() noexcept
 {
-    if (focus == tab_text)
+    if (focus == tab_text_view)
     {
-        /*if (text_action == 0)
-            return error_type();
-
-        while (text_action)
-        {
-            auto& prev_action = text_actions[--text_action];
-            auto done = prev_action.value != object.value;
-            ICY_ERROR(execute(prev_action));
-            auto gui = shared_ptr<gui_queue>(global_gui);
-            if (gui)
-                ICY_ERROR(gui->undo(tab_text));
-            if (done)
-                break;
-        }
-        ICY_ERROR(update());*/
+        ICY_ERROR(tab_text_data.undo());
     }
     else if (focus == tab_refs)
     {
@@ -1489,23 +2087,9 @@ error_type mbox_database::window_type::undo() noexcept
 }
 error_type mbox_database::window_type::redo() noexcept
 {
-    if (focus == tab_text)
+    if (focus == tab_text_view)
     {
-        /*if (text_action == text_actions.size())
-            return error_type();
-
-        while (text_action != text_actions.size())
-        {
-            auto& next_action = text_actions[text_action++];
-            auto done = next_action.value != object.value;
-            ICY_ERROR(execute(next_action));
-            auto gui = shared_ptr<gui_queue>(global_gui);
-            if (gui)
-                ICY_ERROR(gui->redo(tab_text));
-            if (done)
-                break;
-        }
-        ICY_ERROR(update());*/
+        ICY_ERROR(tab_text_data.redo());
     }
     else if (focus == tab_refs)
     { 
@@ -1548,8 +2132,8 @@ error_type mbox_database::window_type::execute(mbox_object& action) noexcept
 }
 error_type mbox_database::window_type::close(bool& cancel) noexcept
 {
-    const auto object_ptr = self.find(object.index);
-    if (object_ptr && (object_ptr->value != object.value || refs_action))
+    const auto& object_ptr = self.find(object.index);
+    if (object_ptr && (object_ptr.value != object.value || refs_action))
     {
         auto yes_save = false;
         ICY_ERROR(save_changes(window, yes_save, cancel));
@@ -1570,7 +2154,7 @@ error_type mbox_database::window_type::compile() noexcept
         string time_str;
         ICY_ERROR(icy::to_string(clock_type::now(), time_str));
         string str;
-        ICY_ERROR(str.appendf("\r\n[%1]: ", string_view(time_str)));
+        ICY_ERROR(str.appendf("\r\n[%1]: "_s, string_view(time_str)));
         ICY_ERROR(str.appendf(format, std::forward<decltype(args)>(args)...));
         ICY_ERROR(tab_debug.append(str));
         return error_type();
@@ -1585,13 +2169,13 @@ error_type mbox_database::window_type::compile() noexcept
     
     heap lua_heap;
     ICY_ERROR(lua_heap.initialize(heap_init(64_mb)));
-    ICY_ERROR(append("Initialize LUA sandbox: 64_mb"));
+    ICY_ERROR(append("Initialize LUA sandbox: 64_mb"_s));
 
     shared_ptr<lua_system> lua;
     ICY_ERROR(create_lua_system(lua, &lua_heap));
     mbox_function func(self.m_objects, object, *lua);
 
-    ICY_ERROR(append("Compile LUA script... "));
+    ICY_ERROR(append("Compile LUA script... "_s));
 
     if (const auto error = func.initialize())
     {
@@ -1608,7 +2192,7 @@ error_type mbox_database::window_type::compile() noexcept
         ICY_ERROR(tab_debug.append("Success!"_s));
     }
 
-    ICY_ERROR(append("Execute LUA script... "));
+    ICY_ERROR(append("Execute LUA script... "_s));
     array<mbox_action> actions;
     if (const auto error = func(actions))
     {
@@ -1631,8 +2215,8 @@ error_type mbox_database::window_type::compile() noexcept
         for (auto&& cmd : actions)
         {
             string str;
-            ICY_ERROR(self.to_string(mbox_index(), cmd, str));
-            ICY_ERROR(str.insert(str.begin(), "\r\n  "));
+            ICY_ERROR(func.to_string(string_view(), cmd, str));
+            ICY_ERROR(str.insert(str.begin(), "\r\n  "_s));
             ICY_ERROR(tab_debug.append(str));
         }
     }
@@ -1655,11 +2239,11 @@ error_type mbox_model_filter::create(map<mbox_index, bool>& filter, const mbox_a
         if (!pair.value)
             continue;
 
-        auto object = data.find(pair.key);
-        while (object)
+        auto object = &data.find(pair.key);
+        while (*object)
         {
             filter.find(object->index)->value = true;
-            object = data.find(object->parent);
+            object = &data.find(object->parent);
         }
     }
     return error_type();
@@ -1716,7 +2300,7 @@ error_type mbox_model_create(xgui_model& model, const mbox_array& data, const ma
     };
     return func(model, mbox_object(), data, icons, filter); 
 }
-error_type mbox_model_find(xgui_node& node, const mbox_object* const object, const gui_node root, const mbox_array& data, const map<mbox_index, bool>* const filter) noexcept
+error_type mbox_model_find(xgui_node& node, const mbox_object& object, const gui_node root, const mbox_array& data, const map<mbox_index, bool>* const filter) noexcept
 {
     if (!object)
     {
@@ -1725,15 +2309,15 @@ error_type mbox_model_find(xgui_node& node, const mbox_object* const object, con
     }
 
     xgui_node parent_node;
-    ICY_ERROR(mbox_model_find(parent_node, data.find(object->parent), root, data, filter));
+    ICY_ERROR(mbox_model_find(parent_node, data.find(object.parent), root, data, filter));
 
     array<const mbox_object*> siblings;
-    ICY_ERROR(data.enum_children(object->parent, siblings));
+    ICY_ERROR(data.enum_children(object.parent, siblings));
     {
         array<const mbox_object*> new_siblings;
         for (auto&& ptr : siblings)
         {
-            if (ptr->index == object->index)
+            if (ptr->index == object.index)
                 continue;
 
             if (filter && filter->find(ptr->index)->value == false)
@@ -1743,13 +2327,13 @@ error_type mbox_model_find(xgui_node& node, const mbox_object* const object, con
         }
         siblings = std::move(new_siblings);
     }
-    ICY_ERROR(siblings.push_back(object));
+    ICY_ERROR(siblings.push_back(&object));
     std::sort(siblings.begin(), siblings.end(), [](const mbox_object* lhs, const mbox_object* rhs) { return *lhs < *rhs; });
 
     auto row = 0u;
     for (auto&& ptr : siblings)
     {
-        if (ptr->index == object->index)
+        if (ptr->index == object.index)
             break;
         ++row;
     }
