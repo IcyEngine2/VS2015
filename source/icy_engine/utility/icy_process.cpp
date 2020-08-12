@@ -1,84 +1,27 @@
-#include <icy_engine/process/icy_process.hpp>
-#include <icy_engine/core/icy_string.hpp>
+#include <icy_engine/utility/icy_process.hpp>
 #include <icy_engine/core/icy_array.hpp>
-#include <icy_engine/core/icy_file.hpp>
 #include <Windows.h>
 #include <tlhelp32.h>
-#include <wtsapi32.h>
+
 using namespace icy;
 
-error_type process::enumerate(array<std::pair<string, uint32_t>>& proc) noexcept
-{    
-    auto lib = "wtsapi32"_lib;
-    ICY_ERROR(lib.initialize());
-    auto ptr = static_cast<WTS_PROCESS_INFOW*>(nullptr);
-    auto len = 0ul;
-
-    const auto func = ICY_FIND_FUNC(lib, WTSEnumerateProcessesW);
-    const auto free = ICY_FIND_FUNC(lib, WTSFreeMemory);
-    if (!func || !free)
-        return make_stdlib_error(std::errc::not_supported);
-
-    if (!func(WTS_CURRENT_SERVER_HANDLE, 0, 1, &ptr, &len))
+error_type icy::process_path(const uint32_t index, string& str) noexcept
+{
+    auto handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, index);
+    if (!handle)
         return last_system_error();
-    ICY_SCOPE_EXIT{ free(ptr); };
+
+    ICY_SCOPE_EXIT{ CloseHandle(handle); };
     
-    for (auto k = 0u; k < len; ++k)
-    {
-        if (!ptr[k].ProcessId)
-            continue;
-
-        string name;
-        ICY_ERROR(to_string(const_array_view<wchar_t>(ptr[k].pProcessName, wcslen(ptr[k].pProcessName)), name));
-        ICY_ERROR(proc.push_back(std::make_pair(std::move(name), uint32_t(ptr[k].ProcessId))));
-    }
-    return {};
-}
-error_type process::wait(uint32_t* const code, const duration_type timeout ) noexcept
-{
-    if (!m_handle)
-        return make_stdlib_error(std::errc::invalid_argument);
-
-    ICY_SCOPE_EXIT{ CloseHandle(m_handle); m_handle = nullptr; };
-    const auto value = WaitForSingleObject(m_handle, ms_timeout(timeout));
-    if (value == WAIT_OBJECT_0)
-    {
-        if (code)
-        {
-            auto dwcode = 0ul;
-            if (!GetExitCodeProcess(m_handle, &dwcode))
-                return last_system_error();
-            *code = dwcode;
-        }
-        return {};
-    }
-    else if (value == WAIT_TIMEOUT)
-    {
-        return make_stdlib_error(std::errc::timed_out);
-    }
-    else
-    {
-        return last_system_error();
-    }
-}
-error_type process::open(const uint32_t index, const bool read) noexcept
-{
-    if (m_handle || !index)
-        return make_stdlib_error(std::errc::invalid_argument);
-
-    m_handle = OpenProcess(PROCESS_CREATE_THREAD | PROCESS_VM_OPERATION | 
-        PROCESS_VM_WRITE | (read ? PROCESS_VM_READ : 0)| SYNCHRONIZE, FALSE, index);
-    if (!m_handle)
+    wchar_t wpath[4096];
+    DWORD count = _countof(wpath);
+    if (!QueryFullProcessImageNameW(handle, 0, wpath, &count))
         return last_system_error();
 
-    m_index = index;
-    return {};
+    return to_string(const_array_view<wchar_t>(wpath, count), str);
 }
-error_type process::launch(const string_view path) noexcept
+error_type icy::process_launch(const string_view path, uint32_t& process, uint32_t& thread) noexcept
 {
-    if (m_handle)
-        return make_stdlib_error(std::errc::invalid_argument);
-
     array<wchar_t> wpath;
     ICY_ERROR(to_utf16(path, wpath));
     array<wchar_t> args;
@@ -89,15 +32,72 @@ error_type process::launch(const string_view path) noexcept
         
     STARTUPINFOW start = { sizeof(start) };
     PROCESS_INFORMATION pinfo = {};
-    if (!CreateProcessW(nullptr, args.data(), nullptr, nullptr, FALSE,
-        0, nullptr, nullptr, &start, &pinfo))
+    if (!CreateProcessW(nullptr, args.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &start, &pinfo))
         return last_system_error();
     
-    m_index = pinfo.dwProcessId;
-    m_handle = pinfo.hProcess;
+    process = pinfo.dwProcessId;
+    thread = pinfo.dwThreadId;
     CloseHandle(pinfo.hThread);
-    return {};
+    CloseHandle(pinfo.hProcess);
+    return error_type();
 }
+error_type icy::process_threads(const uint32_t index, array<uint32_t>& threads) noexcept
+{
+    auto snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, index);
+    if (snapshot && snapshot != INVALID_HANDLE_VALUE)
+        return last_system_error();
+    ICY_SCOPE_EXIT{ CloseHandle(snapshot); };
+
+    THREADENTRY32 thread = { sizeof(thread) };
+    if (Thread32First(snapshot, &thread))
+    {
+        do
+        {
+            if (thread.dwSize >= FIELD_OFFSET(THREADENTRY32, th32OwnerProcessID) + sizeof(thread.th32OwnerProcessID))
+                ICY_ERROR(threads.push_back(thread.th32ThreadID));
+            thread.dwSize = sizeof(thread);
+        } while (Thread32Next(snapshot, &thread));
+    }
+    return error_type();
+}
+
+/*
+    class process
+    {
+        friend remote_library;
+    public:
+        static error_type enumerate(array<std::pair<string, uint32_t>>& proc) noexcept;
+        ~process() noexcept
+        {
+            wait(nullptr, {});
+        }
+        error_type wait(uint32_t* const code, const duration_type timeout = max_timeout) noexcept;
+        error_type open(const uint32_t index, const bool read = false) noexcept;
+        error_type launch(const string_view path) noexcept;
+        error_type inject(const string_view library) noexcept;
+        uint32_t index() const noexcept
+        {
+            return m_index;
+        }
+        explicit operator bool() const noexcept
+        {
+            return m_handle && m_index;
+        }
+    private:
+        void* m_handle = nullptr;
+        uint32_t m_index = 0;
+    };
+    class remote_library
+    {
+    public:
+        error_type open(const process& process, const string_view path) noexcept;
+        error_type close() noexcept;
+        error_type call(const char* const name, const string_view args, error_type& error) noexcept;
+    private:
+        void* m_process = nullptr;
+        void* m_handle = nullptr;
+        array<wchar_t> m_wpath;
+    };
 error_type process::inject(const string_view library) noexcept
 {
     array<wchar_t> wpath;
@@ -288,3 +288,59 @@ error_type remote_library::call(const char* const func, const string_view args, 
     error = read_args.error;
     return {};
 }
+* 
+error_type process::enumerate(array<std::pair<string, uint32_t>>& proc) noexcept
+{
+    auto lib = "wtsapi32"_lib;
+    ICY_ERROR(lib.initialize());
+    auto ptr = static_cast<WTS_PROCESS_INFOW*>(nullptr);
+    auto len = 0ul;
+
+    const auto func = ICY_FIND_FUNC(lib, WTSEnumerateProcessesW);
+    const auto free = ICY_FIND_FUNC(lib, WTSFreeMemory);
+    if (!func || !free)
+        return make_stdlib_error(std::errc::not_supported);
+
+    if (!func(WTS_CURRENT_SERVER_HANDLE, 0, 1, &ptr, &len))
+        return last_system_error();
+    ICY_SCOPE_EXIT{ free(ptr); };
+
+    for (auto k = 0u; k < len; ++k)
+    {
+        if (!ptr[k].ProcessId)
+            continue;
+
+        string name;
+        ICY_ERROR(to_string(const_array_view<wchar_t>(ptr[k].pProcessName, wcslen(ptr[k].pProcessName)), name));
+        ICY_ERROR(proc.push_back(std::make_pair(std::move(name), uint32_t(ptr[k].ProcessId))));
+    }
+    return {};
+}
+error_type process::wait(uint32_t* const code, const duration_type timeout ) noexcept
+{
+    if (!m_handle)
+        return make_stdlib_error(std::errc::invalid_argument);
+
+    ICY_SCOPE_EXIT{ CloseHandle(m_handle); m_handle = nullptr; };
+    const auto value = WaitForSingleObject(m_handle, ms_timeout(timeout));
+    if (value == WAIT_OBJECT_0)
+    {
+        if (code)
+        {
+            auto dwcode = 0ul;
+            if (!GetExitCodeProcess(m_handle, &dwcode))
+                return last_system_error();
+            *code = dwcode;
+        }
+        return {};
+    }
+    else if (value == WAIT_TIMEOUT)
+    {
+        return make_stdlib_error(std::errc::timed_out);
+    }
+    else
+    {
+        return last_system_error();
+    }
+}
+*/

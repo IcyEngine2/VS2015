@@ -26,10 +26,7 @@ namespace icy
     class thread
     {
     public:
-        thread() noexcept
-        {
-
-        }
+        thread() noexcept = default;
         thread(thread&& rhs) noexcept : m_data(rhs.m_data)
         {
             rhs.m_data = nullptr;

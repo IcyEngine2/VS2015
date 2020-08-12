@@ -7,10 +7,12 @@ using namespace icy;
 using namespace mbox;
 
 ICY_STATIC_NAMESPACE_BEG
+static std::atomic<uint32_t> g_version = 0;
 struct mbox_actor_type;
 class mbox_system_data;
 struct mbox_event
 {
+    mbox_action_type type = mbox_action_type::none;
     mbox_actor_type* actor = nullptr;
     mbox_index source;  //  script
     uint64_t uid = 0;
@@ -58,6 +60,7 @@ class mbox_thread : public thread
 public:
     mbox_system_data* system = nullptr;
     error_type run() noexcept override;
+    void cancel() noexcept override;
 };
 class mbox_system_data : public mbox_system, public mbox_array
 {
@@ -75,11 +78,16 @@ public:
     }
     error_type initialize(const mbox_array& data, const mbox_index& party) noexcept;
     error_type exec() noexcept override;
+    error_type cancel() noexcept 
+    {
+        return event_system::post(nullptr, event_type::global_quit);
+    }
 private:
     struct internal_event
     {
         mbox_index index;
         input_message input;
+        uint32_t version = 0;
     };
 private:
     const icy::thread& thread() const noexcept override
@@ -100,6 +108,7 @@ private:
     error_type compile() noexcept;
     error_type prepare(array<mbox_action>& actions) noexcept;
     error_type execute(const const_array_view<mbox_action> actions) noexcept;
+    error_type on_input(mbox_actor_type& chr, const input_message& input) noexcept;
 private:
     const mbox_print_func m_pfunc;
     void* const m_pdata;
@@ -121,7 +130,6 @@ template<> int icy::compare<mbox_actor_type*>(mbox_actor_type* const& lhs, mbox_
 {
     return icy::compare(size_t(lhs), size_t(rhs));
 }
-
 
 error_type mbox_system_data::initialize(const mbox_array& data, const mbox_index& party) noexcept
 {    
@@ -264,6 +272,52 @@ error_type mbox_system_data::initialize(const mbox_array& data, const mbox_index
             string macro_str;
             ICY_ERROR(copy(string_view(find(macro_pair.key).value.data(), find(macro_pair.key).value.size()), macro_str));
             ICY_ERROR(info_chr.macros.push_back(std::move(macro_str)));
+        }
+        for (auto&& ptr : pair.value)
+        {
+            if (ptr->value.empty())
+                continue;
+
+            if (false
+                || ptr->type == mbox_type::profile
+                || ptr->type == mbox_type::account
+                || ptr->type == mbox_type::character
+                || ptr->type == mbox_type::group
+                || ptr->type == mbox_type::action_script)
+            {
+                const string_view search_keys[] =
+                {
+                    "mbox.OnKeyDown(\""_s,
+                    "mbox.OnKeyUp(\""_s,
+                };
+                for (auto&& key : search_keys)
+                {
+                    auto str = string_view(ptr->value.data(), ptr->value.size());
+                    while (true)
+                    {
+                        auto it = str.find(key);
+                        if (it == str.end())
+                            break;
+
+                        it += std::distance(key.begin(), key.end());
+                        const auto beg = it;
+                        while (it != str.end())
+                        {
+                            char32_t chr = 0;
+                            ICY_ERROR(it.to_char(chr));
+                            if (chr == '\"')
+                                break;
+                            ++it;
+                        }
+                        const auto end = it;
+                        input_message input;
+                        ICY_ERROR(mbox_function::make_input(string_view(beg, end), input));
+                        input = input_message(&key == &search_keys[0] ? input_type::key_press : input_type::key_release, input.key, key_mod(input.mods));
+                        str = string_view(end, str.end());
+                        ICY_ERROR(info_chr.events.push_back(input));
+                    }
+                }
+            }
         }
     }
     ICY_ERROR(make_shared(m_thread));
@@ -591,6 +645,7 @@ error_type mbox_system_data::execute(const const_array_view<mbox_action> actions
                 mbox_event event;
                 event.uid = ++m_event;
                 ICY_ERROR(m_lua->copy(action.callback, event.callback));
+                event.type = action.type;
                 event.key = action.input.key;
                 event.mods = key_mod(action.input.mods);
                 event.ref = action.ref;
@@ -606,18 +661,25 @@ error_type mbox_system_data::execute(const const_array_view<mbox_action> actions
             case mbox_action_type::post_event:
             {
                 ICY_ERROR(print());
-                array<lua_variable> callbacks;
-                for (auto&& event : m_events)
+                auto offset = 0_z;
+                while (true)
                 {
-                    if (event.value.ref == action.ref)
+                    auto it = m_events.upper_bound(offset);
+                    if (it == m_events.end())
+                        break;
+
+                    for (; it != m_events.end(); ++it)
                     {
+                        offset = it->key;
+                        if (it->value.type != mbox_action_type::on_event || it->value.ref != action.ref)
+                            continue;
+
                         lua_variable copy_callback;
-                        ICY_ERROR(m_lua->copy(event.value.callback, copy_callback));
-                        ICY_ERROR(callbacks.push_back(std::move(copy_callback)));
+                        ICY_ERROR(m_lua->copy(it->value.callback, copy_callback));
+                        ICY_ERROR(copy_callback());
+                        break;
                     }
                 }
-                for (auto&& cb : callbacks)
-                    ICY_ERROR(cb());
                 break;
             }
             case mbox_action_type::send_key_down:
@@ -679,21 +741,16 @@ error_type mbox_system_data::exec() noexcept
     {
         while (auto event = pop())
         {
-            if (event->type == event_type::system_internal && shared_ptr<event_system>(event->source).get() == this)
+            if (event->type == event_type::global_quit)
+                return error_type();
+            
+            if (event->type == event_type::system_internal)
             {
                 const auto& event_data = event->data<internal_event>();
-                if (event_data.index == mbox_index())
-                    return error_type();
-
-                //const auto source = m_data.find(event_data.index);
-                //if (!source)
-                 //   return make_unexpected_error();
-
-
-            }
-            else if (event->type == event_type::global_quit)
-            {
-                return error_type();
+                const auto chr = m_actors.try_find(event_data.index);
+                if (!chr)
+                    continue;
+                ICY_ERROR(on_input(*chr, event_data.input));
             }
         }
         ICY_ERROR(m_cvar.wait(m_mutex));
@@ -717,9 +774,155 @@ error_type mbox_system_data::post(const mbox_index& character, const input_messa
     internal_event new_event;
     new_event.index = character;
     new_event.input = input;
+    new_event.version = g_version.load(std::memory_order_acquire);
     return event_system::post(this, event_type::system_internal, std::move(new_event));
 }
+error_type mbox_system_data::on_input(mbox_actor_type& chr, const input_message& input) noexcept
+{
+    m_stack.clear();
+    m_send.clear();
+ 
+    auto event_type = mbox_action_type::none;
+    if (input.type == input_type::key_press)
+        event_type = mbox_action_type::on_key_down;
+    else if (input.type == input_type::key_release)
+        event_type = mbox_action_type::on_key_up;
+    else
+        return error_type();
 
+    if (m_pfunc)
+    {
+        string input_str;
+        ICY_ERROR(to_string(input, input_str));
+
+        string str;
+        ICY_ERROR(str.appendf("\r\n\"%1\": PostEvent %2(%3)"_s,
+            string_view(chr.name), to_string(input.type), string_view(input_str)));
+
+        ICY_ERROR(m_pfunc(m_pdata, str));
+    }
+
+    auto offset = 0_z;
+    while (true)
+    {
+        auto it = m_events.upper_bound(offset);
+        if (it == m_events.end())
+            break;
+
+        for (; it != m_events.end(); ++it)
+        {
+            offset = it->key;
+            if (false
+                || it->value.type != event_type
+                || it->value.key != input.key
+                || !key_mod_and(it->value.mods, key_mod(input.key)))
+                continue;
+
+            if (m_pfunc)
+            {
+                string str;
+                ICY_ERROR(str.appendf("\r\n  Execute event callback [%1] for \"%2\""_s,
+                    it->key, string_view(it->value.actor->name)));
+                ICY_ERROR(m_pfunc(m_pdata, str));
+            }
+
+            lua_variable copy_callback;
+            ICY_ERROR(m_lua->copy(it->value.callback, copy_callback));
+            ICY_ERROR(copy_callback());
+            break;
+        }
+    }
+
+    using send_pair_type = std::pair<key_mod, array<input_message>>;
+    map<mbox_index, send_pair_type> map;
+    for (auto&& send : m_send)
+    {
+        auto it = map.find(send.character);
+        if (it == map.end())
+            ICY_ERROR(map.insert(send.character, send_pair_type(), &it));
+
+        auto& mods = it->value.first;
+        const auto press = [it, &mods](const key key) noexcept
+        {
+            ICY_ERROR(it->value.second.push_back(input_message(input_type::key_press, key, mods)));
+            if (key == key::left_ctrl) mods = mods | key_mod::lctrl;
+            if (key == key::left_alt) mods = mods | key_mod::lalt;
+            if (key == key::left_shift) mods = mods | key_mod::lshift;
+            if (key == key::right_ctrl) mods = mods | key_mod::rctrl;
+            if (key == key::right_alt) mods = mods | key_mod::ralt;
+            if (key == key::right_shift) mods = mods | key_mod::rshift;
+            return error_type();
+        };
+        const auto release = [it, &mods](const key key) noexcept
+        {
+            ICY_ERROR(it->value.second.push_back(input_message(input_type::key_release, key, mods)));
+            if (key == key::left_ctrl) mods = key_mod(uint32_t(mods) & ~uint32_t(key_mod::lctrl));
+            if (key == key::left_alt) mods = key_mod(uint32_t(mods) & ~uint32_t(key_mod::lalt));
+            if (key == key::left_shift) mods = key_mod(uint32_t(mods) & ~uint32_t(key_mod::lshift));
+            if (key == key::right_ctrl) mods = key_mod(uint32_t(mods) & ~uint32_t(key_mod::rctrl));
+            if (key == key::right_alt) mods = key_mod(uint32_t(mods) & ~uint32_t(key_mod::ralt));
+            if (key == key::right_shift) mods = key_mod(uint32_t(mods) & ~uint32_t(key_mod::rshift));
+            return error_type();
+        };
+
+        if (send.action & mbox_send::press)
+        {
+            if (send.mods & key_mod::lctrl) { ICY_ERROR(press(key::left_ctrl)); }
+            if (send.mods & key_mod::lalt) { ICY_ERROR(press(key::left_alt)); }
+            if (send.mods & key_mod::lshift) { ICY_ERROR(press(key::left_shift)); }
+            if (send.mods & key_mod::rctrl) { ICY_ERROR(press(key::right_ctrl)); }
+            if (send.mods & key_mod::ralt) { ICY_ERROR(press(key::right_alt)); }
+            if (send.mods & key_mod::rshift) { ICY_ERROR(press(key::right_shift)); }
+            ICY_ERROR(press(send.key));
+        }
+        if (send.action & mbox_send::release)
+        {
+            ICY_ERROR(release(send.key));
+            if (send.mods & key_mod::rshift) { ICY_ERROR(release(key::right_shift)); }
+            if (send.mods & key_mod::lalt) { ICY_ERROR(release(key::right_alt)); }
+            if (send.mods & key_mod::rctrl) { ICY_ERROR(release(key::right_ctrl)); }
+            if (send.mods & key_mod::lshift) { ICY_ERROR(release(key::left_shift)); }
+            if (send.mods & key_mod::lalt) { ICY_ERROR(release(key::left_alt)); }
+            if (send.mods & key_mod::lctrl) { ICY_ERROR(release(key::left_ctrl)); }
+        }
+    }
+
+    for (auto&& pair : map)
+    {
+        auto& vec = pair.value.second;
+        for (auto k = 0u; k < vec.size();)
+        {
+            if (vec[k].type != input_type::key_release)
+            {
+                ++k;
+                continue;
+            }
+
+            auto skip = false;
+            auto n = k + 1;
+            for (; n < vec.size(); ++n)
+            {
+                if (vec[n].type == input_type::none)
+                    continue;
+
+                skip = vec[n].type == input_type::key_press && vec[n].key == vec[k].key && vec[n].mods == vec[k].mods;
+                break;
+            }
+            if (skip)
+            {
+                vec[n] = input_message();
+                vec[k] = input_message();
+                if (k) --k;
+            }
+        }
+        mbox_event_send_input event;
+        event.character = pair.key;
+        event.messages = std::move(vec);
+        ICY_ERROR(event::post(this, mbox_event_type_send_input, std::move(event)));
+    }
+
+    return error_type();
+}
 error_type icy::create_event_system(shared_ptr<mbox::mbox_system>& system, const mbox_array& data, const mbox_index& party, 
     const mbox_print_func pfunc, void* const pdata) noexcept
 {
@@ -732,7 +935,13 @@ error_type icy::create_event_system(shared_ptr<mbox::mbox_system>& system, const
 
 error_type mbox_thread::run() noexcept
 {
-    return system->exec();
+    if (auto error = system->exec())
+        return event::post(system, event_type::system_error, std::move(error));
+    return error_type();
+}
+void mbox_thread::cancel() noexcept
+{
+    system->cancel();
 }
 
 error_type mbox_system_info::update_wow_addon(const mbox_array& data, const string_view path) const noexcept

@@ -441,10 +441,15 @@ namespace icy
 {  
     inline error_type show_error(const error_type error, const string_view text) noexcept
     {
+        if (error == error_type() && text.empty())
+            return error_type();
+
         string msg;
         if (error)
         {
-            ICY_ERROR(to_string("Error: %4 - %1 code [%2]: %3"_s, msg, error.source, long(error.code), error, text));
+            ICY_ERROR(to_string("Error%5%4 - %1 code [%2]: %3"_s, msg, error.source, long(error.code), error, text, text.empty() ? ""_s : ": "_s));
+            if (error.message)
+                ICY_ERROR(msg.appendf("\r\n\r\n%1"_s, string_view(static_cast<const char*>(error.message->data()), error.message->size())));
         }
         else
         {
@@ -478,7 +483,7 @@ namespace icy
                 }
             }
         }
-        ICY_ERROR(win32_message(msg, "Error"_s));
+        ICY_ERROR(icy::message_box(msg, "Error"_s));
         return error_type();
     }
 }

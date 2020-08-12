@@ -95,7 +95,7 @@ error_type file::tmpname(string& str) noexcept
 
     return to_string(const_array_view<wchar_t>(wname, wcsnlen(wname, _countof(wname))), str);
 }
-error_type file::open(const string_view path, const file_access access, const file_open open_mode, const file_share share) noexcept
+error_type file::open(const string_view path, const file_access access, const file_open open_mode, const file_share share, const file_flag flag) noexcept
 {
 	array<wchar_t> wpath;
 	auto size = 0_z;
@@ -103,8 +103,13 @@ error_type file::open(const string_view path, const file_access access, const fi
 	ICY_ERROR(wpath.resize(size + 1));
 	ICY_ERROR(path.to_utf16(wpath.data(), &size));
 	
-	auto handle = CreateFileW(wpath.data(), uint32_t(access), uint32_t(share), nullptr, uint32_t(open_mode),
-		FILE_ATTRIBUTE_NORMAL, nullptr);
+    auto attr = FILE_ATTRIBUTE_NORMAL;
+    if (flag != file_flag::none)
+        attr = 0;
+    if (uint32_t(flag) & uint32_t(file_flag::delete_on_close))
+        attr |= FILE_FLAG_DELETE_ON_CLOSE;
+
+	auto handle = CreateFileW(wpath.data(), uint32_t(access), uint32_t(share), nullptr, uint32_t(open_mode), attr, nullptr);
 	if (handle == INVALID_HANDLE_VALUE)
 		return last_system_error();
 	ICY_SCOPE_EXIT{ if (handle != INVALID_HANDLE_VALUE) CloseHandle(handle); };

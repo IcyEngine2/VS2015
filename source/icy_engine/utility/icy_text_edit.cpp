@@ -405,7 +405,9 @@ error_type text_edit_window::redo() noexcept
 
 error_type text_edit_thread_data::run() noexcept
 {
-    return system->exec();
+    if (auto error = system->exec())
+        return event::post(system, event_type::system_error, std::move(error));
+    return error_type();
 }
 
 error_type text_edit_system_data::exec() noexcept
@@ -557,7 +559,7 @@ error_type text_edit_system_data::exec() noexcept
         {
             return m_error;
         }
-        else
+        else if (wait == WAIT_FAILED)
         {
             return last_system_error();
         }

@@ -1,6 +1,8 @@
 #include <icy_engine/core/icy_string.hpp>
 #include <icy_engine/core/icy_map.hpp>
 #include <icy_engine/core/icy_thread.hpp>
+#include <icy_engine/core/icy_file.hpp>
+#include <icy_engine/core/icy_set.hpp>
 #include <icy_engine/graphics/icy_remote_window.hpp>
 #include <dwmapi.h>
 #include <Windows.h>
@@ -19,6 +21,8 @@ static decltype(&::SetWindowsHookExW) win32_set_windows_hook_ex;
 static decltype(&::UnhookWindowsHookEx) win32_unhook_windows_hook_ex;
 static decltype(&::SendMessageTimeoutW) win32_send_message_timeout;
 static decltype(&::SendMessageW) win32_send_message;
+static decltype(&::SetForegroundWindow) win32_set_foreground_window;
+
 class remote_window_system_data;
 class remote_window_thread : public icy::thread
 {
@@ -62,7 +66,7 @@ ICY_STATIC_NAMESPACE_END
 class remote_window::data_type
 {
 public:
-    error_type hook(const library& lib, const char* func, int type) noexcept;
+    error_type hook(const char* const lib_name, const char* func, int type) noexcept;
 public:
     std::atomic<uint32_t> ref = 1;
     HWND handle = nullptr;
@@ -72,17 +76,17 @@ public:
     HHOOK msghook = nullptr;
 };
 
-error_type remote_window::data_type::hook(const library& lib, const char* const func, const int type) noexcept
+error_type remote_window::data_type::hook(const char* const lib_name, const char* const func, const int type) noexcept
 {
-    if (!lib.handle())
-        return make_stdlib_error(std::errc::invalid_argument);
+    if (!win32_unhook_windows_hook_ex || !win32_set_windows_hook_ex)
+        return make_stdlib_error(std::errc::function_not_supported);
+
+    library hook_lib = library(lib_name);
+    ICY_ERROR(hook_lib.initialize());
 
     HOOKPROC proc = nullptr;
     if (func)
-        proc = static_cast<HOOKPROC>(lib.find(func));
-
-    if (!win32_unhook_windows_hook_ex || !win32_set_windows_hook_ex)
-        return make_stdlib_error(std::errc::function_not_supported);
+        proc = static_cast<HOOKPROC>(hook_lib.find(func));
 
     const auto hook_ptr = &msghook;
     if (*hook_ptr)
@@ -92,21 +96,23 @@ error_type remote_window::data_type::hook(const library& lib, const char* const 
     }
     if (proc)
     {
-        *hook_ptr = win32_set_windows_hook_ex(type, proc, lib.handle(), thread);
+        *hook_ptr = win32_set_windows_hook_ex(type, proc, hook_lib.handle(), thread);
         if (!*hook_ptr)
             return last_system_error();
     }
     return error_type();
 }
 
-error_type remote_window::enumerate(array<remote_window>& vec) noexcept
+error_type remote_window::enumerate(array<remote_window>& vec, const uint32_t thread) noexcept
 {
     auto lib = "user32"_lib;
     ICY_ERROR(lib.initialize());
 
     decltype(&EnumWindows) win32_enum_windows = nullptr;
+    decltype(&EnumThreadWindows) win32_enum_thread_windows = nullptr;
     struct win32_find_window
     {
+        uint32_t thread = 0;
         error_type error;
         array<HWND> vec;
         decltype(&IsWindowVisible) win32_is_window_visible = nullptr;
@@ -116,12 +122,13 @@ error_type remote_window::enumerate(array<remote_window>& vec) noexcept
         decltype(&GetTitleBarInfo) win32_title_bar_info = nullptr;
         decltype(&GetAncestor) win32_get_ancestor = nullptr;
         decltype(&GetLastActivePopup) win32_get_last_active_popup = nullptr;
-
-        decltype(&DwmGetWindowAttribute) win32_dwm_get_window_attribute = nullptr;
+        decltype(&DwmGetWindowAttribute) win32_dwm_get_window_attribute = nullptr;        
     };
     win32_find_window data;
+    data.thread = thread;
 
     ICY_WIN32_FUNC(win32_enum_windows, EnumWindows);
+    ICY_WIN32_FUNC(win32_enum_thread_windows, EnumThreadWindows);
     ICY_WIN32_FUNC(data.win32_is_window_visible, IsWindowVisible);
     ICY_WIN32_FUNC(data.win32_is_window_enabled, IsWindowEnabled);
     ICY_WIN32_FUNC(data.win32_get_window, GetWindow);
@@ -135,6 +142,7 @@ error_type remote_window::enumerate(array<remote_window>& vec) noexcept
     ICY_WIN32_FUNC(win32_get_window_rect, GetWindowRect);
     ICY_WIN32_FUNC(win32_send_message_timeout, SendMessageTimeoutW);
     ICY_WIN32_FUNC(win32_send_message, SendMessageW);
+    ICY_WIN32_FUNC(win32_set_foreground_window, SetForegroundWindow);
 
     library dwm = "dwmapi"_lib;
     if (dwm.initialize() == error_type())
@@ -145,8 +153,8 @@ error_type remote_window::enumerate(array<remote_window>& vec) noexcept
         const auto self = reinterpret_cast<win32_find_window*>(ptr);
         const auto is_alt_tab_window = [self](HWND hwnd)
         {
-            //if (!self->win32_is_window_visible(hwnd))
-            //    return false;
+            if (self->thread)
+                return true;
 
             wchar_t wtext[256];
             auto wlen = win32_get_window_text(hwnd, wtext, _countof(wtext));
@@ -161,7 +169,6 @@ error_type remote_window::enumerate(array<remote_window>& vec) noexcept
                 return false;
             if ((style & WS_VISIBLE) == 0)
                 return false;
-
 
             if (!self->win32_is_window_enabled(hwnd))
                 return false;
@@ -189,7 +196,10 @@ error_type remote_window::enumerate(array<remote_window>& vec) noexcept
         return 1;
     };
 
-    auto ok = win32_enum_windows(proc, reinterpret_cast<LPARAM>(&data));
+    auto ok = thread ?
+        win32_enum_thread_windows(thread, proc, reinterpret_cast<LPARAM>(&data)) : 
+        win32_enum_windows(proc, reinterpret_cast<LPARAM>(&data));
+
     ICY_ERROR(data.error);
     if (!ok)
         return last_system_error();
@@ -225,6 +235,49 @@ error_type remote_window::enumerate(array<remote_window>& vec) noexcept
     }
     return error_type();
 }
+error_type remote_window::unhook(const char* lib) noexcept
+{
+    string path;
+    ICY_ERROR(icy::process_directory(path));
+    ICY_ERROR(path.append(string_view(lib, strlen(lib))));
+    ICY_ERROR(path.append("_log.txt"_s));
+
+    file log;
+    ICY_ERROR(log.open(path, file_access::read, file_open::open_existing, file_share::read));
+    array<char> bytes;
+    auto count = log.info().size;
+    ICY_ERROR(bytes.resize(count));
+    ICY_ERROR(log.read(bytes.data(), count));
+    array<string_view> lines;
+    ICY_ERROR(split(string_view(bytes.data(), count), lines, "\r\n"_s));
+
+    set<uint32_t> threads;
+    for (auto&& line : lines)
+    {
+        auto thread = 0u;
+        auto attach = 0u;
+        if (_snscanf_s(line.bytes().data(), line.bytes().size(), "%u %u", &thread, &attach) == 2)
+        {
+            if (attach)
+            {
+                ICY_ERROR(threads.try_insert(thread));
+            }
+            else 
+            {
+                threads.erase(thread);
+            }
+        }
+    }
+
+    error_type error;
+    for (auto&& thread : threads)
+    {
+        if (!win32_post_thread_message(thread, WM_NULL, 0, 0))
+            error = last_system_error();
+        //win32_send_message_timeout(HWND_BROADCAST, WM_NULL, 0, 0, SMTO_ABORTIFHUNG | SMTO_NOTIMEOUTIFNOTHUNG, 1000, &code);
+    }
+    return error;
+}
 remote_window::remote_window(const remote_window& rhs) noexcept : data(rhs.data)
 {
     if (data)
@@ -239,7 +292,6 @@ remote_window::~remote_window() noexcept
         allocator_type::deallocate(data);
     }
 }
-
 error_type remote_window::name(string& str) const noexcept
 {
     if (!data)
@@ -280,7 +332,7 @@ error_type remote_window::screen(const icy::render_d2d_rectangle_u& rect, matrix
 {
     return make_stdlib_error(std::errc::function_not_supported);
 }
-error_type remote_window::hook(const library& lib, const char* func) noexcept
+error_type remote_window::hook(const char* lib, const char* func) noexcept
 {
     if (!data)
         return make_stdlib_error(std::errc::invalid_argument);
@@ -307,10 +359,6 @@ error_type remote_window::send(const input_message& msg, const duration_type tim
     }
     return error_type();
 }
-error_type remote_window::post(const uint32_t index, const size_t p0, const ptrdiff_t p1) noexcept
-{
-    return make_stdlib_error(std::errc::function_not_supported);
-}
 error_type remote_window::rename(const string_view name) noexcept
 {
     if (!data)
@@ -323,6 +371,16 @@ error_type remote_window::rename(const string_view name) noexcept
     if (!win32_set_window_text(data->handle, wname.data()))
         return last_system_error();
     return error_type();
+}
+error_type remote_window::activate() noexcept
+{
+    if (data && data->handle)
+    {
+        if (!win32_set_foreground_window(data->handle))
+            return last_system_error();
+        return error_type();
+    }
+    return make_stdlib_error(std::errc::invalid_argument);
 }
 
 remote_window_system_data::~remote_window_system_data() noexcept
@@ -351,15 +409,7 @@ error_type remote_window_system_data::initialize() noexcept
 }
 error_type remote_window_system_data::signal(const event_data& event) noexcept
 {
-    if (auto thread = m_thread->index())
-    {
-        if (!win32_post_thread_message(thread, WM_USER, 0, 0))
-            return last_system_error();
-    }
-    else
-    {
-        return make_stdlib_error(std::errc::invalid_argument);
-    }
+    win32_post_thread_message(m_thread->index(), WM_USER, 0, 0);
     return error_type();
 }
 error_type remote_window_system_data::exec() noexcept
@@ -420,7 +470,7 @@ error_type remote_window_system_data::exec() noexcept
                 return make_stdlib_error(std::errc::invalid_argument);
         }
         const auto index = win32_msg_wait_for_multiple_objects_ex(0, nullptr, ms_timeout(timeout), QS_POSTMESSAGE, MWMO_ALERTABLE);
-        if (index == 0)
+        if (index == WAIT_OBJECT_0)
         {
             MSG win32_msg = {};
             while (win32_peek_message(&win32_msg, nullptr, 0, 0, PM_REMOVE))
@@ -428,16 +478,17 @@ error_type remote_window_system_data::exec() noexcept
                 win32_translate_message(&win32_msg);
                 win32_dispatch_message(&win32_msg);
             }
+            WAIT_ABANDONED;
         }
         else if (index == WAIT_TIMEOUT)
         {
             return make_stdlib_error(std::errc::timed_out);
         }
-        else if (index == WAIT_ABANDONED)
+        else if (index == WAIT_IO_COMPLETION)
         {
             return error_type();
         }
-        else //if (index == WAIT_FAILED)
+        else if (index == WAIT_FAILED)
         {
             return last_system_error();
         }
@@ -458,7 +509,9 @@ error_type remote_window_system_data::notify_on_close(const remote_window window
 
 error_type remote_window_thread::run() noexcept
 {
-    return system->exec();
+    if (auto error = system->exec())
+        return event::post(system, event_type::system_error, std::move(error));
+    return error_type();
 }
 
 error_type icy::create_event_system(shared_ptr<remote_window_system>& system) noexcept

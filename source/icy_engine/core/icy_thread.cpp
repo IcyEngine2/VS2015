@@ -14,11 +14,15 @@
 #endif
 using namespace icy;
 
+ICY_STATIC_NAMESPACE_BEG
+icy::detail::rw_spin_lock g_lock;
+icy::thread_system* g_list = nullptr;
+ICY_STATIC_NAMESPACE_END
+
+/*
 #define LDRP_IMAGE_DLL                          0x00000004
 #define LDRP_DONT_CALL_FOR_THREADS              0x00040000
 #define LDRP_PROCESS_ATTACH_CALLED              0x00080000
-
-using namespace icy;
 
 ICY_STATIC_NAMESPACE_BEG
 icy::detail::rw_spin_lock g_lock;
@@ -94,7 +98,7 @@ bool dll_init() noexcept
     }
     return false;
 };
-ICY_STATIC_NAMESPACE_END
+ICY_STATIC_NAMESPACE_END*/
 
 void icy::thread_system::notify(const uint32_t index, const bool attach) noexcept
 {
@@ -106,7 +110,7 @@ icy::thread_system::thread_system() noexcept
 {
     ICY_LOCK_GUARD_WRITE(g_lock);
     m_prev = g_list;
-    static const bool g_init = dll_init();
+    //static const bool g_init = dll_init();
     g_list = this;
 }
 icy::thread_system::~thread_system() noexcept
@@ -154,6 +158,8 @@ struct thread::data_type
     ~data_type() noexcept
     {
         wait(std::chrono::seconds(5));
+        if (index)
+            thread_system::notify(index, false);
     }
     mutex lock;
     cvar cvar;
@@ -246,11 +252,11 @@ error_type thread::launch() noexcept
     m_data = allocator_type::allocate<data_type>(1);
     if (!m_data)
         return make_stdlib_error(std::errc::not_enough_memory);
-    
+    allocator_type::construct(m_data);
+
     auto success = false;
     ICY_SCOPE_EXIT{ if (!success) wait(); };
     
-    allocator_type::construct(m_data);
     ICY_ERROR(m_data->lock.initialize());
     m_data->source = this_index();
 
@@ -275,6 +281,8 @@ error_type thread::launch() noexcept
     m_data->handle = reinterpret_cast<HANDLE>(_beginthreadex(nullptr, 0, proc, this, 0, &m_data->index));
     if (!m_data->handle)
         return last_system_error();
+
+    thread_system::notify(m_data->index, true);
     
     while (true)
     {

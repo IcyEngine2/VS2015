@@ -13,7 +13,7 @@ namespace icy
         enum : uint64_t
         {            
             bitcnt_global   =   0x04,
-            bitcnt_system   =   0x01,
+            bitcnt_system   =   0x02,
             bitcnt_fileio   =   0x02,
             bitcnt_network  =   0x04,
             bitcnt_console  =   0x03,
@@ -59,6 +59,7 @@ namespace icy
             global_any              =   mask_global,
 
             system_internal         =   1ui64   <<  (offset_system + 0x00),
+            system_error            =   1ui64   <<  (offset_system + 0x01),
             system_any              =   mask_system,
 
             file_read               =   1ui64   <<  (offset_fileio + 0x00),

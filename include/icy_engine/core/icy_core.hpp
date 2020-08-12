@@ -776,7 +776,7 @@ enum class dll_main : uint32_t
 namespace icy
 {
     HINSTANCE__* win32_instance() noexcept;
-    error_type win32_message(const string_view text, const string_view header, bool* yesno = nullptr) noexcept;
+    error_type message_box(const string_view text, const string_view header, bool* yesno = nullptr) noexcept;
 }
 #endif
 

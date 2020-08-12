@@ -36,7 +36,6 @@ int main()
 {
     heap gheap;
     auto gheap_init = heap_init::global(64_mb);
-    gheap_init.debug_trace = true;
     if (gheap.initialize(gheap_init))
         return -1;
 

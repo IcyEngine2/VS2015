@@ -1,5 +1,6 @@
 #pragma once
 
+#include <icy_engine/core/icy_file.hpp>
 #include <icy_engine/core/icy_thread.hpp>
 #include <icy_engine/graphics/icy_remote_window.hpp>
 #include <icy_engine/graphics/icy_window.hpp>
@@ -17,6 +18,15 @@ private:
         icy::error_type initialize(icy::gui_widget window) noexcept;
         icy::xgui_widget menu;
         icy::xgui_action config;
+        icy::xgui_action debug;
+    };
+    struct debug_type
+    {
+        icy::error_type initialize(icy::gui_widget window) noexcept;
+        mbox::mbox_print_func print = nullptr;
+        icy::xgui_widget window;
+        icy::xgui_widget text;
+        bool show = false;
     };
     struct library_type
     {
@@ -40,40 +50,40 @@ private:
         icy::xgui_model model;
         icy::xgui_widget label;
         icy::xgui_widget combo;
+        icy::xgui_widget button;
     };
     struct character_type
     {
         mbox::mbox_index index;
         uint32_t slot = 0;
         icy::string name;
-        bool paused = false;
         icy::remote_window window;
+        icy::array<icy::input_message> events;
     };
     struct data_type
     {
         icy::error_type initialize(icy::gui_widget window) noexcept;
-        icy::library lib =
-#if _DEBUG
-            icy::library("mbox_dlld");
-#else
-            icy::library("mbox_dll");
-#endif
         icy::shared_ptr<mbox::mbox_system> system;
         icy::shared_ptr<icy::remote_window_system> remote;
         icy::array<character_type> characters;
         icy::xgui_model model;
         icy::xgui_widget view;
+        icy::file tmp_file;
+        bool paused = false;
     };
 private:
     icy::error_type run() noexcept override;
     icy::error_type reset_library(const icy::string_view name) noexcept;
     icy::error_type reset_games(const icy::string_view select) noexcept;
     icy::error_type reset_data() noexcept;
-    icy::error_type on_launch() noexcept;
+    icy::error_type on_start() noexcept;
     icy::error_type on_stop() noexcept;
     icy::error_type on_context(character_type& chr) noexcept;
     icy::error_type on_select_party(const mbox::mbox_index select) noexcept;
-    icy::error_type find_window(icy::remote_window& new_window) noexcept;
+    icy::error_type find_window(const icy::string_view path, icy::remote_window& new_window) const noexcept;
+    icy::error_type launch_window(const icy::string_view path, icy::remote_window& new_window) const noexcept;
+    icy::error_type hook(character_type& chr) noexcept;
+    icy::error_type launch_mbox() noexcept;
 private:
     icy::shared_ptr<icy::gui_queue> m_gui;
     mbox_config_type m_config;
@@ -81,6 +91,7 @@ private:
     icy::window m_overlay;
     icy::xgui_widget m_window;
     menu_type m_menu;
+    debug_type m_debug;
     library_type m_library;
     party_type m_party;
     games_type m_games;

@@ -197,6 +197,7 @@ namespace mbox
     class mbox_function
     {
     public:
+        static icy::error_type make_input(const icy::string_view str, icy::input_message& msg) noexcept;
         mbox_function() noexcept = default;
         mbox_function(const icy::map<mbox_index, mbox_object>& objects, const mbox_object& object, const icy::lua_system& lua) noexcept :
             m_objects(&objects), m_object(&object), m_lua(&lua)
@@ -251,6 +252,7 @@ namespace mbox
             uint32_t slot = 0;
             icy::string name;
             icy::array<icy::string> macros;
+            icy::array<icy::input_message> events;
         };
         icy::array<character_data> characters;
         icy::error_type update_wow_addon(const mbox_array& data, const icy::string_view path) const noexcept;

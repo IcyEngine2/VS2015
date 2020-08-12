@@ -136,8 +136,8 @@ private:
     error_type create(window& window, const window_flags flags) const noexcept override;
     error_type signal(const event_data& event) noexcept override
     {
-        if (!win32_post_thread_message(m_thread->index(), WM_NULL, 0, 0))
-            return last_system_error();
+        win32_post_thread_message(m_thread->index(), WM_NULL, 0, 0);
+        SetLastError(0);
         return error_type();
     }
 private:
@@ -550,7 +550,9 @@ LRESULT window_data::proc(uint32_t msg, WPARAM wparam, LPARAM lparam) noexcept
 
 error_type window_thread_data::run() noexcept
 {
-    return system->exec();
+    if (auto error = system->exec())
+        return event::post(system, event_type::system_error, std::move(error));
+    return error_type();
 }
 
 window_system_data::~window_system_data() noexcept
@@ -688,7 +690,7 @@ error_type window_system_data::exec() noexcept
             }
             ICY_ERROR(m_error);
         }
-        else if (index == WAIT_ABANDONED)
+        else if (index == WAIT_IO_COMPLETION)
         {
             return error_type();
         }
@@ -696,7 +698,7 @@ error_type window_system_data::exec() noexcept
         {
             return make_stdlib_error(std::errc::timed_out);
         }
-        else //if (index == WAIT_FAILED)
+        else if (index == WAIT_FAILED)
         {
             return last_system_error();
         }

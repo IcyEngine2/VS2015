@@ -1,13 +1,16 @@
 #include <icy_engine/core/icy_input.hpp>
 #include <icy_engine/core/icy_json.hpp>
 #include <icy_engine/core/icy_file.hpp>
+#include <icy_engine/graphics/icy_remote_window.hpp>
 #include "../mbox_dll.h"
 #define NOMINMAX
 #include <Windows.h>
 #if _DEBUG
 #pragma comment(lib, "icy_engine_cored")
+#pragma comment(lib, "icy_engine_graphicsd")
 #else
 #pragma comment(lib, "icy_engine_core")
+#pragma comment(lib, "icy_engine_graphics")
 #endif
 #pragma comment(lib, "user32")
 
@@ -34,23 +37,20 @@ LRESULT WINAPI GetMessageHook(int code, WPARAM wParam, LPARAM lParam)
     if (error)
         return CallNextHookEx(nullptr, code, wParam, lParam);
 
-    icy::detail::global_heap.realloc = [](const void* ptr, size_t size, void*) { return ::realloc(const_cast<void*>(ptr), size); };
-    icy::detail::global_heap.memsize = [](const void*, void*) { return 0_z; };
 
     const auto show_error = [](const error_type& error)
     {
         string str;
-        if (const auto e = to_string(error, str))
-            return MessageBoxW(nullptr, L"Error printing error to string", L"MBox: to_string error", MB_OK);
-
-        icy::win32_message(str, "Runtime error"_s);
+        to_string(error, str);
+        icy::message_box(str, "Runtime error"_s);
         return 0;
     };
 
     static thread_local mbox::mbox_dll_config g_config;
-    if (!g_config.hwnd)
+    static thread_local HWND g_hwnd = nullptr;
+    if (!g_hwnd)
     {
-        error = g_config.load();
+        error = g_config.load(g_hwnd);
         if (error)
         {
             show_error(error);
@@ -140,7 +140,7 @@ LRESULT WINAPI GetMessageHook(int code, WPARAM wParam, LPARAM lParam)
     cdata.dwData = GetCurrentProcessId();
     cdata.cbData = sizeof(input);
     cdata.lpData = &input;
-    SendMessageW(g_config.hwnd, WM_COPYDATA, 0, reinterpret_cast<LPARAM>(&cdata));
+    SendMessageW(g_hwnd, WM_COPYDATA, 0, reinterpret_cast<LPARAM>(&cdata));
     if (const auto code = GetLastError())
     {
         error = make_system_error(make_system_error_code(code));
@@ -161,33 +161,37 @@ LRESULT WINAPI GetMessageHook(int code, WPARAM wParam, LPARAM lParam)
     return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
-error_type mbox::mbox_dll_config::load() noexcept
+error_type mbox::mbox_dll_config::load(HWND__*& hwnd) noexcept
 {
     string path;
     ICY_ERROR(process_directory(path));
     ICY_ERROR(path.appendf("%1%2.txt"_s, "mbox_config/"_s, GetCurrentProcessId()));
-    file input;
-    ICY_ERROR(input.open(path, file_access::read, file_open::open_existing, file_share::read | file_share::write));
-    char bytes[0x4000];
-    auto count = _countof(bytes);
-    ICY_ERROR(input.read(bytes, count));
-
+    
     json json;
-    ICY_ERROR(to_value(string_view(bytes, bytes + count), json));
+    {
+        file input;
+        ICY_ERROR(input.open(path, file_access::read, file_open::open_existing, file_share::read | file_share::write, file_flag::delete_on_close));
+        array<char> bytes;
+        auto count = input.info().size;
+        ICY_ERROR(bytes.resize(count));
+        ICY_ERROR(input.read(bytes.data(), count));
+        ICY_ERROR(to_value(string_view(bytes.data(), count), json));
+    }
 
-    const auto json_hwnd = json.find("hwnd"_s);
     const auto json_event = json.find("event"_s);
     const auto json_pause = json.find("pause"_s);
 
     if (false
-        || !json_hwnd || json_hwnd->type() != json_type::integer
         || !json_event || json_event->type() != json_type::array
         || !json_pause || json_pause->type() != json_type::array)
         return make_stdlib_error(std::errc::invalid_argument);
 
-    uint64_t hwnd_value = 0;
-    ICY_ERROR(to_value(json_hwnd->get(), hwnd_value));
-    hwnd = reinterpret_cast<HWND__*>(hwnd_value);
+    ICY_ERROR(json.get("thread"_s, thread));    
+    array<remote_window> vec;
+    ICY_ERROR(remote_window::enumerate(vec, thread));
+    if (vec.empty())
+        return make_stdlib_error(std::errc::invalid_argument);
+    hwnd = vec[0].handle();
 
     pause_count = std::min(_countof(pause_array), json_pause->size());
     for (auto k = 0u; k < pause_count; ++k)
@@ -199,110 +203,65 @@ error_type mbox::mbox_dll_config::load() noexcept
     event_count = std::min(_countof(event_array), json_event->size());
     for (auto k = 0u; k < event_count; ++k)
     {
-        const auto pause = json_event->at(k);
+        const auto event = json_event->at(k);
         auto int_input_type = 0u;
         auto int_input_key = 0u;
         auto int_input_mods = 0u;
-        ICY_ERROR(pause->get("input.type"_s, int_input_type));
-        ICY_ERROR(pause->get("input.key"_s, int_input_key));
-        ICY_ERROR(pause->get("input.mods"_s, int_input_mods));
+        ICY_ERROR(event->get("input.type"_s, int_input_type));
+        ICY_ERROR(event->get("input.key"_s, int_input_key));
+        ICY_ERROR(event->get("input.mods"_s, int_input_mods));
         event_array[k] = input_message(input_type(int_input_type), key(int_input_key), key_mod(int_input_mods));
     }
     return error_type();
 }
 
-/*error_type send_http(const input_message& msg) noexcept
+int __stdcall DllMain(HINSTANCE hinst, DWORD reason, LPVOID reserved)
 {
-    struct global_type : public heap
+    if (reason == DLL_PROCESS_ATTACH)
     {
-        global_type()
+        icy::detail::global_heap.realloc = [](const void* ptr, size_t size, void*) { return ::realloc(const_cast<void*>(ptr), size); };
+        icy::detail::global_heap.memsize = [](const void*, void*) { return 0_z; };
         {
-            initialize(heap_init::global(g_memory));
-
             string path;
-            process_directory(path);
-            path.appendf("%1%2.txt"_s, mbox::config_path, GetCurrentProcessId());
-
-            json jconfig;
-            {
-                file fconfig;
-                fconfig.open(path, file_access::read, file_open::open_existing, file_share::read);
-                char buf[4096];
-                auto len = sizeof(buf);
-                fconfig.read(buf, len);
-                to_value(string_view(buf, len), jconfig);
-            }
-            file::remove(path);
-
-            jconfig.get(mbox::json_key_version, version);
-            jconfig.get(mbox::json_key_character, character);
-            auto addr_str = jconfig.get(mbox::json_key_connect);
-            if (addr_str.find(":") == addr_str.end())
-                return;
-
-            jconfig.get(mbox::json_key_pause_toggle, g_pause_toggle);
-            jconfig.get(mbox::json_key_pause_begin, g_pause_begin);
-            jconfig.get(mbox::json_key_pause_end, g_pause_end);
-
-            auto addr_host = string_view(addr_str.begin(), addr_str.find(":"));
-            auto addr_port = string_view(addr_str.find(":") + 1, addr_str.end());
-
-            array<network_address> vec;
-            network_address::query(vec, addr_host, addr_port);
-            for (auto&& elem : vec)
-            {
-                if (elem.addr_type() == network_address_type::ip_v4)
-                {
-                    addr = std::move(elem);
-                    sock.initialize(0);
-                    break;
-                }
-            }
+            if (process_directory(path))
+                return 0;
+            if (path.appendf("%1%2.txt"_s, "mbox_config/"_s, GetCurrentProcessId()))
+                return 0;
+            if (file_info().initialize(path))
+                return 0;
         }
-        ~global_type()
+    }
+    return 1;
+
+  /*  const auto append = [hinst](const bool attach)
+    {
+        wchar_t wbuf[4096];
+        auto wlen = GetModuleFileNameW(hinst, wbuf, _countof(wbuf) - 0x20);
+        while (wlen && wbuf[wlen - 1] != '.')
+            --wlen;
+        wcscat_s(wbuf, L"log.txt");
+        auto file = CreateFileW(wbuf, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+            OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (file != INVALID_HANDLE_VALUE)
         {
-            WSACleanup();
+            char buf[256];
+            auto len = sprintf_s(buf, "\r\n%u %u", GetCurrentThreadId(), attach ? 1 : 0);
+            auto count = 0ul;
+            WriteFile(file, buf, len, &count, nullptr);
+            ICY_SCOPE_EXIT{ CloseHandle(file); };
         }
-        network_address addr;
-        network_udp_socket sock;
-        string version;
-        string character;
     };
-    static global_type global;
-
-    if (!global.addr)
-        return make_stdlib_error(std::errc::address_not_available);
-
-    using namespace mbox;
-
-    json j = json_type::object;
-    ICY_ERROR(j.insert(json_key_version, string_view(global.version)));
-    ICY_ERROR(j.insert(json_key_type, uint32_t(msg.type)));
-    if (msg.type == input_type::key_hold ||
-        msg.type == input_type::key_press ||
-        msg.type == input_type::key_release)
+    switch (reason)
     {
-        ICY_ERROR(j.insert(json_key_key, uint32_t(msg.key)));
-    }
-    else
+    case DLL_THREAD_ATTACH:
     {
-        ICY_ERROR(j.insert(json_key_key, 0u));
+        append(true);
+        break;
     }
-    ICY_ERROR(j.insert(json_key_mods, msg.mods));
-    ICY_ERROR(j.insert(json_key_wheel, msg.wheel));
-    ICY_ERROR(j.insert(json_key_point_x, msg.point_x));
-    ICY_ERROR(j.insert(json_key_point_y, msg.point_y));
-    ICY_ERROR(j.insert(json_key_character, global.character));
-
-    string json_str;
-    ICY_ERROR(to_string(j, json_str));
-
-    http_request req;
-    req.type = http_request_type::post;
-    req.content = http_content_type::application_json;
-    ICY_ERROR(copy(json_str.ubytes(), req.body));
-
-    global.sock.send(global.addr, req.body);
-
-    return error_type();
-}*/
+    case DLL_THREAD_DETACH:
+    {
+        append(false);
+        break;
+    }
+    }*/
+}

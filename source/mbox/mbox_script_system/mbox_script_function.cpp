@@ -3,6 +3,96 @@
 using namespace icy;
 using namespace mbox;
 
+error_type mbox_function::make_input(const string_view str, input_message& msg) noexcept
+{
+    array<string_view> words;
+    ICY_ERROR(split(str, words, '+'));
+    if (words.empty())
+    {
+        string_view msg_str = "ParseInput: expected format is '[Mods+]Key'"_s;
+        auto error = make_stdlib_error(std::errc::invalid_argument);
+        error.message = error_message::allocate(detail::global_heap.realloc, detail::global_heap.user, msg_str.bytes().data(), msg_str.bytes().size());
+        return error;
+    }
+    const auto remove_space = [](string_view& word_ref)
+    {
+        while (!word_ref.empty())
+        {
+            char32_t chr = 0;
+            ICY_ERROR(word_ref.begin().to_char(chr));
+            if (chr == ' ' || chr == '\t')
+                word_ref = { word_ref.begin() + 1, word_ref.end() };
+            else
+                break;
+        }
+        while (!word_ref.empty())
+        {
+            char32_t chr = 0;
+            ICY_ERROR((word_ref.end() - 1).to_char(chr));
+            if (chr == ' ' || chr == '\t')
+                word_ref = { word_ref.begin(), word_ref.end() - 1 };
+            else
+                break;
+        }
+        return error_type();
+    };
+
+    key_mod mod = key_mod::none;
+    for (auto k = 1u; k < words.size(); ++k)
+    {
+        ICY_ERROR(remove_space(words[k - 1]));
+
+        string lower_word;
+        ICY_ERROR(to_lower(words[k - 1], lower_word));
+
+        if (lower_word == "left shift"_s || lower_word == "lshift"_s)
+            mod = mod | key_mod::lshift;
+        else if (lower_word == "right shift"_s || lower_word == "rshift"_s)
+            mod = mod | key_mod::rshift;
+        else if (lower_word == "shift"_s)
+            mod = mod | key_mod::lshift | key_mod::rshift;
+        else if (lower_word == "left control"_s || lower_word == "lctrl"_s)
+            mod = mod | key_mod::lctrl;
+        else if (lower_word == "right control"_s || lower_word == "rctrl"_s)
+            mod = mod | key_mod::rctrl;
+        else if (lower_word == "control"_s || lower_word == "ctrl"_s)
+            mod = mod | key_mod::lctrl | key_mod::rctrl;
+        else if (lower_word == "left alt"_s || lower_word == "lalt"_s)
+            mod = mod | key_mod::lalt;
+        else if (lower_word == "right alt"_s || lower_word == "ralt"_s)
+            mod = mod | key_mod::ralt;
+        else if (lower_word == "alt"_s)
+            mod = mod | key_mod::lalt | key_mod::ralt;
+        else
+        {
+            string msg_str;
+            ICY_ERROR(icy::to_string("ParseInput: unknown mod '%1'"_s, msg_str, words[k - 1]));
+            auto error = make_stdlib_error(std::errc::invalid_argument);
+            error.message = error_message::allocate(detail::global_heap.realloc, detail::global_heap.user, msg_str.bytes().data(), msg_str.bytes().size());
+            return error;
+        }
+    }
+    ICY_ERROR(remove_space(words.back()));
+    string lower_word;
+    ICY_ERROR(to_lower(words.back(), lower_word));
+
+    for (auto k = 1u; k < 256u; ++k)
+    {
+        string lower_key;
+        ICY_ERROR(to_lower(icy::to_string(key(k)), lower_key));
+        if (lower_key == lower_word)
+        {
+            msg = input_message(input_type::none, key(k), mod);
+            return error_type();
+        }
+    }
+    string msg_str;
+    ICY_ERROR(icy::to_string("ParseInput: unknown key '%1'"_s, msg_str, words.back()));
+    auto error = make_stdlib_error(std::errc::invalid_argument);
+    error.message = error_message::allocate(detail::global_heap.realloc, detail::global_heap.user, msg_str.bytes().data(), msg_str.bytes().size());
+    return error;
+}
+
 error_type mbox_function::initialize() LUA_NOEXCEPT
 {
     {
@@ -58,69 +148,66 @@ error_type mbox_function::initialize() LUA_NOEXCEPT
         };
         ICY_ERROR(append(add_character, mbox_reserved_name::add_character));
     }
-    else if (m_object->type == mbox_type::action_script)
+    static const auto send_key_any = [](const mbox_action_type type, void* func, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
     {
-        static const auto send_key_any = [](const mbox_action_type type, void* func, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
-        {
-            const auto self = static_cast<mbox_function*>(func);
-            if (input.size() < 1)
-                return self->m_lua->post_error("SendInput: expected 1 or more arguments"_s);
+        const auto self = static_cast<mbox_function*>(func);
+        if (input.size() < 1)
+            return self->m_lua->post_error("SendInput: expected 1 or more arguments"_s);
 
-            mbox_action new_action;
-            new_action.type = type;
-            ICY_ERROR(self->make_input(input[0], new_action.input));
-            if (input.size() >= 2)
-                ICY_ERROR(self->make_target(input[1], new_action.target));
-            ICY_ERROR(self->m_actions->push_back(std::move(new_action)));
-            return error_type();
-        };
-        const auto send_key_down = [](void* func, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
-        {
-            return send_key_any(mbox_action_type::send_key_down, func, input, output);
-        };
-        const auto send_key_up = [](void* func, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
-        {
-            return send_key_any(mbox_action_type::send_key_up, func, input, output);
-        };
-        const auto send_key_press = [](void* func, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
-        {
-            return send_key_any(mbox_action_type::send_key_press, func, input, output);
-        };
-        const auto send_macro = [](void* func, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
-        {
-            const auto self = static_cast<mbox_function*>(func);
-            if (input.size() < 1)
-                return self->m_lua->post_error("SendMacro: expected 1 or more arguments"_s);
+        mbox_action new_action;
+        new_action.type = type;
+        ICY_ERROR(self->make_input(input[0], new_action.input));
+        if (input.size() >= 2)
+            ICY_ERROR(self->make_target(input[1], new_action.target));
+        ICY_ERROR(self->m_actions->push_back(std::move(new_action)));
+        return error_type();
+    };
+    const auto send_key_down = [](void* func, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
+    {
+        return send_key_any(mbox_action_type::send_key_down, func, input, output);
+    };
+    const auto send_key_up = [](void* func, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
+    {
+        return send_key_any(mbox_action_type::send_key_up, func, input, output);
+    };
+    const auto send_key_press = [](void* func, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
+    {
+        return send_key_any(mbox_action_type::send_key_press, func, input, output);
+    };
+    const auto send_macro = [](void* func, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
+    {
+        const auto self = static_cast<mbox_function*>(func);
+        if (input.size() < 1)
+            return self->m_lua->post_error("SendMacro: expected 1 or more arguments"_s);
 
-            mbox_action new_action;
-            new_action.type = mbox_action_type::send_macro;
-            ICY_ERROR(self->make_index(input[0], { mbox_type::action_macro }, new_action.ref));
-            if (input.size() >= 2)
-                ICY_ERROR(self->make_target(input[1], new_action.target));
-            ICY_ERROR(self->m_actions->push_back(std::move(new_action)));
-            return error_type();
-        };
-        const auto send_var_macro = [](void* func, const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
-        {
-            const auto self = static_cast<mbox_function*>(func);
-            if (input.size() < 2)
-                return self->m_lua->post_error("SendVarMacro: expected 2 or more arguments"_s);
+        mbox_action new_action;
+        new_action.type = mbox_action_type::send_macro;
+        ICY_ERROR(self->make_index(input[0], { mbox_type::action_macro }, new_action.ref));
+        if (input.size() >= 2)
+            ICY_ERROR(self->make_target(input[1], new_action.target));
+        ICY_ERROR(self->m_actions->push_back(std::move(new_action)));
+        return error_type();
+    };
+    const auto send_var_macro = [](void* func, const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
+    {
+        const auto self = static_cast<mbox_function*>(func);
+        if (input.size() < 2)
+            return self->m_lua->post_error("SendVarMacro: expected 2 or more arguments"_s);
 
-            mbox_action new_action;
-            new_action.type = mbox_action_type::send_var_macro;
-            ICY_ERROR(self->make_index(input[0], { mbox_type::action_var_macro }, new_action.ref));
-            ICY_ERROR(self->make_target(input[1], new_action.var_macro));
-            if (input.size() >= 3)
-                ICY_ERROR(self->make_target(input[2], new_action.target));
-            ICY_ERROR(self->m_actions->push_back(std::move(new_action)));
-            return error_type();
-        };
-        ICY_ERROR(append(send_key_down, mbox_reserved_name::send_key_down));
-        ICY_ERROR(append(send_key_up, mbox_reserved_name::send_key_up));
-        ICY_ERROR(append(send_key_press, mbox_reserved_name::send_key_press));
-        ICY_ERROR(append(send_macro, mbox_reserved_name::send_macro));
-        ICY_ERROR(append(send_var_macro, mbox_reserved_name::send_var_macro));
-    }
+        mbox_action new_action;
+        new_action.type = mbox_action_type::send_var_macro;
+        ICY_ERROR(self->make_index(input[0], { mbox_type::action_var_macro }, new_action.ref));
+        ICY_ERROR(self->make_target(input[1], new_action.var_macro));
+        if (input.size() >= 3)
+            ICY_ERROR(self->make_target(input[2], new_action.target));
+        ICY_ERROR(self->m_actions->push_back(std::move(new_action)));
+        return error_type();
+    };
+    ICY_ERROR(append(send_key_down, mbox_reserved_name::send_key_down));
+    ICY_ERROR(append(send_key_up, mbox_reserved_name::send_key_up));
+    ICY_ERROR(append(send_key_press, mbox_reserved_name::send_key_press));
+    ICY_ERROR(append(send_macro, mbox_reserved_name::send_macro));
+    ICY_ERROR(append(send_var_macro, mbox_reserved_name::send_var_macro));
     static const auto join_or_leave_group = [](const mbox_action_type type, void* func, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
     {
         const auto self = static_cast<mbox_function*>(func);
@@ -389,7 +476,6 @@ error_type mbox_function::to_string(const string_view default_character, const m
     return error_type();
 }
 
-
 error_type mbox_function::make_target(const lua_variable& input, mbox_action_target& target) const LUA_NOEXCEPT
 {
     if (input.type() == lua_type::number)
@@ -460,82 +546,12 @@ error_type mbox_function::make_input(const lua_variable& input, input_message& m
     if (input.type() != lua_type::string)
         return m_lua->post_error("ParseInput: expected input as string '[Mods+]Key'"_s);
 
-    array<string_view> words(m_lua->realloc(), m_lua->user());
-    ICY_ERROR(split(input.as_string(), words, '+'));
-    if (words.empty())
-        return m_lua->post_error("ParseInput: expected format is '[Mods+]Key'"_s);
-
-    const auto remove_space = [](string_view& word_ref)
+    if (const auto error = make_input(input.as_string(), msg))
     {
-        while (!word_ref.empty())
-        {
-            char32_t chr = 0;
-            ICY_ERROR(word_ref.begin().to_char(chr));
-            if (chr == ' ' || chr == '\t')
-                word_ref = { word_ref.begin() + 1, word_ref.end() };
-            else
-                break;
-        }
-        while (!word_ref.empty())
-        {
-            char32_t chr = 0;
-            ICY_ERROR((word_ref.end() - 1).to_char(chr));
-            if (chr == ' ' || chr == '\t')
-                word_ref = { word_ref.begin(), word_ref.end() - 1 };
-            else
-                break;
-        }
-        return error_type();
-    };
-
-    key_mod mod = key_mod::none;
-    for (auto k = 1u; k < words.size(); ++k)
-    {
-        ICY_ERROR(remove_space(words[k - 1]));
-
-        string lower_word(m_lua->realloc(), m_lua->user());
-        ICY_ERROR(to_lower(words[k - 1], lower_word));
-
-        if (lower_word == "left shift"_s || lower_word == "lshift"_s)
-            mod = mod | key_mod::lshift;
-        else if (lower_word == "right shift"_s || lower_word == "rshift"_s)
-            mod = mod | key_mod::rshift;
-        else if (lower_word == "shift"_s)
-            mod = mod | key_mod::lshift | key_mod::rshift;
-        else if (lower_word == "left control"_s || lower_word == "lctrl"_s)
-            mod = mod | key_mod::lctrl;
-        else if (lower_word == "right control"_s || lower_word == "rctrl"_s)
-            mod = mod | key_mod::rctrl;
-        else if (lower_word == "control"_s || lower_word == "ctrl"_s)
-            mod = mod | key_mod::lctrl | key_mod::rctrl;
-        else if (lower_word == "left alt"_s || lower_word == "lalt"_s)
-            mod = mod | key_mod::lalt;
-        else if (lower_word == "right alt"_s || lower_word == "ralt"_s)
-            mod = mod | key_mod::ralt;
-        else if (lower_word == "alt"_s)
-            mod = mod | key_mod::lalt | key_mod::ralt;
+        if (error == make_stdlib_error(std::errc::invalid_argument))
+            return m_lua->post_error(string_view(static_cast<const char*>(error.message->data()), error.message->size()));
         else
-        {
-            string msg_str(m_lua->realloc(), m_lua->user());
-            ICY_ERROR(icy::to_string("ParseInput: unknown mod '%1'"_s, msg_str, words[k - 1]));
-            return m_lua->post_error(msg_str);
-        }
+            return error;
     }
-    ICY_ERROR(remove_space(words.back()));
-    string lower_word(m_lua->realloc(), m_lua->user());
-    ICY_ERROR(to_lower(words.back(), lower_word));
-
-    for (auto k = 1u; k < 256u; ++k)
-    {
-        string lower_key(m_lua->realloc(), m_lua->user());
-        ICY_ERROR(to_lower(icy::to_string(key(k)), lower_key));
-        if (lower_key == lower_word)
-        {
-            msg = input_message(input_type::none, key(k), mod);
-            return error_type();
-        }
-    }
-    string msg_str(m_lua->realloc(), m_lua->user());
-    ICY_ERROR(icy::to_string("ParseInput: unknown key '%1'"_s, msg_str, words.back()));
-    return m_lua->post_error(msg_str);
+    return error_type();
 }

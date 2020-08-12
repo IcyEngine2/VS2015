@@ -420,9 +420,9 @@ error_type mbox_config_type::edit() noexcept
     ICY_ERROR(model_games.initialize());
     ICY_ERROR(model_pause.initialize());
     ICY_ERROR(model_focus.initialize());
-    ICY_ERROR(model_games.hheader(0, string_view()));
-    ICY_ERROR(model_pause.hheader(0, string_view()));
-    ICY_ERROR(model_focus.hheader(0, string_view()));
+    ICY_ERROR(model_games.hheader(0, ""_s));
+    ICY_ERROR(model_pause.hheader(0, ""_s));
+    ICY_ERROR(model_focus.hheader(0, ""_s));
     ICY_ERROR(tab_games.bind(model_games));
     ICY_ERROR(tab_pause.bind(model_pause));
     ICY_ERROR(tab_focus.bind(model_focus));

@@ -5,6 +5,7 @@
 #include <icy_engine/core/icy_event.hpp>
 #include <Windows.h>
 #include <objbase.h>
+#include <winternl.h>
 
 using namespace icy;
 
@@ -344,27 +345,140 @@ error_type timer::initialize(const size_t count, const duration_type timeout) no
     return error_type();
 }
 
-error_type icy::win32_message(const string_view text, const string_view header, bool* const yesno) noexcept
+error_type icy::message_box(const string_view text, const string_view header, bool* const yesno) noexcept
 {
-    library lib("user32.dll");
-    ICY_ERROR(lib.initialize());
-    if (const auto func = ICY_FIND_FUNC(lib, MessageBoxW))
-    {
-        Sleep(500);
+    array<wchar_t> whdr;
+    array<wchar_t> wtxt;
+    ICY_ERROR(to_utf16(header, whdr));
+    ICY_ERROR(to_utf16(text, wtxt));
 
-        array<wchar_t> wtxt;
-        array<wchar_t> whdr;
-        ICY_ERROR(to_utf16(text, wtxt));
-        ICY_ERROR(to_utf16(header, whdr));
-        const auto value = func(nullptr, wtxt.data(), whdr.data(), yesno ? MB_YESNO : MB_OK);
-        if (yesno)
-            *yesno = value == IDYES;
-    }
-    else
-    {
-        return make_stdlib_error(std::errc::function_not_supported);
-    }
+    library user32("user32");    
+    ICY_ERROR(user32.initialize());
+    const auto func = ICY_FIND_FUNC(user32, MessageBoxW);
+    if (!func)
+        return make_stdlib_error(std::errc::invalid_argument);
+
+    const auto flags_ptr = reinterpret_cast<uint32_t*>(NtCurrentTeb()->ProcessEnvironmentBlock->ProcessParameters->Reserved1 + 8);
+    const auto flags_old = *flags_ptr;
+    *flags_ptr |= 0x00080000;
+    ICY_SCOPE_EXIT{ *flags_ptr = flags_old; };
+
+    const auto code = func(nullptr, wtxt.data(), whdr.data(), yesno ? MB_YESNO : MB_OK);
+    if (yesno)
+        *yesno = code == IDYES;
     return error_type();
+
+/*    static decltype(&GetWindowLongPtrW) win32_get_window_long_ptr = nullptr;
+    win32_get_window_long_ptr = ICY_FIND_FUNC(user32, GetWindowLongPtrW);
+    if (!win32_get_window_long_ptr) return make_stdlib_error(std::errc::function_not_supported);
+
+#define LOAD_USER32(X,Y) data.X = ICY_FIND_FUNC(user32, Y); if (!data.X) return make_stdlib_error(std::errc::function_not_supported)
+    
+    struct func_data
+    {
+        decltype(&DefWindowProcW) win32_def_window_proc = nullptr;
+        decltype(&RegisterClassExW) win32_register_class = nullptr;
+        decltype(&LoadCursorW) win32_load_cursor = nullptr;
+        decltype(&UnregisterClassW) win32_unregister_class = nullptr;
+        decltype(&CreateWindowExW) win32_create_window = nullptr;
+        decltype(&DestroyWindow) win32_destroy_window = nullptr;
+        decltype(&SetWindowTextW) win32_set_window_text = nullptr;
+        decltype(&SetWindowLongPtrW) win32_set_window_long_ptr = nullptr;
+        decltype(&PostQuitMessage) win32_post_quit_message = nullptr;
+        decltype(&MsgWaitForMultipleObjectsEx) win32_msg_wait = nullptr;
+        decltype(&PeekMessageW) win32_peek_message = nullptr;
+        decltype(&TranslateMessage) win32_translate_message = nullptr;
+        decltype(&DispatchMessageW) win32_dispatch_message = nullptr;
+        decltype(&SetWindowLongW) win32_set_window_long = nullptr;
+        bool done = false;
+    } data;
+    LOAD_USER32(win32_def_window_proc, DefWindowProcW);
+    LOAD_USER32(win32_register_class, RegisterClassExW);
+    LOAD_USER32(win32_load_cursor, LoadCursorW);
+    LOAD_USER32(win32_unregister_class, UnregisterClassW);
+    LOAD_USER32(win32_create_window, CreateWindowExW);
+    LOAD_USER32(win32_destroy_window, DestroyWindow);
+    LOAD_USER32(win32_set_window_text, SetWindowTextW);
+    LOAD_USER32(win32_set_window_long_ptr, SetWindowLongPtrW);
+    LOAD_USER32(win32_post_quit_message, PostQuitMessage);
+    LOAD_USER32(win32_msg_wait, MsgWaitForMultipleObjectsEx);
+    LOAD_USER32(win32_peek_message, PeekMessageW);
+    LOAD_USER32(win32_translate_message, TranslateMessage);
+    LOAD_USER32(win32_dispatch_message, DispatchMessageW);
+    LOAD_USER32(win32_set_window_long, SetWindowLongW);
+
+    wchar_t cname[64];
+    swprintf_s(cname, L"Icy Message Box %u.%u", GetCurrentProcessId(), GetCurrentThreadId());
+
+    const auto proc = [](HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) -> LRESULT
+    {
+        auto ptr = reinterpret_cast<func_data*>(win32_get_window_long_ptr(hwnd, GWLP_USERDATA));
+        if (msg == WM_CLOSE)
+        {
+            ptr->done = true;
+            return 0;
+        }
+        return ptr->win32_def_window_proc(hwnd, msg, wparam, lparam);
+    };
+
+    WNDCLASSEXW cls = { sizeof(WNDCLASSEXW) };
+    cls.lpszClassName = cname;
+    cls.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
+    cls.lpfnWndProc = data.win32_def_window_proc;
+    cls.hInstance = win32_instance();
+    cls.hCursor = data.win32_load_cursor(nullptr, IDC_ARROW);
+    if (data.win32_register_class(&cls) == 0)
+        return last_system_error();
+
+    ICY_SCOPE_EXIT{ data.win32_unregister_class(cls.lpszClassName, cls.hInstance); };
+
+    array<wchar_t> whdr;
+    ICY_ERROR(to_utf16(header, whdr));
+
+    //auto hwnd = data.win32_create_window(WS_EX_DLGMODALFRAME, cname, whdr.data(), WS_CAPTION | WS_VISIBLE,
+    //    CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,nullptr, nullptr, win32_instance(), nullptr);
+
+    auto hwnd = data.win32_create_window(WS_EX_DLGMODALFRAME, cname, whdr.data(), WS_CAPTION,
+        CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, nullptr, nullptr, nullptr, nullptr);
+
+    if (!hwnd)
+        return last_system_error();
+    ICY_SCOPE_EXIT{ data.win32_destroy_window(hwnd); };
+
+    data.win32_set_window_long_ptr(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&data));
+    data.win32_set_window_long_ptr(hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(static_cast<WNDPROC>(proc)));
+
+    data.win32_set_window_long(hwnd, GWL_STYLE, WS_VISIBLE | WS_CAPTION);
+
+    while (true)
+    {
+        const auto index = data.win32_msg_wait(0, nullptr, INFINITE, QS_ALLINPUT, 0);
+
+        if (index == WAIT_OBJECT_0)
+        {
+            MSG win32_msg;
+            while (data.win32_peek_message(&win32_msg, hwnd, 0, 0, PM_REMOVE))
+            {
+                data.win32_translate_message(&win32_msg);
+                data.win32_dispatch_message(&win32_msg);
+            }
+            if (data.done)
+                break;
+        }
+        else if (index == WAIT_ABANDONED)
+        {
+            return error_type();
+        }
+        else if (index == WAIT_TIMEOUT)
+        {
+            return make_stdlib_error(std::errc::timed_out);
+        }
+        else //if (index == WAIT_FAILED)
+        {
+            return last_system_error();
+        }
+    }
+    return error_type();*/
 }
 error_type icy::win32_parse_cargs(array<string>& args) noexcept
 {
@@ -432,3 +546,42 @@ error_type icy::win32_debug_print(const string_view str) noexcept
     OutputDebugStringW(wstr.data());
     return error_type();
 }
+
+/*
+    library ole32("ole32");
+        ICY_ERROR(ole32.initialize());
+        const auto com_create = ICY_FIND_FUNC(ole32, CoCreateInstance);
+        if (!com_create)
+            return make_stdlib_error(std::errc::function_not_supported);
+
+        IGlobalOptions* options = nullptr;
+        auto hr = com_create(CLSID_GlobalOptions, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&options));
+        if (FAILED(hr))
+            return make_system_error(hr);
+        ICY_SCOPE_EXIT{ options->Release(); };
+
+        auto value = 0_z;
+        hr = options->Query(COMGLB_EXCEPTION_HANDLING, &value);
+        if (FAILED(hr)) return make_system_error(hr);
+
+        hr = options->Set(COMGLB_EXCEPTION_HANDLING, COMGLB_EXCEPTION_DONOT_HANDLE);
+        if (FAILED(hr)) return make_system_error(hr);
+        ICY_SCOPE_EXIT{ options->Set(COMGLB_EXCEPTION_HANDLING, value); };
+* 
+static const auto PROCESS_CALLBACK_FILTER_ENABLED = 0x1;
+    typedef BOOL(WINAPI* GETPROCESSUSERMODEEXCEPTIONPOLICY)(__out LPDWORD lpFlags);
+    typedef BOOL(WINAPI* SETPROCESSUSERMODEEXCEPTIONPOLICY)(__in DWORD dwFlags);
+
+       library k32("kernel32");
+        ICY_ERROR(k32.initialize());
+
+        auto get_except = reinterpret_cast<GETPROCESSUSERMODEEXCEPTIONPOLICY>(k32.find("GetProcessUserModeExceptionPolicy"));
+        auto set_except = reinterpret_cast<SETPROCESSUSERMODEEXCEPTIONPOLICY>(k32.find("SetProcessUserModeExceptionPolicy"));
+        auto flags = 0ul;
+        if (get_except && set_except)
+        {
+            get_except(&flags);
+            set_except(flags & ~PROCESS_CALLBACK_FILTER_ENABLED);
+            set_except(flags);
+        }
+*/

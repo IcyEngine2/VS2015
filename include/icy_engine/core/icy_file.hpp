@@ -36,6 +36,11 @@ namespace icy
 		file,
 		dir,
 	};
+	enum class file_flag : uint32_t
+	{
+		none,
+		delete_on_close,
+	};
 
 	class file_info
 	{
@@ -78,7 +83,7 @@ namespace icy
 			return m_info;
 		}
 		void close() noexcept;
-		error_type open(const string_view path, const file_access access, const file_open open_mode, const file_share share) noexcept;
+		error_type open(const string_view path, const file_access access, const file_open open_mode, const file_share share, const file_flag flags = file_flag::none) noexcept;
 		error_type read(void* data, size_t& size) noexcept;
 		error_type append(const void* data, size_t size) noexcept;
 		error_type text(array<string>& lines) noexcept
