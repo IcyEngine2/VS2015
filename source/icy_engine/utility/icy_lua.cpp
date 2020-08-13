@@ -37,6 +37,7 @@ struct lua_object_init
         luafunc,
         library,
         global,
+        cvarfunc,
     };
     lua_object_init(const type type) noexcept : type(type)
     {
@@ -46,7 +47,9 @@ struct lua_object_init
     string_view parse;
     const char* name = nullptr;
     lua_cfunction cfunc = nullptr;
+    lua_cvarfunction cvarfunc= nullptr;
     void* cdata = nullptr;
+    array<lua_variable> cvardata;
     lua_default_library lib = lua_default_library::none;
     int index = 0;
 };
@@ -73,10 +76,12 @@ public:
     error_type to_value(const int index, lua_variable& var) const LUA_NOEXCEPT;
 private:   
     error_type parse(lua_variable& func, const string_view parse, const char* const name) const LUA_NOEXCEPT override;
+    error_type global(lua_variable& var) const LUA_NOEXCEPT override;
     error_type make_table(lua_variable& var) const LUA_NOEXCEPT override;
     error_type make_string(lua_variable& var, const string_view str) const LUA_NOEXCEPT override;
     error_type make_binary(lua_variable& var, const const_array_view<uint8_t> bytes) const LUA_NOEXCEPT override;
     error_type make_function(lua_variable& var, const lua_cfunction func, void* fdata) const LUA_NOEXCEPT override;
+    error_type make_varfunction(lua_variable& var, const lua_cvarfunction func, const const_array_view<lua_variable> vars) const LUA_NOEXCEPT override;
     error_type make_library(lua_variable& var, const lua_default_library lib) const LUA_NOEXCEPT override;
     error_type copy(const lua_variable& src, lua_variable& dst) const LUA_NOEXCEPT override;
     error_type post_error(const string_view msg) const LUA_NOEXCEPT override;
@@ -98,7 +103,7 @@ private:
         };
         return safe_call(proc, &func, only_safe);
     }
-    error_type create(lua_variable& var, const lua_object_init& init) const LUA_NOEXCEPT;
+    error_type create(lua_variable& var, lua_object_init&& init) const LUA_NOEXCEPT;
     error_type print(int index, error_type(*func)(void* pdata, const string_view str), void* const pdata, const string_view tabs = ""_s) const LUA_NOEXCEPT;
     error_type safe_call(error_type(*func)(const void* const ptr), const void* const data, const bool only_safe) const LUA_NOEXCEPT;
 private:
@@ -165,6 +170,8 @@ private:
     decltype(lua_object_init::type::unknown) m_type;
     lua_cfunction m_func = nullptr;
     void* m_data = nullptr;
+    lua_cvarfunction m_varfunc = nullptr;
+    array<lua_variable> m_vardata;
 };
 
 error_type lua_system_data::initialize() noexcept
@@ -375,7 +382,13 @@ void lua_system_data::push(const lua_variable& var) const LUA_NOEXCEPT
 void lua_system_data::push(const lua_object_data& object) const LUA_NOEXCEPT
 {
     const auto lua = m_state;
-    const auto s0 = lua_gettop(lua);
+    if (object.m_type == lua_object_init::type::global)
+    {
+        lua_pushglobaltable(lua);
+        return;
+    }
+
+    //const auto s0 = lua_gettop(lua);
     lua_pushlightuserdata(lua, const_cast<lua_object_data*>(&object));  //  &object
     lua_gettable(lua, LUA_REGISTRYINDEX);                               //  table
     if (lua_getmetatable(lua, -1))      //  table; meta
@@ -460,7 +473,7 @@ error_type lua_system_data::to_value(const int index, lua_variable& var) const L
         {
             auto init = lua_object_init(lua_object_init::type::unknown);
             init.index = index;
-            ICY_ERROR(create(var, init));
+            ICY_ERROR(create(var, std::move(init)));
         }
         break;
     }
@@ -468,7 +481,7 @@ error_type lua_system_data::to_value(const int index, lua_variable& var) const L
     {
         auto init = lua_object_init(lua_object_init::type::unknown);
         init.index = index;
-        ICY_ERROR(create(var, init));
+        ICY_ERROR(create(var, std::move(init)));
         break;
     }
     case LUA_TUSERDATA:
@@ -496,7 +509,16 @@ error_type lua_system_data::parse(lua_variable& func, const string_view parse, c
         lua_object_init init(lua_object_init::type::script);
         init.name = name;
         init.parse = parse;
-        return create(func, init);
+        return create(func, std::move(init));
+    };
+    return safe_call(proc);
+}
+error_type lua_system_data::global(lua_variable& var) const LUA_NOEXCEPT
+{
+    const auto proc = [&]
+    {
+        lua_object_init init(lua_object_init::type::global);
+        return create(var, std::move(init));
     };
     return safe_call(proc);
 }
@@ -505,7 +527,7 @@ error_type lua_system_data::make_table(lua_variable& var) const LUA_NOEXCEPT
     const auto proc = [&]
     {
         lua_object_init init(lua_object_init::type::table);
-        return create(var, init);
+        return create(var, std::move(init));
     };
     return safe_call(proc);
 }
@@ -532,7 +554,25 @@ error_type lua_system_data::make_function(lua_variable& var, const lua_cfunction
         lua_object_init init(lua_object_init::type::cfunc);
         init.cfunc = func;
         init.cdata = fdata;
-        return create(var, init);
+        return create(var, std::move(init));
+    };
+    return safe_call(proc);
+}
+error_type lua_system_data::make_varfunction(lua_variable& var, const lua_cvarfunction func, const const_array_view<lua_variable> vars) const LUA_NOEXCEPT
+{
+    if (func == nullptr)
+        return make_stdlib_error(std::errc::invalid_argument);
+    const auto proc = [&]
+    {
+        lua_object_init init(lua_object_init::type::cvarfunc);
+        init.cvarfunc = func;
+        for (auto&& var : vars)
+        {
+            lua_variable copy_var;
+            ICY_ERROR(copy(var, copy_var));
+            ICY_ERROR(init.cvardata.push_back(std::move(copy_var)));
+        }
+        return create(var, std::move(init));
     };
     return safe_call(proc);
 }
@@ -545,7 +585,7 @@ error_type lua_system_data::make_library(lua_variable& var, const lua_default_li
     {
         lua_object_init init(lua_object_init::type::library);
         init.lib = lib;
-        return create(var, init);
+        return create(var, std::move(init));
     };
     return safe_call(proc);
 }
@@ -612,7 +652,7 @@ error_type lua_system_data::print(const lua_variable& var, error_type(*pfunc)(vo
     };
     return safe_call(proc);
 }
-error_type lua_system_data::create(lua_variable& var, const lua_object_init& init) const LUA_NOEXCEPT
+error_type lua_system_data::create(lua_variable& var, lua_object_init&& init) const LUA_NOEXCEPT
 {
     const auto lua = m_state;
     if (!lua_checkstack(lua, 5))
@@ -654,6 +694,10 @@ error_type lua_system_data::create(lua_variable& var, const lua_object_init& ini
         lua_pushlightuserdata(lua, new_object); //  new_object;
         lua_pushvalue(lua, abs);                //  new_object; table
         lua_settable(lua, LUA_REGISTRYINDEX);   //  -
+    }
+    else if (init.type == lua_object_init::type::global)
+    {
+        var = lua_variable(*new_object, type);
     }
     else
     {
@@ -710,11 +754,19 @@ error_type lua_system_data::create(lua_variable& var, const lua_object_init& ini
         lua_pushcclosure(lua, gcproc, 1);       //  new_object; table; meta; "__gc"; gc
         lua_settable(lua, -3);                  //  new_object; table; meta
 
-        if (init.type == lua_object_init::type::cfunc)
+        if (init.type == lua_object_init::type::cfunc || init.type == lua_object_init::type::cvarfunc)
         {
             type = lua_type::function;
-            new_object->m_func = init.cfunc;
-            new_object->m_data = init.cdata;
+            if (init.type == lua_object_init::type::cfunc)
+            {
+                new_object->m_func = init.cfunc;
+                new_object->m_data = init.cdata;
+            }
+            else
+            {
+                new_object->m_varfunc = init.cvarfunc;
+                new_object->m_vardata = std::move(init.cvardata);
+            }
             const auto cfunc_proc = [](lua_State* lua) -> int
             {
                 const auto data = static_cast<lua_object_data*>(lua_touserdata(lua, lua_upvalueindex(1)));
@@ -732,7 +784,14 @@ error_type lua_system_data::create(lua_variable& var, const lua_object_init& ini
                             ICY_ERROR(ptr->to_value(k, var));
                             ICY_ERROR(input.push_back(std::move(var)));
                         }
-                        ICY_ERROR(data->m_func(data->m_data, input, &output));
+                        if (data->m_type == lua_object_init::type::cfunc)
+                        {
+                            ICY_ERROR(data->m_func(data->m_data, input, &output));
+                        }
+                        else if (data->m_type == lua_object_init::type::cvarfunc)
+                        {
+                            ICY_ERROR(data->m_varfunc(data->m_vardata, input, & output));
+                        }
 
                         if (!lua_checkstack(lua, int(output.size())))
                             return make_stdlib_error(std::errc::not_enough_memory);
@@ -766,7 +825,7 @@ error_type lua_system_data::create(lua_variable& var, const lua_object_init& ini
             lua_pushstring(lua, "__call");          //  new_object; table; meta; "__call"
             if (const auto code = luaL_loadbufferx(lua, init.parse.bytes().data(), init.parse.bytes().size(), init.name, "t"))
                 lua_error(lua);
-            //  new_object; table; meta; "__call"; lua_script; 
+                                            //  new_object; table; meta; "__call"; lua_script; 
             lua_createtable(lua, 0, 0);     //  new_object; table; meta; "__call"; lua_script; env
             lua_pushstring(lua, "_G");      //  new_object; table; meta; "__call"; lua_script; env; "_G"
             lua_pushglobaltable(lua);       //  new_object; table; meta; "__call"; lua_script; env; "_G"; globals
@@ -1092,4 +1151,4 @@ error_type icy::create_lua_system(shared_ptr<lua_system>& system, realloc_func r
 }
 
 const char* icy::lua_keywords = "and break do else elseif end false for function goto"
-" if in ilocal nil not or repeat return then true until while";
+" if in local nil not or repeat return then true until while";

@@ -260,17 +260,17 @@ namespace icy
 		using reverse_iterator = std::reverse_iterator<iterator>;
 	public:
         rel_ops(const_array_view);
-		constexpr const_array_view() noexcept : m_ptr{ }, m_size{ }
+		constexpr const_array_view() noexcept : m_ptr(nullptr), m_size(0)
 		{
 
 		}
 		constexpr const_array_view(const const_pointer ptr, const size_type size) noexcept :
-			m_ptr{ const_cast<pointer>(ptr) }, m_size{ size }
+			m_ptr(const_cast<pointer>(ptr)), m_size(size)
 		{
 
 		}
 		const_array_view(const const_pointer begin, const const_pointer end) noexcept :
-			m_ptr{ const_cast<pointer>(begin) }, m_size{ size_type(end - begin) }
+			m_ptr(const_cast<pointer>(begin)), m_size(size_type(end - begin))
 		{
 			ICY_ASSERT(begin <= end, "INVALID ITERATOR RANGE (BEGIN > END)");
 		}
@@ -281,7 +281,7 @@ namespace icy
 			static_assert(!std::is_same<container_type, std::initializer_list<T>>::value, "INVALID CONTAINER");
 		}
 		const_array_view(const std::initializer_list<T> list) noexcept :
-			m_ptr{ const_cast<T*>(list.begin()) }, m_size{ list.size() }
+			m_ptr(const_cast<T*>(list.begin())), m_size(list.size())
 		{
 
 		}
@@ -370,20 +370,20 @@ namespace icy
 		using reverse_iterator = typename base::reverse_iterator;
 	public:
 		array_view() noexcept = default;
-		array_view(const pointer ptr, const size_type size) noexcept : base{ ptr, size }
+		array_view(const pointer ptr, const size_type size) noexcept : base(ptr, size)
 		{
 			
 		}
-		array_view(const pointer begin, const pointer end) noexcept : base{ begin, end }
+		array_view(const pointer begin, const pointer end) noexcept : base(begin, end)
 		{
 
 		}
 		template<typename container_type, typename = std::enable_if_t<!std::is_const<container_type>::value>>
-		array_view(container_type& container) noexcept : array_view{ std::data(container), std::size(container) }
+		array_view(container_type& container) noexcept : array_view(std::data(container), std::size(container))
 		{
 
 		}
-		array_view(const std::initializer_list<T> list) noexcept : array_view{ list.begin(), list.end() }
+		array_view(const std::initializer_list<T> list) noexcept : array_view(list.begin(), list.end())
 		{
 
 		}

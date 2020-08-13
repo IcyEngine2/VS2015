@@ -26,6 +26,7 @@ namespace icy
     class lua_object;
     class lua_variable;
     using lua_cfunction = error_type(*)(void* user, const const_array_view<lua_variable> input, array<lua_variable>* output);
+    using lua_cvarfunction = error_type(*)(array_view<lua_variable> user, const const_array_view<lua_variable> input, array<lua_variable>* output);
     extern const char* lua_keywords;
 
     enum class lua_default_library
@@ -53,11 +54,20 @@ namespace icy
             static_assert(std::is_trivially_destructible<T>::value, "TYPE MUST BE TRIVIAL");
             return make_binary(var, const_array_view<uint8_t>(reinterpret_cast<const uint8_t*>(&value), sizeof(T)));
         }
+        virtual error_type global(lua_variable& var) const LUA_NOEXCEPT = 0;
         virtual error_type make_binary(lua_variable& var, const const_array_view<uint8_t> bytes) const LUA_NOEXCEPT = 0;
         virtual error_type make_function(lua_variable& var, const lua_cfunction func, void* const data) const LUA_NOEXCEPT = 0;
+        virtual error_type make_varfunction(lua_variable& var, const lua_cvarfunction func, const const_array_view<lua_variable> vars) const LUA_NOEXCEPT = 0;
         virtual error_type make_library(lua_variable& var, const lua_default_library type) const LUA_NOEXCEPT = 0;
         virtual error_type copy(const lua_variable& src, lua_variable& dst) const LUA_NOEXCEPT = 0;
         virtual error_type post_error(const string_view str) const LUA_NOEXCEPT = 0;
+        template<typename... arg_type>
+        error_type post_error(const string_view format, arg_type&&... args) const LUA_NOEXCEPT
+        {
+            string str(realloc(), user());
+            ICY_ERROR(str.appendf(format, std::forward<arg_type>(args)...));
+            return post_error(str);
+        }
         virtual error_type print(const lua_variable& var, error_type(*pfunc)(void* pdata, const string_view str), void* const pdata) const LUA_NOEXCEPT = 0;
         virtual realloc_func realloc() const noexcept = 0;
         virtual void* user() const noexcept = 0;
@@ -84,7 +94,6 @@ namespace icy
     public:
         using boolean_type = bool;
         using number_type = double;
-        using pointer_type = const void*;
         using binary_type = const_array_view<uint8_t>;
     public:
         lua_variable() noexcept : m_type(lua_type::none)
@@ -116,9 +125,9 @@ namespace icy
         {
             new (&m_number) number_type(value);
         }
-        lua_variable(const pointer_type value) noexcept : m_type(lua_type::pointer)
+        lua_variable(const void* value) noexcept : m_type(lua_type::pointer)
         {
-            new (&m_pointer) pointer_type(value);
+            new (&m_pointer) (const void*)(value);
         }
         lua_variable(lua_object& value, const lua_type type) noexcept : m_type(type)
         {
@@ -144,7 +153,7 @@ namespace icy
                 new (&m_number) number_type(rhs.m_number);
                 break;
             case lua_type::pointer:
-                new (&m_pointer) pointer_type(rhs.m_pointer);
+                new (&m_pointer) (const void*)(rhs.m_pointer);
                 break;
             case lua_type::string:
                 new (&m_string) string(std::move(rhs.m_string));
@@ -177,6 +186,31 @@ namespace icy
                 break;
             }
         }
+        bool operator==(const lua_variable& rhs) const noexcept
+        {
+            if (rhs.type() != m_type)
+                return false;
+
+            switch (m_type)
+            {
+            case lua_type::none:
+                return true;
+            case lua_type::boolean:
+                return m_boolean == rhs.m_boolean;
+            case lua_type::number:
+                return m_number == rhs.m_number;
+            case lua_type::string:
+                return m_string == rhs.m_string;
+            case lua_type::pointer:
+                return m_pointer == rhs.m_pointer;
+            case lua_type::table:
+            case lua_type::function: 
+                return m_object == rhs.m_object;
+            case lua_type::binary:
+                return m_binary == rhs.m_binary;
+            }
+            return false;
+        }
     public:
         lua_type type() const noexcept
         {
@@ -190,7 +224,11 @@ namespace icy
         {
             return m_type == lua_type::number ? m_number : 0;
         }
-        pointer_type as_pointer() const noexcept
+        const void* as_pointer() const noexcept
+        {
+            return m_type == lua_type::pointer ? m_pointer : nullptr;
+        }
+        void* as_pointer() noexcept
         {
             return m_type == lua_type::pointer ? m_pointer : nullptr;
         }
@@ -249,7 +287,7 @@ namespace icy
             boolean_type m_boolean;
             number_type m_number;
             string m_string;
-            pointer_type m_pointer;
+            void* m_pointer;
             lua_object* m_object;
             array<uint8_t> m_binary;
         };

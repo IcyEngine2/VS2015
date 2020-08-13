@@ -91,7 +91,6 @@
     <ClCompile Include="..\..\..\source\icy_engine\utility\icy_database.cpp" />
     <ClCompile Include="..\..\..\source\icy_engine\utility\icy_lua.cpp" />
     <ClCompile Include="..\..\..\source\mbox\mbox_script_system\mbox_script_array.cpp" />
-    <ClCompile Include="..\..\..\source\mbox\mbox_script_system\mbox_script_function.cpp" />
     <ClCompile Include="..\..\..\source\mbox\mbox_script_system\mbox_script_system.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -390,15 +390,15 @@ error_type mbox_database::launch(const mbox_index& party) noexcept
     {
         const auto text = static_cast<xgui_text_edit*>(ptr);
         
-        if (str.find("\r\n"_s) == str.begin())
+        /*if (!str.empty() && str.find("\r\n"_s) == str.begin())
         {
-            string time_str;
+           string time_str;
             ICY_ERROR(icy::to_string(clock_type::now(), time_str));
             string msg;
             ICY_ERROR(icy::to_string("\r\n[%1]: %2"_s, msg, string_view(time_str), string_view(str.begin() + 2, str.end())));
             ICY_ERROR(text->append(msg));
         }
-        else
+        else*/
         {
             ICY_ERROR(text->append(str));
         }
@@ -416,7 +416,11 @@ error_type mbox_database::launch(const mbox_index& party) noexcept
     };
 
     shared_ptr<mbox_system> system;
-    if (const auto error = create_event_system(system, *this, party, print, &main_widget))
+    mbox_system_init init;
+    init.pfunc = print;
+    init.pdata = &main_widget;
+    init.party = party;
+    if (const auto error = create_event_system(system, *this, init))
     {
         if (error != make_mbox_error(mbox_error::execute_lua))
             return error;
@@ -463,8 +467,7 @@ error_type mbox_database::launch(const mbox_index& party) noexcept
     shared_ptr<event_queue> loop;
     ICY_ERROR(create_event_system(loop, event_type::gui_update | event_type::gui_select));
     ICY_ERROR(window.show(true));
-    ICY_ERROR(info->update_wow_addon(*this, "D:/World of Warcraft/_classic_/Interface/AddOns/"_s));
-
+    
     ICY_ERROR(system->thread().launch());
     ICY_ERROR(system->thread().rename("MBox System"_s));
 
@@ -1753,13 +1756,12 @@ error_type mbox_database::window_type::remodel() noexcept
     
     array<string_view> words;
     ICY_ERROR(split(string_view(mbox_keywords, strlen(mbox_keywords)), words));
-    ICY_ERROR(lexer.keywords[1].append("mbox"_s));
     for (auto&& word : words)
-        ICY_ERROR(lexer.keywords[1].appendf(" mbox.%1"_s, word));
+        ICY_ERROR(lexer.keywords[1].appendf(" %1"_s, word));
 
-    ICY_ERROR(lexer.keywords[2].append("mbox"_s));
+    //ICY_ERROR(lexer.keywords[2].append("mbox"_s));
     for (auto&& pair : object.refs)
-        ICY_ERROR(lexer.keywords[2].appendf(" mbox.%1"_s, string_view(pair.key)));
+        ICY_ERROR(lexer.keywords[2].appendf(" %1"_s, string_view(pair.key)));
 
     text_edit_style default_style;
     ICY_ERROR(copy("Consolas"_s, default_style.font));
@@ -1767,8 +1769,8 @@ error_type mbox_database::window_type::remodel() noexcept
     ICY_ERROR(lexer.add_style(SCE_LUA_WORD, colors::blue));
     ICY_ERROR(lexer.add_style(SCE_LUA_WORD2, colors::dark_green));
     ICY_ERROR(lexer.add_style(SCE_LUA_WORD3, colors::dark_red));
+    ICY_ERROR(lexer.add_style(SCE_LUA_NUMBER, colors::dark_violet));
     ICY_ERROR(tab_text_data.lexer(std::move(lexer)));
-
 
     return error_type();
 
@@ -2167,58 +2169,124 @@ error_type mbox_database::window_type::compile() noexcept
         ICY_ERROR(tab_debug.append(str));
     }
     
-    heap lua_heap;
-    ICY_ERROR(lua_heap.initialize(heap_init(64_mb)));
-    ICY_ERROR(append("Initialize LUA sandbox: 64_mb"_s));
-
-    shared_ptr<lua_system> lua;
-    ICY_ERROR(create_lua_system(lua, &lua_heap));
-    mbox_function func(self.m_objects, object, *lua);
-
-    ICY_ERROR(append("Compile LUA script... "_s));
-
-    if (const auto error = func.initialize())
+    set<const mbox_object*> tree;
+    ICY_ERROR(self.enum_dependencies(object, tree));
+    
+    class mbox_array_tmp : public mbox_array
     {
-        if (error != lua_error_execute)
-            return error;   //  memory?
-
-        string msg;
-        ICY_ERROR(lua_error_to_string(error, msg));
-        ICY_ERROR(tab_debug.append(msg));
-        return error_type();
-    }
-    else
-    {
-        ICY_ERROR(tab_debug.append("Success!"_s));
-    }
-
-    ICY_ERROR(append("Execute LUA script... "_s));
-    array<mbox_action> actions;
-    if (const auto error = func(actions))
-    {
-        if (error != lua_error_execute)
-            return error;   //  memory?
-
-        string msg;
-        ICY_ERROR(lua_error_to_string(error, msg));
-        ICY_ERROR(tab_debug.append(msg));
-        return error_type();
-    }
-    else
-    {
-        ICY_ERROR(tab_debug.append("Success!"_s));
-    }
-
-    if (!actions.empty())
-    {
-        ICY_ERROR(append("Actions list: "_s));
-        for (auto&& cmd : actions)
+    public:
+        map<mbox_index, mbox_object>& objects() noexcept
         {
-            string str;
-            ICY_ERROR(func.to_string(string_view(), cmd, str));
-            ICY_ERROR(str.insert(str.begin(), "\r\n  "_s));
-            ICY_ERROR(tab_debug.append(str));
+            return m_objects;
         }
+        array<mbox_macro>& macros() noexcept
+        {
+            return m_macros;
+        }
+    };
+    mbox_array_tmp new_data;
+    for (auto&& ptr : tree)
+    {
+        mbox_object copy_object;
+        ICY_ERROR(copy(*ptr, copy_object));
+        ICY_ERROR(new_data.objects().insert(ptr->index, std::move(copy_object)));
+    }
+
+    mbox_system_init init;
+    ICY_ERROR(copy(self.m_macros, new_data.macros()));
+    
+    if (object.type == mbox_type::party)
+    {
+        init.party = object.index;
+    }
+    else
+    {
+        init.party = mbox_index::create();
+        if (!init.party)
+            return last_system_error();
+
+        mbox_object party_object;
+        party_object.index = init.party;
+        party_object.type = mbox_type::party;
+
+        string ref_character_key;
+        ICY_ERROR(ref_character_key.append("Unknown_Character"_s));
+        ICY_ERROR(party_object.value.append("AddCharacter(Unknown_Character, 1)"_s.bytes()));
+        mbox_index character_index;
+
+        if (object.type == mbox_type::character ||
+            object.type == mbox_type::account ||
+            object.type == mbox_type::profile ||
+            object.type == mbox_type::group)
+        {
+            if (object.type != mbox_type::character)
+            {
+                mbox_object character_object;
+                character_index = character_object.index = mbox_index::create();
+                character_object.type = mbox_type::character;
+                character_object.parent = object.index;
+                if (!character_object.index)
+                    return last_system_error();
+                ICY_ERROR(new_data.objects().insert(character_object.index, std::move(character_object)));
+                
+                if (object.type == mbox_type::group)
+                {
+                    string ref_group_key;
+                    ICY_ERROR(ref_group_key.append("ThisGroup"_s));
+                    ICY_ERROR(party_object.refs.insert(std::move(ref_group_key), object.index));
+                    ICY_ERROR(party_object.value.append("\r\nUnknown_Character: JoinGroup(ThisGroup)"_s.bytes()));
+                }
+            }
+            else
+            {
+                character_index = object.index;
+            }
+        }
+        else if (object.type == mbox_type::action_script)
+        {
+            mbox_object character_object;
+            character_index = character_object.index = mbox_index::create();
+            character_object.type = mbox_type::character;
+            if (!character_object.index)
+                return last_system_error();
+
+            string ref_script_key;
+            ICY_ERROR(ref_script_key.append("ThisScript"_s));
+            ICY_ERROR(party_object.refs.insert(std::move(ref_script_key), object.index));
+            ICY_ERROR(party_object.value.append("\r\nUnknown_Character: RunScript(ThisScript)"_s.bytes()));
+            ICY_ERROR(new_data.objects().insert(character_object.index, std::move(character_object)));
+        }
+        ICY_ERROR(party_object.refs.insert(std::move(ref_character_key), character_index));
+        ICY_ERROR(new_data.objects().insert(party_object.index, std::move(party_object)));       
+    }
+
+    init.pfunc = [](void* ptr, string_view str)
+    {
+        auto widget = static_cast<xgui_text_edit*>(ptr);
+        /*if (!str.empty() && str.find("\r\n"_s) == str.begin())
+        {
+            string time_str;
+            ICY_ERROR(to_string(clock_type::now(), time_str));
+            string msg;
+            ICY_ERROR(msg.appendf("\r\n[%1]: %2"_s, string_view(time_str), string_view(str.begin() + 2, str.end())));
+            ICY_ERROR(widget->append(msg));
+        }
+        else*/
+        {
+            ICY_ERROR(widget->append(str));
+        }
+        return error_type();
+    };
+    init.pdata = &tab_debug;
+
+    shared_ptr<mbox_system> system;
+    if (const auto error = create_event_system(system, new_data, init))
+    {
+        if (error.source.hash != make_mbox_error(mbox_error::execute_lua).source.hash || !error.message)
+            return error;
+        string str;
+        ICY_ERROR(lua_error_to_string(error, str));
+        ICY_ERROR(append("%1"_s, string_view(str)));
     }
     return error_type();
 }

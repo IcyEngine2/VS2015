@@ -88,7 +88,7 @@ namespace mbox
         icy::map<icy::string, mbox_index> refs;
     }; 
 
-    struct mbox_action_target
+    /*struct mbox_action_target
     {
         enum
         {
@@ -124,7 +124,7 @@ namespace mbox
         on_key_down,        //  exec: any   |   args: "Mods+Key", LUA function, [target]
         on_key_up,          //  exec: any   |   args: "Mods+Key", LUA function, [target]
         on_event,           //  exec: any   |   args: event, [target]
-    };
+    };*/
     enum class mbox_reserved_name : uint32_t
     {
         add_character,
@@ -140,12 +140,13 @@ namespace mbox
         on_key_down,
         on_key_up,
         on_event,
-        others,
+        character,
+        print,
         _count,
     };
     extern const char* const mbox_keywords;
 
-    struct mbox_action
+   /* struct mbox_action
     {
         mbox_action_type type = mbox_action_type::none;
         mbox_action_target target;
@@ -154,7 +155,7 @@ namespace mbox
         icy::lua_variable callback;
         uint32_t slot = 0;
         mbox_action_target var_macro;
-    };
+    };*/
 
     using mbox_errors = icy::map<mbox_index, icy::array<icy::error_type>>;
     struct mbox_macro
@@ -194,7 +195,7 @@ namespace mbox
         icy::map<mbox_index, mbox_object> m_objects;
         icy::array<mbox_macro> m_macros;
     };
-    class mbox_function
+    /*class mbox_function
     {
     public:
         static icy::error_type make_input(const icy::string_view str, icy::input_message& msg) noexcept;
@@ -243,7 +244,7 @@ namespace mbox
         mutable icy::array<mbox_action>* m_actions = nullptr;
         icy::map<mbox_index, icy::string> m_names;
     };
-
+    */
     struct mbox_system_info
     {
         struct character_data
@@ -260,7 +261,16 @@ namespace mbox
 
     using mbox_print_func = icy::error_type(*)(void* pdata, const icy::string_view str);
 
-
+    struct mbox_system_init
+    {
+        mbox_print_func pfunc = nullptr;
+        void* pdata = nullptr;
+        mbox_index party;
+        uint32_t max_events = 0x1000;
+        uint32_t max_timers = 0x1000;
+        uint32_t max_actions = 0x1000;
+        uint32_t max_lua_op = 0x10000;
+    };
     class mbox_system : public icy::event_system
     {
     public:
@@ -338,8 +348,7 @@ namespace icy
         return icy::compare<size_t>(size_t(lhs), size_t(rhs));
     }
 
-    error_type create_event_system(shared_ptr<mbox::mbox_system>& system, const mbox::mbox_array& data,
-        const mbox::mbox_index& party, const mbox::mbox_print_func pfunc = nullptr, void* const pdata = nullptr) noexcept;
+    error_type create_event_system(shared_ptr<mbox::mbox_system>& system, const mbox::mbox_array& data, const mbox::mbox_system_init& init) noexcept;
     string_view to_string(const mbox::mbox_type type) noexcept;
     string_view to_string(const mbox::mbox_reserved_name name) noexcept;
 }

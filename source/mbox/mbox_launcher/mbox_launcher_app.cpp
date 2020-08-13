@@ -862,7 +862,12 @@ error_type mbox_launcher_app::launch_mbox() noexcept
         ICY_ERROR(m_debug.text.text(name));
     }
 
-    if (const auto error = create_event_system(m_data.system, m_library.data, m_config.default_party, m_debug.show ? m_debug.print : nullptr, &m_debug.text))
+    mbox::mbox_system_init init;
+    init.party = m_config.default_party;
+    init.pfunc = m_debug.show ? m_debug.print : nullptr;
+    init.pdata = &m_debug.text;
+
+    if (const auto error = create_event_system(m_data.system, m_library.data, init))
     {
         ICY_ERROR(show_error(error, "Create mbox system"_s));
     }

@@ -36,7 +36,8 @@ const char* const mbox::mbox_keywords =
 "OnKeyDown "
 "OnKeyUp "
 "OnEvent "
-"Others ";
+"Character "
+"Print ";
 
 static const auto mbox_dbi_macros = "macros"_s;
 static const auto mbox_dbi_object = "object"_s;

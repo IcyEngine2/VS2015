@@ -176,8 +176,7 @@ namespace icy
             pointer,
         };
         template<typename T> int compare_ex(std::integral_constant<compare_type, compare_type::container>, const T& lhs, const T& rhs) noexcept;
-        template<typename T> int compare_ex(std::integral_constant<compare_type, compare_type::pointer>, const T& lhs, const T& rhs) noexcept;
-
+        
         template<typename T, typename _ = void>
         struct is_container : std::false_type {};
 
@@ -207,13 +206,11 @@ namespace icy
         template<typename T>
         int compare_ex(std::integral_constant<compare_type, compare_type::container>, const T& lhs, const T& rhs) noexcept;
 
-        template<typename T>
-        inline int compare(std::integral_constant<compare_type, compare_type::pointer>, const T& lhs, const T& rhs) noexcept
+        inline int compare_ex(std::integral_constant<compare_type, compare_type::pointer>, void const* const& lhs, void const* const& rhs) noexcept
         {
             return int(rhs < lhs) - int(lhs < rhs);
         }
-        template<typename T>
-        inline int compare(std::integral_constant<compare_type, compare_type::pointer>, T& lhs, T& rhs) noexcept
+        inline int compare_ex(std::integral_constant<compare_type, compare_type::pointer>, void* const& lhs, void* const& rhs) noexcept
         {
             return int(rhs < lhs) - int(lhs < rhs);
         }
@@ -225,12 +222,6 @@ namespace icy
         return detail::compare_ex(std::integral_constant<detail::compare_type,
             detail::is_container<T>::value ? detail::compare_type::container :
             std::is_pointer<T>::value ? detail::compare_type::pointer : detail::compare_type::none>{}, lhs, rhs);
-    }
-
-    template<>
-    inline int compare<char const*>(char const* const& lhs, char const* const& rhs) noexcept
-    {
-        return int(rhs < lhs) - int(lhs < rhs);
     }
 
     template<typename T>

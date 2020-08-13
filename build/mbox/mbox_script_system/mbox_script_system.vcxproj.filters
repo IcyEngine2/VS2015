@@ -41,8 +41,5 @@
     <ClCompile Include="..\..\..\source\mbox\mbox_script_system\mbox_script_array.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\source\mbox\mbox_script_system\mbox_script_function.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
 </Project>
