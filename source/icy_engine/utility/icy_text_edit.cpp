@@ -12,7 +12,11 @@
 #include <icy_engine/utility/icy_text_edit.hpp>
 #include <icy_engine/core/icy_array.hpp>
 #include <icy_engine/core/icy_thread.hpp>
+#if _DEBUG
 #pragma comment(lib, "scintillad")
+#else
+#pragma comment(lib, "scintilla")
+#endif
 #pragma comment(lib, "user32")
 #pragma comment(lib, "gdi32")
 #pragma comment(lib, "ole32")
@@ -49,7 +53,7 @@ struct internal_message
 class text_edit_window_data
 {
 public:
-    text_edit_window_data(const text_edit_system_data* const system = nullptr, const int index = 0) noexcept :
+    text_edit_window_data(const text_edit_system_data* const system = nullptr, const uint32_t index = 0) noexcept :
         m_system(const_cast<text_edit_system_data*>(system)), m_index(index)
     {
 
@@ -75,7 +79,7 @@ private:
     error_type notify(const SCNotification& data) noexcept;
 private:
     text_edit_system_data* m_system = nullptr;
-    int m_index = 0;
+    uint32_t m_index = 0;
     HWND m_hwnd = nullptr;
     HWND m_edit = nullptr;
     SciFnDirect m_func = nullptr;
@@ -132,7 +136,7 @@ private:
     mutable mutex m_lock;
     wchar_t m_cname[64] = {};
     bool m_lib = false;
-    mutable map<uint32_t, text_edit_window_data> m_data;
+    mutable map<uint32_t, unique_ptr<text_edit_window_data>> m_data;
     mutable uint32_t m_next = 1;
     HWND m_hwnd = nullptr;
     shared_ptr<text_edit_thread_data> m_thread;
@@ -459,9 +463,9 @@ error_type text_edit_system_data::exec() noexcept
                         auto& wnd = it->value;
                         if (msg_data.type == internal_message_type::create)
                         {
-                            if (!wnd.hwnd())
+                            if (!wnd->hwnd())
                             {
-                                if (const auto error = wnd.initialize(self->m_cname))
+                                if (const auto error = wnd->initialize(self->m_cname))
                                 {
                                     self->m_data.erase(it);
                                     self->exit(error);
@@ -474,7 +478,7 @@ error_type text_edit_system_data::exec() noexcept
                         }
                         else if (msg_data.type == internal_message_type::show)
                         {
-                            const auto window_hwnd = wnd.hwnd();
+                            const auto window_hwnd = wnd->hwnd();
                             auto style = GetWindowLongW(window_hwnd, GWL_STYLE);
                             style &= ~WS_VISIBLE;
                             if (msg_data.show)
@@ -483,27 +487,27 @@ error_type text_edit_system_data::exec() noexcept
                         }
                         else if (msg_data.type == internal_message_type::text)
                         {
-                            if (const auto error = wnd.text(msg_data.text))
+                            if (const auto error = wnd->text(msg_data.text))
                                 self->exit(error);
                         }
                         else if (msg_data.type == internal_message_type::lexer)
                         {
-                            if (const auto error = wnd.lexer(msg_data.lexer))
+                            if (const auto error = wnd->lexer(msg_data.lexer))
                                 self->exit(error);
                         }
                         else if (msg_data.type == internal_message_type::save)
                         {
-                            if (const auto error = wnd.save())
+                            if (const auto error = wnd->save())
                                 self->exit(error);
                         }
                         else if (msg_data.type == internal_message_type::undo)
                         {
-                            if (const auto error = wnd.undo())
+                            if (const auto error = wnd->undo())
                                 self->exit(error);
                         }
                         else if (msg_data.type == internal_message_type::redo)
                         {
-                            if (const auto error = wnd.redo())
+                            if (const auto error = wnd->redo())
                                 self->exit(error);
                         }
                     }
@@ -520,16 +524,16 @@ error_type text_edit_system_data::exec() noexcept
                 }
 
                 auto& wnd = it->value;
-                if (!wnd.hwnd())
+                if (!wnd->hwnd())
                 {
-                    if (const auto error = wnd.initialize(self->m_cname))
+                    if (const auto error = wnd->initialize(self->m_cname))
                     {
                         self->m_data.erase(it);
                         self->exit(error);
                         return 0;
                     }
                 }
-                return reinterpret_cast<LRESULT>(wnd.hwnd());
+                return reinterpret_cast<LRESULT>(wnd->hwnd());
             }
         }
         return DefWindowProcW(hwnd, msg, wparam, lparam);
@@ -614,9 +618,13 @@ error_type text_edit_system_data::create(text_edit_window& window) const noexcep
     ICY_SCOPE_EXIT{ if (new_data) { allocator_type::destroy(new_data); allocator_type::deallocate(new_data); } };
     new_data->system = make_shared_from_this(this);
     {
+        auto ptr = make_unique<text_edit_window_data>(this, m_next);
+        if (!ptr)
+            return make_stdlib_error(std::errc::not_enough_memory);
+
         ICY_LOCK_GUARD(m_lock);
         new_data->index = m_next;
-        ICY_ERROR(m_data.insert(m_next, text_edit_window_data(this, m_next)));
+        ICY_ERROR(m_data.insert(m_next, std::move(ptr)));
         m_next++;
 
         const auto self = const_cast<text_edit_system_data*>(this);
@@ -699,7 +707,7 @@ HWND text_edit_system_data::hwnd(const uint32_t window) noexcept
 {
     ICY_LOCK_GUARD(m_lock);
     if (const auto ptr = m_data.try_find(window))
-        return ptr->hwnd();
+        return (*ptr)->hwnd();
     return nullptr;
 }
 HWND text_edit_system_data::wait(const uint32_t window) noexcept

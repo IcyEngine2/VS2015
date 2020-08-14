@@ -28,19 +28,7 @@ error_type mbox_launcher_app::debug_type::initialize(icy::gui_widget parent_wind
     print = [](void* ptr, const icy::string_view str)
     {
         auto widget = static_cast<xgui_text_edit*>(ptr);
-        if (str.find("\r\n"_s) == str.begin())
-        {
-            string time_str;
-            ICY_ERROR(to_string(clock_type::now(), time_str));
-            string msg;
-            ICY_ERROR(msg.appendf("\r\n[%1]: %2"_s, string_view(time_str), string_view(str.begin() + 2, str.end())));
-            ICY_ERROR(widget->append(msg));
-        }
-        else
-        {
-            ICY_ERROR(widget->append(str));
-        }        
-        return error_type();
+        return widget->append(str);
     };
     return error_type();
 }
@@ -457,6 +445,9 @@ error_type mbox_launcher_app::on_start() noexcept
         return show_error(error_type(), "No executable path has been configured for selected game"_s);
 
     ICY_ERROR(launch_mbox());
+    if (!m_data.system)
+        return error_type();
+
     ICY_ERROR(create_event_system(m_data.remote));    
     ICY_ERROR(m_data.remote->thread().launch());
     ICY_ERROR(m_data.remote->thread().rename("Remote window thread"_s));
@@ -473,6 +464,17 @@ error_type mbox_launcher_app::on_start() noexcept
     }
     std::sort(m_data.characters.begin(), m_data.characters.end(), [](const character_type& lhs, const character_type& rhs) { return lhs.slot < rhs.slot; });
 
+    if (path.find("World of Warcraft"_s) != path.end())
+    {
+        icy::file_name fname(path);
+        string addon_path;
+        ICY_ERROR(addon_path.appendf("%1Interface/Addons"_s, fname.directory));
+        if (file_info().initialize(addon_path) == error_type())
+        {
+            ICY_ERROR(addon_path.append("/"_s));
+            ICY_ERROR(info.update_wow_addon(m_library.data, addon_path));
+        }
+    }
     ICY_ERROR(m_menu.config.enable(false));
     ICY_ERROR(m_library.button.enable(false));
     ICY_ERROR(m_party.combo.enable(false));

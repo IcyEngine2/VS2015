@@ -389,19 +389,7 @@ error_type mbox_database::launch(const mbox_index& party) noexcept
     const auto print = [](void* ptr, const string_view str)
     {
         const auto text = static_cast<xgui_text_edit*>(ptr);
-        
-        /*if (!str.empty() && str.find("\r\n"_s) == str.begin())
-        {
-           string time_str;
-            ICY_ERROR(icy::to_string(clock_type::now(), time_str));
-            string msg;
-            ICY_ERROR(icy::to_string("\r\n[%1]: %2"_s, msg, string_view(time_str), string_view(str.begin() + 2, str.end())));
-            ICY_ERROR(text->append(msg));
-        }
-        else*/
-        {
-            ICY_ERROR(text->append(str));
-        }
+        ICY_ERROR(text->append(str));
         return error_type();
     };
 
@@ -424,6 +412,9 @@ error_type mbox_database::launch(const mbox_index& party) noexcept
     {
         if (error != make_mbox_error(mbox_error::execute_lua))
             return error;
+        string msg;
+        ICY_ERROR(lua_error_to_string(error, msg));
+        ICY_ERROR(main_widget.append(msg));
     }
 
     const mbox_system_info null_info;
@@ -468,9 +459,11 @@ error_type mbox_database::launch(const mbox_index& party) noexcept
     ICY_ERROR(create_event_system(loop, event_type::gui_update | event_type::gui_select));
     ICY_ERROR(window.show(true));
     
-    ICY_ERROR(system->thread().launch());
-    ICY_ERROR(system->thread().rename("MBox System"_s));
-
+    if (system)
+    {
+        ICY_ERROR(system->thread().launch());
+        ICY_ERROR(system->thread().rename("MBox System"_s));
+    }
     while (true)
     {
         event event;
@@ -1754,22 +1747,29 @@ error_type mbox_database::window_type::remodel() noexcept
     ICY_ERROR(lexer.initialize("lua"_s));
     ICY_ERROR(copy(string_view(lua_keywords, strlen(lua_keywords)), lexer.keywords[0]));
     
-    array<string_view> words;
-    ICY_ERROR(split(string_view(mbox_keywords, strlen(mbox_keywords)), words));
-    for (auto&& word : words)
-        ICY_ERROR(lexer.keywords[1].appendf(" %1"_s, word));
-
-    //ICY_ERROR(lexer.keywords[2].append("mbox"_s));
+    for (auto k = mbox_reserved_name::add_character; k < mbox_reserved_name::_count; k = mbox_reserved_name(uint32_t(k) + 1))
+    {
+        if (k == mbox_reserved_name::add_character ||
+            k == mbox_reserved_name::character ||
+            k == mbox_reserved_name::group)
+        {
+            ICY_ERROR(lexer.keywords[1].appendf(" %1"_s, to_string(k)));
+        }
+        else
+        {
+            ICY_ERROR(lexer.keywords[2].appendf(" %1"_s, to_string(k)));
+        }
+    }
     for (auto&& pair : object.refs)
-        ICY_ERROR(lexer.keywords[2].appendf(" %1"_s, string_view(pair.key)));
+        ICY_ERROR(lexer.keywords[3].appendf(" %1"_s, string_view(pair.key)));
 
     text_edit_style default_style;
     ICY_ERROR(copy("Consolas"_s, default_style.font));
     ICY_ERROR(lexer.styles.insert(SCE_LUA_DEFAULT, std::move(default_style)));
-    ICY_ERROR(lexer.add_style(SCE_LUA_WORD, colors::blue));
-    ICY_ERROR(lexer.add_style(SCE_LUA_WORD2, colors::dark_green));
-    ICY_ERROR(lexer.add_style(SCE_LUA_WORD3, colors::dark_red));
-    ICY_ERROR(lexer.add_style(SCE_LUA_NUMBER, colors::dark_violet));
+    ICY_ERROR(lexer.add_style(SCE_LUA_WORD, colors::blue));             //  lua keywords
+    ICY_ERROR(lexer.add_style(SCE_LUA_WORD2, colors::dark_green));      //  globals
+    ICY_ERROR(lexer.add_style(SCE_LUA_WORD3, colors::dark_red));        //  functions
+    ICY_ERROR(lexer.add_style(SCE_LUA_WORD4, colors::dark_violet));     //  references
     ICY_ERROR(tab_text_data.lexer(std::move(lexer)));
 
     return error_type();
@@ -2263,18 +2263,7 @@ error_type mbox_database::window_type::compile() noexcept
     init.pfunc = [](void* ptr, string_view str)
     {
         auto widget = static_cast<xgui_text_edit*>(ptr);
-        /*if (!str.empty() && str.find("\r\n"_s) == str.begin())
-        {
-            string time_str;
-            ICY_ERROR(to_string(clock_type::now(), time_str));
-            string msg;
-            ICY_ERROR(msg.appendf("\r\n[%1]: %2"_s, string_view(time_str), string_view(str.begin() + 2, str.end())));
-            ICY_ERROR(widget->append(msg));
-        }
-        else*/
-        {
-            ICY_ERROR(widget->append(str));
-        }
+        ICY_ERROR(widget->append(str));
         return error_type();
     };
     init.pdata = &tab_debug;

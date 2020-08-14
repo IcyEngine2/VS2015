@@ -32,6 +32,7 @@ namespace icy
     enum class lua_default_library
     {
         none,
+        base,
         math,
         string,
         utf8,
@@ -55,6 +56,7 @@ namespace icy
             return make_binary(var, const_array_view<uint8_t>(reinterpret_cast<const uint8_t*>(&value), sizeof(T)));
         }
         virtual error_type global(lua_variable& var) const LUA_NOEXCEPT = 0;
+        virtual error_type make_print(lua_variable& var, error_type(*pfunc)(array_view<lua_variable> pvars, const string_view str), const const_array_view<lua_variable> pvars) const LUA_NOEXCEPT = 0;
         virtual error_type make_binary(lua_variable& var, const const_array_view<uint8_t> bytes) const LUA_NOEXCEPT = 0;
         virtual error_type make_function(lua_variable& var, const lua_cfunction func, void* const data) const LUA_NOEXCEPT = 0;
         virtual error_type make_varfunction(lua_variable& var, const lua_cvarfunction func, const const_array_view<lua_variable> vars) const LUA_NOEXCEPT = 0;
@@ -88,6 +90,8 @@ namespace icy
         virtual error_type insert(const lua_variable& key, const lua_variable& val) LUA_NOEXCEPT = 0;
         virtual error_type map(array<lua_variable>& keys, array<lua_variable>& vals) LUA_NOEXCEPT = 0;
         virtual error_type operator()(const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT = 0;
+        virtual error_type meta(lua_variable& meta) LUA_NOEXCEPT = 0;
+        virtual string_view name() const noexcept = 0;
     };
     class lua_variable
     {
@@ -259,7 +263,7 @@ namespace icy
             else
                 return make_stdlib_error(std::errc::invalid_argument);
         }
-        error_type find(const lua_variable& key, lua_variable& val) LUA_NOEXCEPT
+        error_type find(const lua_variable& key, lua_variable& val) const LUA_NOEXCEPT
         {
             if (auto ptr = as_object())
                 return ptr->find(key, val);
@@ -273,12 +277,26 @@ namespace icy
             else
                 return make_stdlib_error(std::errc::invalid_argument);
         }
-        error_type map(array<lua_variable>& keys, array<lua_variable>& vals) LUA_NOEXCEPT
+        error_type map(array<lua_variable>& keys, array<lua_variable>& vals) const LUA_NOEXCEPT
         {
             if (auto ptr = as_object())
                 return ptr->map(keys, vals);
             else
                 return make_stdlib_error(std::errc::invalid_argument);
+        }
+        error_type meta(lua_variable& table) LUA_NOEXCEPT
+        {
+            if (auto ptr = as_object())
+                return ptr->meta(table);
+            else
+                return make_stdlib_error(std::errc::invalid_argument);
+        }
+        string_view name() const noexcept
+        {
+            if (auto ptr = as_object())
+                return ptr->name();
+            else
+                return string_view();
         }
     private:
         lua_type m_type = lua_type::none;

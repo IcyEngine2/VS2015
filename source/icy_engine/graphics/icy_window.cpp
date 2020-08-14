@@ -82,7 +82,7 @@ static decltype(&::SetWindowPos) win32_set_window_pos = nullptr;
 class window_data
 {
 public:
-    window_data(window_system_data* const system = nullptr, const int index = 0, const window_flags flags = window_flags::none) noexcept : 
+    window_data(window_system_data* const system = nullptr, const uint32_t index = 0, const window_flags flags = window_flags::none) noexcept : 
         m_system(system), m_index(index), m_flags(flags)
     {
 
@@ -104,7 +104,7 @@ private:
     LRESULT proc(uint32_t msg, WPARAM wparam, LPARAM lparam) noexcept;
 private:
     window_system_data* m_system = nullptr;
-    int m_index = 0;
+    uint32_t m_index = 0;
     window_flags m_flags;
     HWND__* m_hwnd = nullptr;
     uint32_t m_win32_flags = 0;
@@ -144,7 +144,7 @@ private:
     mutable mutex m_lock;
     library m_lib_user32 = library("user32");
     library m_lib_gdi32 = library("gdi32");
-    mutable map<uint32_t, window_data> m_data;
+    mutable map<uint32_t, unique_ptr<window_data>> m_data;
     mutable uint32_t m_next = 1;
     wchar_t m_cname[64] = {};
     shared_ptr<window_thread_data> m_thread;
@@ -648,9 +648,9 @@ error_type window_system_data::exec() noexcept
             auto& wnd = it->value;
             if (msg_data.type == internal_message_type::create)
             {
-                if (!wnd.handle())
+                if (!wnd->handle())
                 {
-                    if (const auto error = wnd.initialize(m_cname))
+                    if (const auto error = wnd->initialize(m_cname))
                     {
                         m_data.erase(it);
                         return error;
@@ -663,19 +663,19 @@ error_type window_system_data::exec() noexcept
             }
             else if (msg_data.type == internal_message_type::show)
             {
-                ICY_ERROR(wnd.show(msg_data.show));
+                ICY_ERROR(wnd->show(msg_data.show));
             }
             else if (msg_data.type == internal_message_type::rename)
             {
-                ICY_ERROR(wnd.rename(msg_data.name));
+                ICY_ERROR(wnd->rename(msg_data.name));
             }
             else if (msg_data.type == internal_message_type::restyle)
             {
-                ICY_ERROR(wnd.restyle(msg_data.style));
+                ICY_ERROR(wnd->restyle(msg_data.style));
             }
             else if (msg_data.type == internal_message_type::repaint)
             {
-                ICY_ERROR(wnd.repaint(std::move(msg_data.repaint)));
+                ICY_ERROR(wnd->repaint(std::move(msg_data.repaint)));
             }
         }
 
@@ -716,7 +716,7 @@ window_flags window_system_data::flags(const uint32_t index) const noexcept
     if (it == m_data.end())
         return window_flags::none;
 
-    return it->value.flags();
+    return it->value->flags();
 }
 HWND window_system_data::handle(const uint32_t index) const noexcept
 {
@@ -727,7 +727,7 @@ HWND window_system_data::handle(const uint32_t index) const noexcept
         if (it == m_data.end())
             return nullptr;
 
-        if (const auto hwnd = it->value.handle())
+        if (const auto hwnd = it->value->handle())
             return hwnd;
         else
             sleep(std::chrono::milliseconds(0));
@@ -744,10 +744,13 @@ error_type window_system_data::create(window& new_window, const window_flags fla
     new_data->system = make_shared_from_this(this);
     {
         const auto self = const_cast<window_system_data*>(this);
-
+        auto new_ptr = make_unique<window_data>(self, m_next);
+        if (!new_ptr)
+            return make_stdlib_error(std::errc::not_enough_memory);
+        
         ICY_LOCK_GUARD(m_lock);
         new_data->index = m_next;
-        ICY_ERROR(m_data.insert(m_next, window_data(self, m_next)));
+        ICY_ERROR(m_data.insert(m_next, std::move(new_ptr)));
         m_next++;
 
         internal_message msg;

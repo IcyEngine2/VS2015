@@ -22,23 +22,6 @@ public:
 };
 ICY_STATIC_NAMESPACE_END
 
-const char* const mbox::mbox_keywords =
-"AddCharacter "
-"JoinGroup "
-"LeaveGroup "
-"RunScript "
-"SendKeyDown "
-"SendKeyUp "
-"SendKeyPress "
-"SendMacro "
-"SendVarMacro "
-"PostEvent "
-"OnKeyDown "
-"OnKeyUp "
-"OnEvent "
-"Character "
-"Print ";
-
 static const auto mbox_dbi_macros = "macros"_s;
 static const auto mbox_dbi_object = "object"_s;
 static const auto mbox_dbi_string = "string"_s;
@@ -131,6 +114,7 @@ error_type mbox_array::enum_dependencies(const mbox_object& object, set<const mb
 
     ICY_ERROR(tree.insert(&object));
 
+    auto skip = true;
     if (object.type == mbox_type::character)
     {
         auto parent = &find(object.parent);
@@ -141,16 +125,26 @@ error_type mbox_array::enum_dependencies(const mbox_object& object, set<const mb
             parent = &find(parent->parent);
         }
     }
+    else if (object.type == mbox_type::party)
+    {
+        skip = false;
+    }
+
     for (auto&& pair : object.refs)
     {
         const auto& ref = find(pair.value);
-        if (ref
-            && ref.type != mbox_type::character
-            && ref.type != mbox_type::account
-            && ref.type != mbox_type::profile)
+        if (!ref)
+            continue;
+
+        if (ref.type == mbox_type::character
+            || ref.type == mbox_type::account
+            || ref.type == mbox_type::profile)
         {
-            ICY_ERROR(enum_dependencies(ref, tree));
+            if (skip)
+                continue;
         }
+
+        ICY_ERROR(enum_dependencies(ref, tree));
     }
     return error_type();
 }
@@ -267,21 +261,22 @@ error_type mbox_array::validate(const mbox_object& obj, array<error_type>& error
 
     if (!obj.refs.empty())
     {
-        array<string_view> mbox_words;
-        ICY_ERROR(split(string_view(mbox_keywords, strlen(mbox_keywords)), mbox_words));
-
         array<string_view> lua_words;
         ICY_ERROR(split(string_view(lua_keywords, strlen(lua_keywords)), lua_words));
-
 
         const auto valid_ref = [&](const string_view key, const mbox_index& index, bool& success)
         {
             if (key.empty() || index == obj.index)  // empty key or self reference
                 return error_type();
             
-            if (std::find(mbox_words.begin(), mbox_words.end(), key) != mbox_words.end() ||
-                std::find(lua_words.begin(), lua_words.end(), key) != lua_words.end())
+            if (std::find(lua_words.begin(), lua_words.end(), key) != lua_words.end())
                 return error_type();
+
+            for (auto k = mbox_reserved_name::add_character; k < mbox_reserved_name::_count; k = mbox_reserved_name(uint32_t(k) + 1))
+            {
+                if (to_string(k) == key)
+                    return error_type();
+            }
 
             for (auto it = key.begin(); it != key.end(); ++it)
             {
@@ -574,94 +569,121 @@ error_type mbox_array::save(const string_view path, const size_t max_size) const
     database_txn_write txn;
     ICY_ERROR(txn.initialize(db));
 
-    database_dbi dbi_string;
-    database_dbi dbi_object;
-    database_dbi dbi_macros;
-    ICY_ERROR(dbi_string.initialize_create_int_key(txn, mbox_dbi_string));
-    ICY_ERROR(dbi_object.initialize_create_any_key(txn, mbox_dbi_object));
-    ICY_ERROR(dbi_macros.initialize_create_any_key(txn, mbox_dbi_macros));
-
-    mbox_array old_data;
-    mbox_errors errors;
-    ICY_ERROR(old_data.initialize(txn, errors));
-
-    database_cursor_write cur_string;
-    database_cursor_write cur_object;
-    database_cursor_write cur_macros;
-    ICY_ERROR(cur_string.initialize(txn, dbi_string));
-    ICY_ERROR(cur_object.initialize(txn, dbi_object));
-    ICY_ERROR(cur_macros.initialize(txn, dbi_macros));
-
-    for (auto&& pair : old_data.m_objects)
     {
-        if (const auto ptr = m_objects.try_find(pair.key))
-            continue;
-        ICY_ERROR(cur_object.del_by_type(pair.key));
-    }
+        database_dbi dbi_string;
+        database_dbi dbi_object;
+        database_dbi dbi_macros;
+        ICY_ERROR(dbi_string.initialize_create_int_key(txn, mbox_dbi_string));
+        ICY_ERROR(dbi_object.initialize_create_any_key(txn, mbox_dbi_object));
+        ICY_ERROR(dbi_macros.initialize_create_any_key(txn, mbox_dbi_macros));
 
-    for (auto&& pair : m_objects)
-    {
-        const auto& new_object = pair.value;
+        mbox_array old_data;
+        mbox_errors errors;
+        ICY_ERROR(old_data.initialize(txn, errors));
 
-        mbox_object old_object;
-        if (const auto ptr = old_data.m_objects.try_find(pair.key))
-            ICY_ERROR(copy(*ptr, old_object));
+        database_cursor_write cur_string;
+        database_cursor_write cur_object;
+        database_cursor_write cur_macros;
+        ICY_ERROR(cur_string.initialize(txn, dbi_string));
+        ICY_ERROR(cur_object.initialize(txn, dbi_object));
+        ICY_ERROR(cur_macros.initialize(txn, dbi_macros));
 
-        mbox_dbase_object dbase_object;
-        dbase_object.parent = new_object.parent;
-        dbase_object.type = new_object.type;
-        dbase_object.name = hash64(new_object.name);
-
-        if (!new_object.value.empty())
-            dbase_object.value = hash64(string_view(new_object.value.data(), new_object.value.size()));
-
-        auto changed = false;
-        if (old_object.name != new_object.name)
+        for (auto&& pair : old_data.m_objects)
         {
-            ICY_ERROR(cur_string.put_str_by_type(dbase_object.name, database_oper_write::none, new_object.name));
-            changed = true;
+            if (const auto ptr = m_objects.try_find(pair.key))
+                continue;
+            ICY_ERROR(cur_object.del_by_type(pair.key));
         }
 
-        string json_str;
-        json json_object = json_type::object;
-        if (!new_object.refs.empty())
+        set<uint64_t> used_ref;
+        for (auto&& pair : m_objects)
         {
-            for (auto&& pair : new_object.refs)
+            const auto& new_object = pair.value;
+
+            mbox_object old_object;
+            if (const auto ptr = old_data.m_objects.try_find(pair.key))
+                ICY_ERROR(copy(*ptr, old_object));
+
+            mbox_dbase_object dbase_object;
+            dbase_object.parent = new_object.parent;
+            dbase_object.type = new_object.type;
+            dbase_object.name = hash64(new_object.name);
+            
+
+            if (!new_object.value.empty())
+                dbase_object.value = hash64(string_view(new_object.value.data(), new_object.value.size()));
+
+            auto changed = false;
+            if (old_object.name != new_object.name)
             {
-                string str_index;
-                ICY_ERROR(icy::to_string(pair.value, str_index));
-                ICY_ERROR(json_object.insert(pair.key, std::move(str_index)));
+                ICY_ERROR(cur_string.put_str_by_type(dbase_object.name, database_oper_write::none, new_object.name));
+                changed = true;
             }
-            ICY_ERROR(icy::to_string(json_object, json_str));
-            dbase_object.refs = hash64(json_str);
+
+            string json_str;
+            json json_object = json_type::object;
+            if (!new_object.refs.empty())
+            {
+                for (auto&& pair : new_object.refs)
+                {
+                    string str_index;
+                    ICY_ERROR(icy::to_string(pair.value, str_index));
+                    ICY_ERROR(json_object.insert(pair.key, std::move(str_index)));
+                }
+                ICY_ERROR(icy::to_string(json_object, json_str));
+                dbase_object.refs = hash64(json_str);
+            }
+            if (old_object.refs.keys() != new_object.refs.keys() || old_object.refs.vals() != new_object.refs.vals())
+            {
+                ICY_ERROR(cur_string.put_str_by_type(dbase_object.refs, database_oper_write::none, json_str));
+                changed = true;
+            }
+            if (old_object.value != new_object.value)
+            {
+                ICY_ERROR(cur_string.put_str_by_type(dbase_object.value, database_oper_write::none,
+                    string_view(new_object.value.data(), new_object.value.size())));
+                changed = true;
+            }
+            if (old_object.parent != new_object.parent)
+            {
+                changed = true;
+            }
+            if (changed)
+            {
+                ICY_ERROR(cur_object.put_type_by_type(new_object.index,
+                    old_object.index ? database_oper_write::none : database_oper_write::unique, dbase_object));
+            }
+            ICY_ERROR(used_ref.try_insert(dbase_object.name));
+            ICY_ERROR(used_ref.try_insert(dbase_object.value));
+            ICY_ERROR(used_ref.try_insert(dbase_object.refs));
         }
-        if (old_object.refs.keys() != new_object.refs.keys() || old_object.refs.vals() != new_object.refs.vals())
+
+        set<uint64_t> unused_ref;
+        auto oper = database_oper_read::first;
+   
+        while (true)
         {
-            ICY_ERROR(cur_string.put_str_by_type(dbase_object.refs, database_oper_write::none, json_str));
-            changed = true;
+            auto str_key = 0ui64;
+            string_view str_val;
+            auto error = cur_string.get_str_by_type(str_key, str_val, oper);
+            if (error == database_error_not_found)
+                break;
+            else if (error == database_error_invalid_size)
+                return make_mbox_error(mbox_error::database_corrupted);
+            ICY_ERROR(error);
+            oper = database_oper_read::next;
+            if (used_ref.try_find(str_key))
+                continue;
+            ICY_ERROR(unused_ref.insert(str_key));
         }
-        if (old_object.value != new_object.value)
-        {
-            ICY_ERROR(cur_string.put_str_by_type(dbase_object.value, database_oper_write::none, 
-                string_view(new_object.value.data(), new_object.value.size())));
-            changed = true;
-        }
-        if (old_object.parent != new_object.parent)
-        {
-            changed = true;
-        }
-        if (changed)
-        {
-            ICY_ERROR(cur_object.put_type_by_type(new_object.index,
-                old_object.index ? database_oper_write::none : database_oper_write::unique, dbase_object));
-        }
+        for (auto&& key : unused_ref)
+            ICY_ERROR(cur_string.del_by_type(key));
+        
+        array_view<uint8_t> val;
+        ICY_ERROR(cur_macros.put_var_by_var(mbox_dbi_macros_key_general.ubytes(),
+            m_macros.size() * sizeof(mbox_macro), database_oper_write::none, val));
+        ::memcpy(val.data(), m_macros.data(), val.size());
     }
-
-    array_view<uint8_t> val;
-    ICY_ERROR(cur_macros.put_var_by_var(mbox_dbi_macros_key_general.ubytes(),
-        m_macros.size() * sizeof(mbox_macro), database_oper_write::none, val));
-    ::memcpy(val.data(), m_macros.data(), val.size());
-
     ICY_ERROR(txn.commit());
     return error_type();
 }
@@ -764,18 +786,40 @@ const error_source icy::error_source_mbox = register_error_source("mbox"_s, mbox
 
 string_view icy::to_string(const mbox::mbox_reserved_name name) noexcept
 {
-    auto str = string_view(mbox_keywords, strlen(mbox_keywords));
-    for (auto k = 0u; k <= uint32_t(name); ++k)
+    switch (name)
     {
-        auto it = str.find(" "_s);
-        
-        if (k == uint32_t(name))
-            return string_view(str.begin(), it);
-
-        if (it == str.end())
-            break;
-        
-        str = string_view(it + 1, str.end());
+    case mbox_reserved_name::add_character:
+        return "AddCharacter"_s;
+    case mbox_reserved_name::join_group:
+        return "JoinGroup"_s;
+    case mbox_reserved_name::leave_group:
+        return "LeaveGroup"_s;
+    case mbox_reserved_name::run_script:
+        return "RunScript"_s;
+    case mbox_reserved_name::send_key_press:
+        return "SendKeyPress"_s;
+    case mbox_reserved_name::send_key_release:
+        return "SendKeyRelease"_s;
+    case mbox_reserved_name::send_key_click:
+        return "SendKeyClick"_s;
+    case mbox_reserved_name::send_macro:
+        return "SendMacro"_s;
+    case mbox_reserved_name::send_var_macro:
+        return "SendVarMacro"_s;
+    case mbox_reserved_name::post_event:
+        return "PostEvent"_s;
+    case mbox_reserved_name::on_key_press:
+        return "OnKeyPress"_s;
+    case mbox_reserved_name::on_key_release:
+        return "OnKeyRelease"_s;
+    case mbox_reserved_name::on_event:
+        return "OnEvent"_s;
+    case mbox_reserved_name::on_timer:
+        return "OnTimer"_s;
+    case mbox_reserved_name::character:
+        return "Character"_s;
+    case mbox_reserved_name::group:
+        return "Group"_s;
     }
     return ""_s;
 }

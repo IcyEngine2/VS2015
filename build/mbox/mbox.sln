@@ -43,6 +43,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "mbox_launcher", "mbox_launc
 		{2529D4F5-C845-4B41-B789-4FCFFF27B9BA} = {2529D4F5-C845-4B41-B789-4FCFFF27B9BA}
 	EndProjectSection
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "scintilla", "..\libs\scintilla\scintilla.vcxproj", "{5AC992B9-A9BD-4CC6-94C3-19CE176D5B06}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -89,6 +91,10 @@ Global
 		{96C5344F-FCE5-4864-8421-0BCCC8DA2AEA}.Debug|x64.Build.0 = Debug|x64
 		{96C5344F-FCE5-4864-8421-0BCCC8DA2AEA}.Release|x64.ActiveCfg = Release|x64
 		{96C5344F-FCE5-4864-8421-0BCCC8DA2AEA}.Release|x64.Build.0 = Release|x64
+		{5AC992B9-A9BD-4CC6-94C3-19CE176D5B06}.Debug|x64.ActiveCfg = Debug|x64
+		{5AC992B9-A9BD-4CC6-94C3-19CE176D5B06}.Debug|x64.Build.0 = Debug|x64
+		{5AC992B9-A9BD-4CC6-94C3-19CE176D5B06}.Release|x64.ActiveCfg = Release|x64
+		{5AC992B9-A9BD-4CC6-94C3-19CE176D5B06}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

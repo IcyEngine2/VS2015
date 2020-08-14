@@ -87,75 +87,26 @@ namespace mbox
         icy::array<char> value;
         icy::map<icy::string, mbox_index> refs;
     }; 
-
-    /*struct mbox_action_target
-    {
-        enum
-        {
-            type_none,
-            type_party,
-            type_character,
-            type_group,
-        } type = type_none;
-        enum
-        {
-            others      =   -1,
-            everyone    =   +0,
-        } mod = everyone;
-        uint32_t slot = 0;
-        mbox_index index;
-    };
-    enum class mbox_action_type : uint32_t
-    {
-        //  [target] is number: party slot | or guid: character or group | or binary blob: mbox.Everyone(Group) or mbox.Others(Group) 
-        //  [target] is not optional if caller source is party (initialize only)
-        //  if [target] is nil, than assume target==caller source (character)
-        none,
-        add_character,      //  exec: party |   args: unique character, unique slot (index)
-        join_group,         //  exec: any   |   args: group, [target]
-        leave_group,        //  exec: any   |   args: group, [target]
-        run_script,         //  exec: any   |   args: script, [target]
-        send_key_down,      //  exec: script|   args: "Mods+Key", [target] 
-        send_key_up,        //  exec: script|   args: "Mods+Key", [target] 
-        send_key_press,     //  exec: script|   args: "Mods+Key", [target] 
-        send_macro,         //  exec: script|   args: macro, [target]
-        send_var_macro,     //  exec: script|   args: var_macro, character/slot, [target]
-        post_event,         //  exec: any   |   args: event, [target]
-        on_key_down,        //  exec: any   |   args: "Mods+Key", LUA function, [target]
-        on_key_up,          //  exec: any   |   args: "Mods+Key", LUA function, [target]
-        on_event,           //  exec: any   |   args: event, [target]
-    };*/
     enum class mbox_reserved_name : uint32_t
     {
         add_character,
         join_group,
         leave_group,
         run_script,
-        send_key_down,
-        send_key_up,
         send_key_press,
+        send_key_release,
+        send_key_click,
         send_macro,
         send_var_macro,
         post_event,
-        on_key_down,
-        on_key_up,
+        on_key_press,
+        on_key_release,
         on_event,
+        on_timer,
         character,
-        print,
+        group,
         _count,
     };
-    extern const char* const mbox_keywords;
-
-   /* struct mbox_action
-    {
-        mbox_action_type type = mbox_action_type::none;
-        mbox_action_target target;
-        mbox_index ref;
-        icy::input_message input;
-        icy::lua_variable callback;
-        uint32_t slot = 0;
-        mbox_action_target var_macro;
-    };*/
 
     using mbox_errors = icy::map<mbox_index, icy::array<icy::error_type>>;
     struct mbox_macro
@@ -195,56 +146,7 @@ namespace mbox
         icy::map<mbox_index, mbox_object> m_objects;
         icy::array<mbox_macro> m_macros;
     };
-    /*class mbox_function
-    {
-    public:
-        static icy::error_type make_input(const icy::string_view str, icy::input_message& msg) noexcept;
-        mbox_function() noexcept = default;
-        mbox_function(const icy::map<mbox_index, mbox_object>& objects, const mbox_object& object, const icy::lua_system& lua) noexcept :
-            m_objects(&objects), m_object(&object), m_lua(&lua)
-        {
-
-        }
-        mbox_function(mbox_function&& rhs) noexcept : m_objects(rhs.m_objects), m_object(rhs.m_object), m_lua(rhs.m_lua),
-            m_func(std::move(rhs.m_func)), m_actions(std::move(rhs.m_actions))
-        {
-
-        }
-        ICY_DEFAULT_MOVE_ASSIGN(mbox_function);
-        icy::error_type initialize() LUA_NOEXCEPT;
-        icy::error_type operator()(icy::array<mbox_action>& actions) const LUA_NOEXCEPT;
-        explicit operator bool() const noexcept
-        {
-            return m_func.type() != icy::lua_type::none;
-        }
-        const icy::map<mbox_index, mbox_object>* objects() const noexcept 
-        {
-            return m_objects;
-        }
-        const mbox_object& object() const noexcept
-        {
-            return *m_object;
-        }
-        icy::string_view name(const mbox_index index) const noexcept
-        {
-            if (const auto ptr = m_names.try_find(index))
-                return *ptr;
-            return icy::string_view();
-        }
-        icy::error_type to_string(const icy::string_view default_character, const mbox_action& action, icy::string& str) const noexcept;
-    private:
-        icy::error_type make_target(const icy::lua_variable& input, mbox_action_target& target) const LUA_NOEXCEPT;
-        icy::error_type make_index(const icy::lua_variable& input, const icy::const_array_view<mbox_type> types, mbox_index& index) const LUA_NOEXCEPT;
-        icy::error_type make_input(const icy::lua_variable& input, icy::input_message& msg) const LUA_NOEXCEPT;
-    private:
-        const icy::map<mbox_index, mbox_object>* const m_objects = nullptr;
-        const mbox_object* const m_object = nullptr;
-        const icy::lua_system* const m_lua = nullptr;
-        icy::lua_variable m_func;
-        mutable icy::array<mbox_action>* m_actions = nullptr;
-        icy::map<mbox_index, icy::string> m_names;
-    };
-    */
+    
     struct mbox_system_info
     {
         struct character_data

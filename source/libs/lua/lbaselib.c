@@ -20,27 +20,27 @@
 #include "lauxlib.h"
 #include "lualib.h"
 
-
+/*
 static int luaB_print (lua_State *L) {
-  int n = lua_gettop(L);  /* number of arguments */
+  int n = lua_gettop(L);  /* number of arguments * /
   int i;
   lua_getglobal(L, "tostring");
   for (i=1; i<=n; i++) {
     const char *s;
     size_t l;
-    lua_pushvalue(L, -1);  /* function to be called */
-    lua_pushvalue(L, i);   /* value to print */
+    lua_pushvalue(L, -1);  /* function to be called * /
+    lua_pushvalue(L, i);   /* value to print * /
     lua_call(L, 1, 1);
-    s = lua_tolstring(L, -1, &l);  /* get result */
+    s = lua_tolstring(L, -1, &l);  /* get result * /
     if (s == NULL)
       return luaL_error(L, "'tostring' must return a string to 'print'");
     if (i>1) lua_writestring("\t", 1);
     lua_writestring(s, l);
-    lua_pop(L, 1);  /* pop result */
+    lua_pop(L, 1);  /* pop result * /
   }
   lua_writeline();
   return 0;
-}
+}*/
 
 
 #define SPACECHARS	" \f\n\r\t\v"
@@ -453,11 +453,9 @@ static int luaB_tostring (lua_State *L) {
 static const luaL_Reg base_funcs[] = {
   {"assert", luaB_assert},
   {"collectgarbage", luaB_collectgarbage},
-  {"dofile", luaB_dofile},
   {"error", luaB_error},
   {"getmetatable", luaB_getmetatable},
   {"ipairs", luaB_ipairs},
-  {"loadfile", luaB_loadfile},
   {"load", luaB_load},
 #if defined(LUA_COMPAT_LOADSTRING)
   {"loadstring", luaB_load},
@@ -465,7 +463,6 @@ static const luaL_Reg base_funcs[] = {
   {"next", luaB_next},
   {"pairs", luaB_pairs},
   {"pcall", luaB_pcall},
-  {"print", luaB_print},
   {"rawequal", luaB_rawequal},
   {"rawlen", luaB_rawlen},
   {"rawget", luaB_rawget},
@@ -477,22 +474,20 @@ static const luaL_Reg base_funcs[] = {
   {"type", luaB_type},
   {"xpcall", luaB_xpcall},
   /* placeholders */
-  {"_G", NULL},
-  {"_VERSION", NULL},
   {NULL, NULL}
 };
 
 
 LUAMOD_API int luaopen_base (lua_State *L) {
   /* open lib into global table */
-  lua_pushglobaltable(L);
-  luaL_setfuncs(L, base_funcs, 0);
-  /* set global _G */
+  luaL_newlib(L, base_funcs);
+  /*luaL_setfuncs(L, base_funcs, 0);
+  / set global _G 
   lua_pushvalue(L, -1);
   lua_setfield(L, -2, "_G");
-  /* set global _VERSION */
+  / set global _VERSION 
   lua_pushliteral(L, LUA_VERSION);
-  lua_setfield(L, -2, "_VERSION");
+  lua_setfield(L, -2, "_VERSION");*/
   return 1;
 }
 

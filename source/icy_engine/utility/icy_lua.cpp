@@ -71,12 +71,15 @@ public:
     error_type insert(const lua_object_data& object, const lua_variable& key, const lua_variable& val) const LUA_NOEXCEPT;
     error_type map(const lua_object_data& object, array<lua_variable>& keys, array<lua_variable>& vals) const LUA_NOEXCEPT;
     error_type exec(const lua_object_data& object, const const_array_view<lua_variable> input, array<lua_variable>* output) const LUA_NOEXCEPT;
+    error_type meta(const lua_object_data& object, lua_variable& table) const LUA_NOEXCEPT;
+    error_type debug(lua_object_data& object) const noexcept;
     void push(const lua_variable& var) const LUA_NOEXCEPT;
     void push(const lua_object_data& object) const LUA_NOEXCEPT;
     error_type to_value(const int index, lua_variable& var) const LUA_NOEXCEPT;
 private:   
     error_type parse(lua_variable& func, const string_view parse, const char* const name) const LUA_NOEXCEPT override;
     error_type global(lua_variable& var) const LUA_NOEXCEPT override;
+    error_type make_print(lua_variable& var, error_type(*pfunc)(array_view<lua_variable> pvars, const string_view str), const const_array_view<lua_variable> pvars) const LUA_NOEXCEPT override;
     error_type make_table(lua_variable& var) const LUA_NOEXCEPT override;
     error_type make_string(lua_variable& var, const string_view str) const LUA_NOEXCEPT override;
     error_type make_binary(lua_variable& var, const const_array_view<uint8_t> bytes) const LUA_NOEXCEPT override;
@@ -164,6 +167,21 @@ private:
             return ptr->exec(*this, input, output);
         return error_type();
     }
+    error_type meta(lua_variable& table) LUA_NOEXCEPT override
+    {
+        if (auto ptr = shared_ptr<lua_system_data>(m_system))
+            return ptr->meta(*this, table);
+        return make_stdlib_error(std::errc::invalid_argument);
+    }
+    string_view name() const noexcept override
+    {
+        if (m_type == lua_object_init::type::unknown)
+        {
+            const auto system = shared_ptr<lua_system_data>(m_system);
+            system->debug(*const_cast<lua_object_data*>(this));
+        }
+        return m_name;
+    }
 private:
     uint32_t m_ref = 1;
     const weak_ptr<lua_system_data> m_system;
@@ -172,6 +190,7 @@ private:
     void* m_data = nullptr;
     lua_cvarfunction m_varfunc = nullptr;
     array<lua_variable> m_vardata;
+    string m_name;
 };
 
 error_type lua_system_data::initialize() noexcept
@@ -333,6 +352,48 @@ error_type lua_system_data::exec(const lua_object_data& object, const const_arra
         return error_type();
     };
     return safe_call(proc);
+}
+error_type lua_system_data::meta(const lua_object_data& object, lua_variable& table) const LUA_NOEXCEPT
+{
+    const auto proc = [&]
+    {
+        const auto lua = m_state;
+        if (!lua_checkstack(lua, 3))
+            return make_stdlib_error(std::errc::not_enough_memory);
+
+        push(object);
+        ICY_SCOPE_EXIT{ lua_pop(lua, 1); };
+
+        if (lua_getmetatable(lua, -1))
+        {
+            lua_object_init init(lua_object_init::type::unknown);
+            init.index = -1;
+            ICY_SCOPE_EXIT{ lua_pop(lua, 1); };
+            return create(table, std::move(init));
+        }
+        return make_stdlib_error(std::errc::invalid_argument);
+    };
+    return safe_call(proc);
+}
+error_type lua_system_data::debug(lua_object_data& object) const noexcept
+{
+    const auto proc = [&]
+    {
+        if (object.m_name.empty())
+        {
+            const auto lua = m_state;
+            push(object);
+            lua_Debug debug;
+            if (lua_getinfo(lua, ">nS", &debug) && debug.linedefined != -1 && debug.source)
+            {
+                object.m_name = string(m_realloc, m_user);
+                return object.m_name.appendf("%1..%2 %3"_s, debug.linedefined,
+                    debug.lastlinedefined, string_view(debug.source, strlen(debug.source)));                
+            }
+        }
+        return error_type();
+    };
+    return safe_call(proc, true);
 }
 void lua_system_data::push(const lua_variable& var) const LUA_NOEXCEPT
 {
@@ -521,6 +582,49 @@ error_type lua_system_data::global(lua_variable& var) const LUA_NOEXCEPT
         return create(var, std::move(init));
     };
     return safe_call(proc);
+}
+error_type lua_system_data::make_print(lua_variable& var, error_type(*pfunc)(array_view<lua_variable> pvars, const string_view str), const_array_view<lua_variable> pvars) const LUA_NOEXCEPT
+{
+    if (!pfunc)
+        return make_stdlib_error(std::errc::invalid_argument);
+
+    array<lua_variable> vec_vars;
+    ICY_ERROR(vec_vars.push_back(this));
+    ICY_ERROR(vec_vars.push_back(pfunc));
+    for (auto&& var : pvars)
+    {
+        lua_variable copy_var;
+        ICY_ERROR(copy(var, copy_var));
+        ICY_ERROR(vec_vars.push_back(std::move(copy_var)));
+    }
+    const auto proc = [](array_view<lua_variable> vars, const const_array_view<lua_variable> input, array<lua_variable>* output)
+    {
+        const auto system = static_cast<const lua_system_data*>(vars[0].as_pointer());
+        const auto pfunc = reinterpret_cast<error_type(*)(array_view<lua_variable>, const string_view)>(vars[1].as_pointer());
+        const auto pvars = array_view<lua_variable>(vars.data() + 2, vars.size() - 2);
+        const auto func = [&]
+        {
+            const auto lua = system->m_state;
+            string str(system->realloc(), system->user());
+            for (auto&& var : input)
+            {
+                system->push(var);
+                auto len = 0_z;
+                auto ptr = luaL_tolstring(lua, -1, &len);
+                if (!ptr)
+                    return system->post_error("'tostring' must return a string to 'print'"_s);
+                
+                error_type error;
+                if (&var != input.data()) error = str.append(", "_s);
+                if (!error) error = error = str.append(string_view(ptr, len));
+                lua_pop(lua, 2);
+                ICY_ERROR(error);
+            }
+            return pfunc(pvars, str);
+        };
+        return system->safe_call(func);        
+    };
+    return make_varfunction(var, proc, vec_vars);
 }
 error_type lua_system_data::make_table(lua_variable& var) const LUA_NOEXCEPT
 {
@@ -717,6 +821,11 @@ error_type lua_system_data::create(lua_variable& var, lua_object_init&& init) co
         lua_pushlightuserdata(lua, new_object); //  new_object;
         switch (init.lib)
         {
+        case lua_default_library::base:
+        {
+            luaopen_base(lua);
+            break;
+        }
         case lua_default_library::threads:
         {
             luaopen_coroutine(lua);
@@ -806,7 +915,7 @@ error_type lua_system_data::create(lua_variable& var, lua_object_init&& init) co
                     if (error)
                     {
                         string error_str(ptr->realloc(), ptr->user());
-                        to_string(error, error_str);
+                        icy::to_string(error, error_str);
                         if (!error_str.empty() && lua_checkstack(lua, 1))
                             lua_pushlstring(lua, error_str.bytes().data(), error_str.bytes().size());
                         return lua_error(lua);
@@ -875,7 +984,7 @@ error_type lua_system_data::print(int index, error_type(*func)(void* pdata, cons
     case LUA_TNUMBER:
     {
         string str(m_realloc, m_user);
-        ICY_ERROR(to_string(lua_tonumberx(lua, index, nullptr), str));
+        ICY_ERROR(icy::to_string(lua_tonumberx(lua, index, nullptr), str));
         ICY_ERROR(func(pdata, str));
         break;
     }
@@ -890,7 +999,7 @@ error_type lua_system_data::print(int index, error_type(*func)(void* pdata, cons
     case LUA_TUSERDATA:
     {
         string str(m_realloc, m_user);
-        ICY_ERROR(to_string(reinterpret_cast<uint64_t>(lua_touserdata(lua, index)), 16, str));
+        ICY_ERROR(to_string_unsigned(reinterpret_cast<uint64_t>(lua_touserdata(lua, index)), 16, str));
         ICY_ERROR(func(pdata, str));
         break;
     }
@@ -899,7 +1008,7 @@ error_type lua_system_data::print(int index, error_type(*func)(void* pdata, cons
         if (const auto ptr = lua_tocfunction(lua, index))
         {
             string str(m_realloc, m_user);
-            ICY_ERROR(to_string(reinterpret_cast<uint64_t>(ptr), 16, str));
+            ICY_ERROR(to_string_unsigned(reinterpret_cast<uint64_t>(ptr), 16, str));
             ICY_ERROR(str.insert(str.begin(), "__c function "_s));
             ICY_ERROR(func(pdata, str));
         }
@@ -1001,7 +1110,7 @@ error_type lua_system_data::safe_call(error_type(*func)(const void* const ptr), 
 
         string error_str(system->m_realloc, system->m_user);
         if (error)
-            to_string(error, error_str);
+            icy::to_string(error, error_str);
 
         if (!error_str.empty() && !lua_checkstack(lua, 1))
         {
