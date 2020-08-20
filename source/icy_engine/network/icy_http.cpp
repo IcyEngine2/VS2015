@@ -536,13 +536,13 @@ http_content_type icy::is_http_content_type(const string_view filename) noexcept
 	}
 	const auto ext = last_dot ? string_view(last_dot, ptr + len) : string_view();
 
-	if (ext.find(".js") != ext.end())
+	if (ext.find(".js"_s) != ext.end())
 		return http_content_type::application_javascript;
-	else if (ext.find(".map") != ext.end())
+	else if (ext.find(".map"_s) != ext.end())
 		return http_content_type::application_javascript;
-	else if (ext.find(".css") != ext.end())
+	else if (ext.find(".css"_s) != ext.end())
 		return http_content_type::text_css;
-	else if (ext.find(".dll") != ext.end())
+	else if (ext.find(".dll"_s) != ext.end())
 		return http_content_type::application_dll;
 
 	switch (hash(ext))
@@ -617,13 +617,13 @@ error_type icy::to_string(const http_request& request, string& str) noexcept
 	{
 		for (auto&& url : request.url_sub)
 		{
-			ICY_ERROR(str.append("/"));
+			ICY_ERROR(str.append("/"_s));
 			ICY_ERROR(str.append(url));
 		}
 	}
 	if (!request.url_args.empty())
 	{
-		ICY_ERROR(str.append("?"));
+		ICY_ERROR(str.append("?"_s));
 		auto first_time = true;
 		for (auto&& arg : request.url_args)
 		{

@@ -414,6 +414,7 @@ error_type mbox_database::launch(const mbox_index& party) noexcept
             return error;
         string msg;
         ICY_ERROR(lua_error_to_string(error, msg));
+        ICY_ERROR(msg.insert(msg.begin(), "\r\n"_s));
         ICY_ERROR(main_widget.append(msg));
     }
 
@@ -1267,16 +1268,16 @@ error_type mbox_database::macros() noexcept
                 m_macros.clear();
                 const key hint_keys[] =
                 {
-                    key::num_0,
-                    key::num_1,
-                    key::num_2,
-                    key::num_3,
-                    key::num_4,
-                    key::num_5,
-                    key::num_6,
-                    key::num_7,
-                    key::num_8,
-                    key::num_9,
+                    key::_1,
+                    key::_2,
+                    key::_3,
+                    key::_4,
+                    key::_5,
+                    key::_6,
+                    key::_7,
+                    key::_8,
+                    key::_9,
+                    key::_0,
                     key::F1,
                     key::F2,
                     key::F3,
@@ -1289,18 +1290,19 @@ error_type mbox_database::macros() noexcept
                     key::F11,
                     key::F12,
                 };
-                const key_mod hint_mods[] = { key_mod::lctrl, key_mod::rctrl, key_mod::lalt, key_mod::ralt, key_mod::lshift, key_mod::rshift };
+                const key_mod hint_mods[] = { key_mod::lctrl, key_mod::rctrl, 
+                    key_mod::ralt, key_mod::lshift, key_mod::rshift };
 
                 for (auto&& key : hint_keys)
                 {
                     for (auto&& mod : hint_mods)
                     {
-                        if (key >= key::num_0 && key <= key::num_9 && (mod == key_mod::lshift || mod == key_mod::rshift))
-                            continue;
+                        //if (key >= key::num_0 && key <= key::num_9 && (mod == key_mod::lshift || mod == key_mod::rshift))
+                        //    continue;
                         mbox_macro macro;
                         macro.key = key;
                         macro.mods = mod;
-                        ICY_ERROR(m_macros.push_back(macro));
+                        ICY_ERROR(new_macros.push_back(macro));
                     }
                 }
                 ICY_ERROR(button_save.enable(true));
@@ -1426,16 +1428,17 @@ error_type mbox_database::edit_macro(array<mbox_macro>& new_macros, const size_t
     {
         const key hint_keys[] =
         {
-            key::num_0,
-            key::num_1,
-            key::num_2,
-            key::num_3,
-            key::num_4,
-            key::num_5,
-            key::num_6,
-            key::num_7,
-            key::num_8,
-            key::num_9,
+            key::_0,
+            key::_1,
+            key::_2,
+            key::_3,
+            key::_4,
+            key::_5,
+            key::_6,
+            key::_7,
+            key::_8,
+            key::_9,
+            key::_0,
             key::F1,
             key::F2,
             key::F3,
@@ -1448,7 +1451,7 @@ error_type mbox_database::edit_macro(array<mbox_macro>& new_macros, const size_t
             key::F11,
             key::F12,
         };
-        const key_mod hint_mods[] = { key_mod::lctrl, key_mod::rctrl, key_mod::lalt, key_mod::ralt, key_mod::lshift, key_mod::rshift };
+        const key_mod hint_mods[] = { key_mod::lctrl, key_mod::rctrl, key_mod::ralt, key_mod::lshift, key_mod::rshift };
         const auto error = [&]
         {
             for (auto&& mod : hint_mods)

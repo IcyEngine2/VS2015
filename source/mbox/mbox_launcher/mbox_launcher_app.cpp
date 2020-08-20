@@ -11,6 +11,52 @@ static const auto hook_lib =
     "mbox_dll";
 #endif
 
+error_type mbox_launcher_app::character_thread::run() noexcept
+{
+    array<mbox::mbox_event_send_input> next_msg_priority;
+    mbox::mbox_event_send_input next_msg;
+    while (true)
+    {
+        event event;
+        ICY_ERROR(queue->pop(event));
+        while (event)
+        {
+            if (event->type == event_type::global_quit)
+                return error_type();
+            if (event->type == event_type::system_internal)
+            {
+                auto& event_data = event->data<mbox::mbox_event_send_input>();
+                if (event_data.priority)
+                {
+                    ICY_ERROR(next_msg_priority.push_back(std::move(event_data)));
+                }
+                else
+                    next_msg = std::move(event_data);
+            }
+            ICY_ERROR(queue->pop(event, duration_type()));
+        }
+        std::reverse(next_msg_priority.begin(), next_msg_priority.end());
+        std::stable_sort(next_msg_priority.begin(), next_msg_priority.end(),
+            [](const mbox::mbox_event_send_input& lhs, const mbox::mbox_event_send_input& rhs) { return lhs.priority < rhs.priority; });
+        for (auto it = next_msg_priority.rbegin(); it != next_msg_priority.rend(); ++it)
+        {
+            for (auto&& msg : it->messages)
+            {
+                if (msg.type != input_type::none)
+                    window.send(msg, std::chrono::milliseconds(500));
+            }
+        }
+        next_msg_priority.clear();
+
+        for (auto&& msg : next_msg.messages)
+        {
+            if (msg.type != input_type::none)
+                window.send(msg, std::chrono::milliseconds(500));
+        }
+        next_msg = {};
+    }
+    return error_type();
+}
 error_type mbox_launcher_app::menu_type::initialize(const gui_widget window) noexcept
 {
     ICY_ERROR(menu.initialize(gui_widget_type::menubar, window));
@@ -266,7 +312,7 @@ error_type mbox_launcher_app::run() noexcept
                     for (auto&& focus : m_config.focus)
                     {
                         if (focus.input.type == input->type && focus.input.key == input->key 
-                            && key_mod_and(key_mod(focus.input.mods), key_mod(input->mods)))
+                            && key_mod_and(key_mod(input->mods), key_mod(focus.input.mods)))
                         {
                             set_focus = focus.index;
                             break;
@@ -307,23 +353,20 @@ error_type mbox_launcher_app::run() noexcept
             }
             else if (event->type == mbox::mbox_event_type_send_input)
             {
-                const auto& event_data = event->data<mbox::mbox_event_send_input>();
                 if (m_data.paused)
                     return error_type();
+
+                auto& event_data = const_cast<mbox::mbox_event_send_input&>(event->data<mbox::mbox_event_send_input>());
 
                 for (auto&& chr : m_data.characters)
                 {
                     if (chr.index != event_data.character)
                         continue;
 
-                    if (!chr.window)
+                    if (!chr.thread)
                         break;
 
-                    for (auto&& msg : event_data.messages)
-                    {
-                        if (msg.type != input_type::none)
-                            ICY_ERROR(chr.window.send(msg, std::chrono::seconds(1)));
-                    }
+                    ICY_ERROR(chr.thread->post(std::move(event_data)));
                     break;
                 }
             }
@@ -544,7 +587,8 @@ error_type mbox_launcher_app::on_context(character_type& chr) noexcept
 
     if (action == action_clear)
     {
-        chr.window = remote_window();
+        chr.thread->wait();
+        chr.window = remote_window();        
         ICY_ERROR(reset_data());
     }
     else if (action == action_find || action == action_launch)
@@ -556,7 +600,7 @@ error_type mbox_launcher_app::on_context(character_type& chr) noexcept
         }
         else if (action == action_launch)
         {
-            ICY_ERROR(launch_window(path, new_window));
+            ICY_ERROR(launch_window(chr, path, new_window));
         }
         if (new_window)
         {
@@ -762,8 +806,94 @@ error_type mbox_launcher_app::find_window(const string_view path, remote_window&
     }
     return error_type();
 }
-error_type mbox_launcher_app::launch_window(const string_view path, remote_window& new_window) const noexcept
+error_type mbox_launcher_app::launch_window(const character_type& chr, const string_view path, remote_window& new_window) const noexcept
 {
+    auto account = &m_library.data.find(chr.index);
+    while (*account)
+    {
+        if (account->type == mbox::mbox_type::account)
+            break;
+        account = &m_library.data.find(account->parent);
+    }
+    string_view account_name;
+    if (account->type == mbox::mbox_type::account)
+        account_name = account->name;
+    
+    if (path.find("World of Warcraft"_s) != path.end() && !account_name.empty())
+    {
+        string account_lower;
+        ICY_ERROR(to_lower(account_name, account_lower));
+       
+        icy::file_name fname(path);
+        string wtf_path;
+        ICY_ERROR(wtf_path.appendf("%1WTF/Config.wtf"_s, fname.directory));
+        if (file_info().initialize(wtf_path) == error_type())
+        {
+            array<char> bytes;
+            {
+                file input_wtf;
+                ICY_ERROR(input_wtf.open(wtf_path, file_access::read, file_open::open_existing, file_share::read | file_share::write));
+                auto count = input_wtf.info().size;
+                ICY_ERROR(bytes.resize(count));
+                ICY_ERROR(input_wtf.read(bytes.data(), count));
+                input_wtf.close();
+            }
+            file output_wtf;
+            string tmp;
+            ICY_ERROR(file::tmpname(tmp));
+            ICY_ERROR(output_wtf.open(tmp, file_access::write, file_open::create_always, file_share::none));
+
+            array<string_view> lines;
+            ICY_ERROR(split(string_view(bytes.data(), bytes.size()), lines, "\r\n"_s));
+            for (auto&& line : lines)
+            {
+                const auto key = "SET accountList \""_s;
+
+                if (line.find(key) == line.begin())
+                {
+                    auto it = line.begin();
+                    it += std::distance(key.begin(), key.end());
+                    auto beg = it;
+                    while (it != line.end())
+                    {
+                        char32_t symbol = 0;
+                        ICY_ERROR(it.to_char(symbol));
+                        if (symbol == '\"')
+                            break;
+                        ++it;
+                    }
+                    line = string_view(beg, it);
+                    array<string_view> account_list;
+                    ICY_ERROR(split(line, account_list, "|"_s));
+
+                    string new_line;
+                    ICY_ERROR(new_line.append(key));
+
+                    for (auto&& acc : account_list)
+                    {
+                        if (acc.find("!"_s) == acc.begin())
+                            acc = string_view(acc.begin() + 1, acc.end());
+                        string acc_lower;
+                        ICY_ERROR(to_lower(acc, acc_lower));
+                        if (acc_lower == account_lower)
+                            ICY_ERROR(new_line.append("!"_s));
+                        ICY_ERROR(new_line.append(acc));
+                        ICY_ERROR(new_line.append("|"_s));
+                    }
+                    ICY_ERROR(new_line.append("\""_s));
+                    ICY_ERROR(output_wtf.append(new_line.bytes().data(), new_line.bytes().size()));
+                }
+                else
+                {
+                    ICY_ERROR(output_wtf.append(line.bytes().data(), line.bytes().size()));        
+                }
+                ICY_ERROR(output_wtf.append("\r\n", 2));
+            }
+            output_wtf.close();
+            ICY_ERROR(file::replace(tmp, wtf_path));
+        }
+    }
+
     auto process = 0u;
     auto thread = 0u;
     ICY_ERROR(process_launch(path, process, thread));
@@ -851,6 +981,13 @@ error_type mbox_launcher_app::hook(character_type& chr) noexcept
     
     ICY_ERROR(config.save(chr.window.process()));
     ICY_ERROR(chr.window.hook(hook_lib, GetMessageHook));
+    ICY_ERROR(chr.window.rename(chr.name));
+
+    ICY_ERROR(make_shared(chr.thread));
+    ICY_ERROR(create_event_system(chr.thread->queue, event_type::system_internal));
+    chr.thread->window = chr.window;
+    ICY_ERROR(chr.thread->launch());
+
     return error_type();
 }
 
@@ -919,6 +1056,122 @@ error_type mbox::mbox_dll_config::save(const uint32_t process) noexcept
     file output;
     ICY_ERROR(output.open(path, file_access::write, file_open::create_always, file_share::read));
     ICY_ERROR(output.append(str.bytes().data(), str.bytes().size()));
+
+    return error_type();
+}
+
+
+error_type mbox::mbox_system_info::update_wow_addon(const mbox::mbox_array& data, const string_view path) const noexcept
+{
+    string dir;
+    ICY_ERROR(dir.appendf("%1%2"_s, path, "IcyMBox"_s));
+    ICY_ERROR(icy::make_directory(dir));
+
+    {
+
+        string toc_str;
+        if (path.find("classic"_s) != path.end())
+        {
+            ICY_ERROR(toc_str.append("## Interface: 11305"_s));
+        }
+        else
+        {
+            ICY_ERROR(toc_str.append("## Interface: 80300"_s));
+        }
+        ICY_ERROR(toc_str.append("\r\n## Title: IcyMBox Macros"_s));
+        ICY_ERROR(toc_str.append("\r\n## Notes: Autogenerated macros for current party"_s));
+        ICY_ERROR(toc_str.append("\r\n## Author: Icybull"_s));
+        ICY_ERROR(toc_str.append("\r\n## Version: 1.0.0"_s));
+        ICY_ERROR(toc_str.append("\r\n\r\nmain.lua"_s));
+
+        string file_toc_name;
+        ICY_ERROR(file_toc_name.appendf("%1/IcyMBox.toc"_s, string_view(dir)));
+        file file_toc;
+        ICY_ERROR(file_toc.open(file_toc_name, file_access::write, file_open::create_always, file_share::none));
+        ICY_ERROR(file_toc.append(toc_str.bytes().data(), toc_str.bytes().size()));
+    }
+
+
+    auto max_macro = 0_z;
+    for (auto&& chr : characters)
+        max_macro = std::max(max_macro, chr.macros.size());
+
+    if (max_macro > data.macros().size())
+        return make_mbox_error(mbox_error::not_enough_macros);
+
+    string lua_str;
+
+    ICY_ERROR(lua_str.append("local onLoadTable = {}"_s));
+
+    ICY_ERROR(lua_str.append("local frame = CreateFrame(\"Frame\", \"MBox_Frame\", UIParent)"_s));
+    for (auto k = 0u; k < max_macro; ++k)
+    {
+        string input_str;
+        ICY_ERROR(copy(to_string(data.macros()[k].key), input_str));
+        ICY_ERROR(input_str.replace("Num "_s, "NUMPAD"_s));
+        if (data.macros()[k].mods & key_mod::lalt)
+        {
+            ICY_ERROR(input_str.insert(input_str.begin(), "LALT-"_s));
+        }
+        else if (data.macros()[k].mods & key_mod::ralt)
+        {
+            ICY_ERROR(input_str.insert(input_str.begin(), "RALT-"_s));
+        }
+
+        if (data.macros()[k].mods & key_mod::lctrl)
+        {
+            ICY_ERROR(input_str.insert(input_str.begin(), "LCTRL-"_s));
+        }
+        else if (data.macros()[k].mods & key_mod::rctrl)
+        {
+            ICY_ERROR(input_str.insert(input_str.begin(), "RCTRL-"_s));
+        }
+
+        if (data.macros()[k].mods & key_mod::lshift)
+        {
+            ICY_ERROR(input_str.insert(input_str.begin(), "LSHIFT-"_s));
+        }
+        else if (data.macros()[k].mods & key_mod::rshift)
+        {
+            ICY_ERROR(input_str.insert(input_str.begin(), "RSHIFT-"_s));
+        }
+
+
+        ICY_ERROR(lua_str.appendf("\r\n\r\nlocal btn_%1 = CreateFrame(\"Button\", \"MBox_Button_%1\", UIParent, \"SecureActionButtonTemplate\")"_s, k + 1));
+        ICY_ERROR(lua_str.appendf("\r\n  btn_%1:SetAttribute(\"type\", \"macro\")"_s, k + 1));
+        ICY_ERROR(lua_str.appendf("\r\n  SetOverrideBindingClick(frame, false, \"%1\", btn_%2:GetName())"_s, string_view(input_str), k + 1));
+    }
+    for (auto&& chr : characters)
+    {
+        ICY_ERROR(lua_str.appendf("\r\n\r\nlocal function OnLoad_%1()"_s, chr.slot));
+        auto row = 0u;
+        for (auto&& macro : chr.macros)
+        {
+            string macro_str;
+            ICY_ERROR(copy(macro, macro_str));
+            json json = std::move(macro_str);
+            ICY_ERROR(to_string(json, macro_str));
+            ICY_ERROR(lua_str.appendf("\r\n  btn_%1:SetAttribute(\"macrotext\", %2)"_s, ++row, string_view(macro_str)));
+        }
+        ICY_ERROR(lua_str.appendf("\r\nprint(\"%1 loaded\")"_s, string_view(chr.name)));
+        ICY_ERROR(lua_str.append("\r\nend"_s));
+        ICY_ERROR(lua_str.appendf("\r\nonLoadTable[\"%1\"]=OnLoad_%2"_s, string_view(data.find(chr.index).name), chr.slot));
+    }
+
+    ICY_ERROR(lua_str.append("\r\n\r\nlocal name = UnitName(\"player\")"_s));
+    ICY_ERROR(lua_str.append("\r\nlocal server = GetRealmName()"_s));
+    ICY_ERROR(lua_str.append("\r\nlocal func = onLoadTable[name .. \"-\" .. server]"_s));
+    ICY_ERROR(lua_str.append("\r\nif (func == nil) then func = onLoadTable[name] end"_s));
+    ICY_ERROR(lua_str.append("\r\nif (func == nil) then"_s));
+    ICY_ERROR(lua_str.append("\r\n  print(\"MBox has not found character by name '\" .. name .. \"' or by server - name '\" .. name .. \"-\" .. server .. \"'\")"_s));
+    ICY_ERROR(lua_str.append("\r\nelse func() end"_s));
+
+
+    string file_lua_name;
+    ICY_ERROR(file_lua_name.appendf("%1/main.lua"_s, string_view(dir)));
+    file file_lua;
+    ICY_ERROR(file_lua.open(file_lua_name, file_access::write, file_open::create_always, file_share::none));
+    ICY_ERROR(file_lua.append(lua_str.bytes().data(), lua_str.bytes().size()));
 
     return error_type();
 }

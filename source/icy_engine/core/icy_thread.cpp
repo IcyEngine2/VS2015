@@ -8,7 +8,7 @@
 #include <process.h>
 #include <thread>
 #if _MSC_VER >= 1900
-#include <xthreads.h>
+#include <thr/xthreads.h>
 #else
 #include <thr/threads.h>
 #endif

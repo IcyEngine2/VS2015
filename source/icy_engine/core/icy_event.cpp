@@ -136,6 +136,8 @@ error_type event_queue::pop(event& event, const duration_type timeout) noexcept
         event = event_system::pop();
         if (event)
             break;
+        if (timeout == duration_type())
+            break;
         ICY_ERROR(m_cvar.wait(m_mutex, timeout));
     }
     return error_type();

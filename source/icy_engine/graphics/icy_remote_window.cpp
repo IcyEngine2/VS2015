@@ -22,6 +22,8 @@ static decltype(&::UnhookWindowsHookEx) win32_unhook_windows_hook_ex;
 static decltype(&::SendMessageTimeoutW) win32_send_message_timeout;
 static decltype(&::SendMessageW) win32_send_message;
 static decltype(&::SetForegroundWindow) win32_set_foreground_window;
+static decltype(&::GetForegroundWindow) win32_get_foreground_window;
+static decltype(&keybd_event) win32_keybd_event;
 
 class remote_window_system_data;
 class remote_window_thread : public icy::thread
@@ -143,6 +145,8 @@ error_type remote_window::enumerate(array<remote_window>& vec, const uint32_t th
     ICY_WIN32_FUNC(win32_send_message_timeout, SendMessageTimeoutW);
     ICY_WIN32_FUNC(win32_send_message, SendMessageW);
     ICY_WIN32_FUNC(win32_set_foreground_window, SetForegroundWindow);
+    ICY_WIN32_FUNC(win32_get_foreground_window, GetForegroundWindow);
+    ICY_WIN32_FUNC(win32_keybd_event, keybd_event);
 
     library dwm = "dwmapi"_lib;
     if (dwm.initialize() == error_type())
@@ -376,8 +380,24 @@ error_type remote_window::activate() noexcept
 {
     if (data && data->handle)
     {
-        if (!win32_set_foreground_window(data->handle))
-            return last_system_error();
+        const auto hwnd = win32_get_foreground_window();
+        if (hwnd != data->handle)
+        {
+            win32_keybd_event(0, 0, 0, 0);
+            if (!win32_set_foreground_window(data->handle))
+                return last_system_error();
+
+            /*const auto thread = GetWindowThreadProcessId(hwnd, nullptr);
+            AttachThreadInput(thread, data->thread, true);
+            BringWindowToTop(data->handle);
+            ShowWindow(data->handle, SW_SHOW);
+            AttachThreadInput(thread, data->thread, false);*/
+        }
+
+        
+
+        //if (!)
+         //   return last_system_error();
         return error_type();
     }
     return make_stdlib_error(std::errc::invalid_argument);

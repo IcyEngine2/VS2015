@@ -944,6 +944,8 @@ namespace icy
                         break;
                     return error;
                 }
+                if (!event)
+                    break;
 
                 if (event->type == event_type::global_quit)
                     break;

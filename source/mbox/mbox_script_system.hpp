@@ -51,6 +51,7 @@ namespace mbox
     struct mbox_event_send_input
     {
         mbox_index character;
+        double priority = 0;
         icy::array<icy::input_message> messages;
     };
 

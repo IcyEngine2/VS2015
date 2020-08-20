@@ -52,6 +52,22 @@ private:
         icy::xgui_widget combo;
         icy::xgui_widget button;
     };
+    struct character_type;
+    struct character_thread : public icy::thread
+    {
+        icy::error_type run() noexcept override;
+        void cancel() noexcept override
+        {
+            if (queue)
+                queue->post(nullptr, icy::event_type::global_quit);
+        }
+        icy::error_type post(mbox::mbox_event_send_input&& msg) noexcept
+        {
+            return queue->post(nullptr, icy::event_type::system_internal, std::move(msg));
+        }
+        icy::remote_window window;
+        icy::shared_ptr<icy::event_queue> queue;
+    };
     struct character_type
     {
         mbox::mbox_index index;
@@ -59,6 +75,7 @@ private:
         icy::string name;
         icy::remote_window window;
         icy::array<icy::input_message> events;
+        icy::shared_ptr<character_thread> thread;
     };
     struct data_type
     {
@@ -81,7 +98,7 @@ private:
     icy::error_type on_context(character_type& chr) noexcept;
     icy::error_type on_select_party(const mbox::mbox_index select) noexcept;
     icy::error_type find_window(const icy::string_view path, icy::remote_window& new_window) const noexcept;
-    icy::error_type launch_window(const icy::string_view path, icy::remote_window& new_window) const noexcept;
+    icy::error_type launch_window(const character_type& chr, const icy::string_view path, icy::remote_window& new_window) const noexcept;
     icy::error_type hook(character_type& chr) noexcept;
     icy::error_type launch_mbox() noexcept;
 private:
