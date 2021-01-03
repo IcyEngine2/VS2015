@@ -355,6 +355,15 @@ namespace icy
                 }
                 // now m_head looks at new node (and that new node stores previous head)
             }
+            bool push_if_empty(void* ptr) noexcept
+            {
+                auto head = m_head.load(std::memory_order_acquire);
+                if (head == nullptr && m_head.compare_exchange_strong(head, new (ptr) node{ nullptr }, std::memory_order_acq_rel))
+                {
+                    return true;
+                }
+                return false;
+            }
             void* pop() noexcept
             {
                 if (m_tail)

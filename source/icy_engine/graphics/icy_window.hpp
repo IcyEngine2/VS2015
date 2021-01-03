@@ -15,8 +15,8 @@ namespace icy
 
 struct window_repaint_type
 {
-    icy::weak_ptr<icy::render_factory> render;
-    icy::map<float, icy::array<render_command_2d>> map;
+    //icy::weak_ptr<icy::render_factory> render;
+    //icy::map<float, icy::array<render_command_2d>> map;
     ID2D1Device* device = nullptr;
 };
 

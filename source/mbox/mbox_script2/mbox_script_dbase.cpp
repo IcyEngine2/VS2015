@@ -300,6 +300,7 @@ error_type mbox_database::exec(const text_edit_event& event) noexcept
             {
                 break;
             }
+            ICY_ERROR(vec.resize(strnlen(vec.data(), vec.size())));
             dst = std::move(vec);
             pair.value.can_redo = event.can_redo;
             pair.value.can_undo = event.can_undo;

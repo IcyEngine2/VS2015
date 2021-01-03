@@ -1,5 +1,4 @@
 #include "icy_adapter.hpp"
-#include <icy_engine/graphics/icy_render.hpp>
 #include <dxgi1_6.h>
 #include <dxgidebug.h>
 #include <d3d12.h>
@@ -144,7 +143,7 @@ string_view adapter::name() const noexcept
 }
 void* adapter::handle() const noexcept
 {
-    return data ? &data->adapter() : nullptr;
+    return data ? static_cast<IDXGIAdapter*>(data->adapter()) : nullptr;
 }
 error_type adapter::msaa(render_flags& quality) const noexcept
 {

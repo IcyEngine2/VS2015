@@ -29,12 +29,49 @@ namespace icy
         uint32_t thread() const noexcept;
         uint32_t process() const noexcept;
         HWND__* handle() const noexcept;
+        error_type size(window_size& size) const noexcept;
         error_type screen(const icy::render_d2d_rectangle_u& rect, matrix_view<color>& colors) const noexcept;
         error_type hook(const char* const lib, const char* func) noexcept;
         error_type send(const input_message& msg, const duration_type timeout = max_timeout) noexcept;
         //error_type post(const uint32_t type, const size_t wparam, const ptrdiff_t lparam) noexcept;
         error_type rename(const string_view name) noexcept;
         error_type activate() noexcept;
+    private:
+        class data_type;
+        data_type* data = nullptr;
+    };
+    class named_write_pipe
+    {
+    public:
+        named_write_pipe() noexcept = default;
+        named_write_pipe(named_write_pipe&& rhs) noexcept : data(rhs.data)
+        {
+
+        }
+        ICY_DEFAULT_MOVE_ASSIGN(named_write_pipe);
+        ~named_write_pipe() noexcept;
+        error_type create(const string_view name) noexcept;
+        error_type wait(const duration_type timeout = max_timeout) noexcept;
+        template<typename T>
+        error_type write(const T& msg) noexcept
+        {
+            static_assert(std::is_default_constructible<T>::value, "INVALID TYPE");
+            return write(const_array_view<uint8_t>(reinterpret_cast<const uint8_t*>(&msg), sizeof(msg)));
+        }
+        error_type write(const const_array_view<uint8_t> msg) noexcept;
+    private:
+        class data_type;
+        data_type* data = nullptr;
+    };
+    class named_read_pipe
+    {
+    public:
+        named_read_pipe() noexcept = default;
+        named_read_pipe(const named_read_pipe& rhs) noexcept = delete;
+        ~named_read_pipe() noexcept;
+        error_type create(const string_view name, const size_t buffer) noexcept;
+    protected:
+        virtual void read(const error_type error, const const_array_view<uint8_t> msg) noexcept = 0;
     private:
         class data_type;
         data_type* data = nullptr;

@@ -309,9 +309,9 @@ error_type timer::initialize(const size_t count, const duration_type timeout) no
     {
         if (const auto ptr = static_cast<timer*>(this_timer))
         {
-            event::post(nullptr, event_type::global_timer, pair{ ptr, ptr->m_count });
-            --ptr->m_count;
-            if (ptr->m_count != 0)
+            const auto count = ptr->m_count.fetch_sub(1, std::memory_order_acq_rel);
+            event::post(nullptr, event_type::global_timer, pair{ ptr, count });
+            if (count > 1)
             {
                 union
                 {

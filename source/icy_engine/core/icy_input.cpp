@@ -13,11 +13,17 @@ struct key_pair
 };
 const key_pair key_array[109] =
 {
-    { "Left Mouse Button"_s, key::mouse_left },
+   /*{ "Left Mouse Button"_s, key::mouse_left },
     { "Right Mouse Button"_s, key::mouse_right},
     { "Middle Mouse Button"_s, key::mouse_mid },
     { "X1 Mouse Button"_s, key::mouse_x1 },
-    { "X2 Mouse Button"_s, key::mouse_x2 },
+    { "X2 Mouse Button"_s, key::mouse_x2 },*/
+
+    { "LMB"_s, key::mouse_left },
+    { "RMB"_s, key::mouse_right},
+    { "MMB"_s, key::mouse_mid },
+    { "X1MB"_s, key::mouse_x1 },
+    { "X2MB"_s, key::mouse_x2 },
 
     { "Backspace"_s, key::back },
     { "Tab"_s, key::tab },

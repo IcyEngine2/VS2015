@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\..\source\libs\portaudio\common\pa_allocation.h" />
+    <ClInclude Include="..\..\..\source\libs\portaudio\common\pa_converters.h" />
+    <ClInclude Include="..\..\..\source\libs\portaudio\common\pa_cpuload.h" />
+    <ClInclude Include="..\..\..\source\libs\portaudio\common\pa_debugprint.h" />
+    <ClInclude Include="..\..\..\source\libs\portaudio\common\pa_dither.h" />
+    <ClInclude Include="..\..\..\source\libs\portaudio\common\pa_endianness.h" />
+    <ClInclude Include="..\..\..\source\libs\portaudio\common\pa_gitrevision.h" />
+    <ClInclude Include="..\..\..\source\libs\portaudio\common\pa_hostapi.h" />
+    <ClInclude Include="..\..\..\source\libs\portaudio\common\pa_memorybarrier.h" />
+    <ClInclude Include="..\..\..\source\libs\portaudio\common\pa_process.h" />
+    <ClInclude Include="..\..\..\source\libs\portaudio\common\pa_ringbuffer.h" />
+    <ClInclude Include="..\..\..\source\libs\portaudio\common\pa_stream.h" />
+    <ClInclude Include="..\..\..\source\libs\portaudio\common\pa_trace.h" />
+    <ClInclude Include="..\..\..\source\libs\portaudio\common\pa_types.h" />
+    <ClInclude Include="..\..\..\source\libs\portaudio\common\pa_util.h" />
+    <ClInclude Include="..\..\..\source\libs\portaudio\include\pa_asio.h" />
+    <ClInclude Include="..\..\..\source\libs\portaudio\include\pa_jack.h" />
+    <ClInclude Include="..\..\..\source\libs\portaudio\include\pa_win_ds.h" />
+    <ClInclude Include="..\..\..\source\libs\portaudio\include\pa_win_wasapi.h" />
+    <ClInclude Include="..\..\..\source\libs\portaudio\include\pa_win_waveformat.h" />
+    <ClInclude Include="..\..\..\source\libs\portaudio\include\pa_win_wdmks.h" />
+    <ClInclude Include="..\..\..\source\libs\portaudio\include\pa_win_wmme.h" />
+    <ClInclude Include="..\..\..\source\libs\portaudio\include\portaudio.h" />
+    <ClInclude Include="..\..\..\source\libs\portaudio\win\pa_win_coinitialize.h" />
+    <ClInclude Include="..\..\..\source\libs\portaudio\win\pa_win_wdmks_utils.h" />
+    <ClInclude Include="..\..\..\source\libs\portaudio\win\pa_x86_plain_converters.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\..\source\libs\portaudio\common\pa_allocation.c" />
+    <ClCompile Include="..\..\..\source\libs\portaudio\common\pa_converters.c" />
+    <ClCompile Include="..\..\..\source\libs\portaudio\common\pa_cpuload.c" />
+    <ClCompile Include="..\..\..\source\libs\portaudio\common\pa_debugprint.c" />
+    <ClCompile Include="..\..\..\source\libs\portaudio\common\pa_dither.c" />
+    <ClCompile Include="..\..\..\source\libs\portaudio\common\pa_front.c" />
+    <ClCompile Include="..\..\..\source\libs\portaudio\common\pa_process.c" />
+    <ClCompile Include="..\..\..\source\libs\portaudio\common\pa_ringbuffer.c" />
+    <ClCompile Include="..\..\..\source\libs\portaudio\common\pa_stream.c" />
+    <ClCompile Include="..\..\..\source\libs\portaudio\common\pa_trace.c" />
+    <ClCompile Include="..\..\..\source\libs\portaudio\pa_win_wasapi.c" />
+    <ClCompile Include="..\..\..\source\libs\portaudio\pa_win_wmme.c" />
+    <ClCompile Include="..\..\..\source\libs\portaudio\win\pa_win_coinitialize.c" />
+    <ClCompile Include="..\..\..\source\libs\portaudio\win\pa_win_hostapis.c" />
+    <ClCompile Include="..\..\..\source\libs\portaudio\win\pa_win_util.c" />
+    <ClCompile Include="..\..\..\source\libs\portaudio\win\pa_win_waveformat.c" />
+    <ClCompile Include="..\..\..\source\libs\portaudio\win\pa_win_wdmks_utils.c" />
+    <ClCompile Include="..\..\..\source\libs\portaudio\win\pa_x86_plain_converters.c" />
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>16.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{6f44c6db-20ea-4272-baa3-cea0e77653eb}</ProjectGuid>
+    <RootNamespace>portaudio</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\..\vsprops\LibDebugL2.props" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\..\vsprops\LibReleaseL2.props" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>true</LinkIncremental>
+    <IncludePath>$(ProjectDir)..\..\..\include\;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <IncludePath>$(ProjectDir)..\..\..\include\;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>false</SDLCheck>
+      <PreprocessorDefinitions>PA_USE_WASAPI;_CRT_SECURE_NO_WARNINGS;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>false</SDLCheck>
+      <PreprocessorDefinitions>PA_USE_WASAPI;_CRT_SECURE_NO_WARNINGS;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

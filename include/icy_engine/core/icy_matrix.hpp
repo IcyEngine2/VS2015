@@ -83,6 +83,10 @@ namespace icy
         {
             return m_rows * m_cols;
         }
+        size_type pitch() const noexcept
+        {
+            return m_pitch;
+        }
         const_view_type view(const size_type row, const size_type col, const size_type rows, const size_type cols) const noexcept
         {
             return{ m_data, m_pitch, rows, cols, row, col };

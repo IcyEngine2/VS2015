@@ -57,6 +57,24 @@ namespace icy
             m_size.fetch_add(1, std::memory_order_release);
             return error_type();
         }
+        error_type push_if_empty(const T& value, bool& success) noexcept
+        {
+            auto new_pair = allocator_type::allocate<pair_type>(1);
+            if (!new_pair)
+                return make_stdlib_error(std::errc::not_enough_memory);
+            allocator_type::construct(&new_pair->value, value);
+            if (m_queue.push_if_empty(new_pair))
+            {
+                success = true;
+                m_size.fetch_add(1, std::memory_order_release);
+            }
+            else
+            {
+                allocator_type::destroy(&new_pair->value);
+                allocator_type::deallocate(new_pair);
+            }
+            return error_type();
+        }
         bool pop(T& value) noexcept
         {
             auto pair = static_cast<pair_type*>(m_queue.pop());

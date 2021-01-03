@@ -1,6 +1,4 @@
 #include "icy_window.hpp"
-#include "icy_render_commands.hpp"
-#include "icy_render_svg.hpp"
 #include <icy_engine/core/icy_string.hpp>
 #include <icy_engine/core/icy_array.hpp>
 #include <icy_engine/core/icy_input.hpp>
@@ -113,9 +111,18 @@ private:
 class window_thread_data : public thread
 {
 public:
-    error_type run() noexcept override;
+    void cancel() noexcept
+    {
+        system->post(nullptr, event_type::global_quit);
+    }
+    error_type run() noexcept override
+    {
+        if (auto error = system->exec())
+            return event::post(system, event_type::system_error, std::move(error));
+        return error_type();
+    }
 public:
-    window_system_data* system = nullptr;
+    window_system* system = nullptr;
 };
 ICY_STATIC_NAMESPACE_END
 class window_system_data : public window_system
@@ -133,7 +140,7 @@ private:
     {
         return *m_thread;
     }
-    error_type create(window& window, const window_flags flags) const noexcept override;
+    error_type create(icy::window& window, const window_flags flags) const noexcept override;
     error_type signal(const event_data& event) noexcept override
     {
         win32_post_thread_message(m_thread->index(), WM_NULL, 0, 0);
@@ -280,18 +287,39 @@ HWND__* window_data::handle() const noexcept
 }
 LRESULT window_data::proc(uint32_t msg, WPARAM wparam, LPARAM lparam) noexcept
 {
-    const auto on_resize = [this]
+    const auto make_message = [this](window_message& message) noexcept
+    {
+        message.index = m_index;
+        message.handle = m_hwnd;
+
+        if (m_win32_flags & win32_flag::inactive) message.state = message.state | window_state::inactive;
+        if (m_win32_flags & win32_flag::minimized) message.state = message.state | window_state::minimized;
+
+        RECT rect;
+        if (!win32_get_client_rect(m_hwnd, &rect))
+        {
+            m_system->exit(last_system_error());
+            return false;
+        }
+        message.size.x = rect.right - rect.left;
+        message.size.y = rect.bottom - rect.top;
+        return true;
+    };
+   /* const auto on_resize = [this]
     {
         RECT rect = {};
         if (!win32_get_client_rect(m_hwnd, &rect))
             return last_system_error();
 
-        auto size = window_size{ uint32_t(rect.right - rect.left), uint32_t(rect.bottom - rect.top) };
-        return event::post(m_system, event_type::window_resize, size);
-    };
+        window_message msg = {};
+        msg.index = m_index;
+        msg.size = window_size{ uint32_t(rect.right - rect.left), uint32_t(rect.bottom - rect.top) };
+        msg.state = m_state;
+        return event::post(m_system, event_type::window_resize, msg);
+    };*/
     const auto on_repaint = [this]
     {
-        auto render = shared_ptr<render_factory>(m_repaint.render);
+       /* auto render = shared_ptr<render_factory>(m_repaint.render);
         if (!render || !m_repaint.device)
             return error_type();
 
@@ -347,25 +375,10 @@ LRESULT window_data::proc(uint32_t msg, WPARAM wparam, LPARAM lparam) noexcept
         end_paint_done = true;
         if (!win32_end_paint(m_hwnd, &ps))
             return last_system_error();
-
+            */
         return error_type();
     };
-    const auto make_message = [this](window_message& message) noexcept
-    {
-        message.index = m_index;
-        if (m_win32_flags & win32_flag::inactive) message.state = message.state | window_state::inactive;
-        if (m_win32_flags & win32_flag::minimized) message.state = message.state | window_state::minimized;
 
-        RECT rect;
-        if (!win32_get_client_rect(m_hwnd, &rect))
-        {
-            m_system->exit(last_system_error());
-            return false;
-        }
-        message.size.x = rect.right - rect.left;
-        message.size.y = rect.bottom - rect.top;    
-        return true;
-    };
 
     switch (msg)
     {
@@ -434,7 +447,10 @@ LRESULT window_data::proc(uint32_t msg, WPARAM wparam, LPARAM lparam) noexcept
     case WM_EXITSIZEMOVE:
         if ((m_win32_flags & win32_flag::resizing1) && (m_win32_flags & win32_flag::resizing2))
         {
-            if (const auto error = on_resize())
+            window_message message;
+            if (!make_message(message))
+                break;
+            if (const auto error = event::post(m_system, event_type::window_resize, std::move(message)))
                 m_system->exit(error);
         }
         m_win32_flags &= ~(win32_flag::resizing1 | win32_flag::resizing2);
@@ -466,11 +482,6 @@ LRESULT window_data::proc(uint32_t msg, WPARAM wparam, LPARAM lparam) noexcept
         }
         else if (wparam == SIZE_MAXIMIZED || (wparam == SIZE_RESTORED && (m_win32_flags & win32_flag::resizing1) == 0 && (m_win32_flags & win32_flag::resizing2) == 0))
         {
-            if (const auto error = on_resize())
-            {
-                m_system->exit(error);
-                break;
-            }
             window_message message;
             if (!make_message(message))
                 break;
@@ -546,13 +557,6 @@ LRESULT window_data::proc(uint32_t msg, WPARAM wparam, LPARAM lparam) noexcept
     }
     }
     return win32_def_window_proc(m_hwnd, msg, wparam, lparam);
-}
-
-error_type window_thread_data::run() noexcept
-{
-    if (auto error = system->exec())
-        return event::post(system, event_type::system_error, std::move(error));
-    return error_type();
 }
 
 window_system_data::~window_system_data() noexcept
@@ -734,7 +738,7 @@ HWND window_system_data::handle(const uint32_t index) const noexcept
     }
     return nullptr;
 }
-error_type window_system_data::create(window& new_window, const window_flags flags) const noexcept
+error_type window_system_data::create(icy::window& new_window, const window_flags flags) const noexcept
 {
     auto new_data = allocator_type::allocate<window::data_type>(1);
     if (!new_data)
@@ -744,7 +748,7 @@ error_type window_system_data::create(window& new_window, const window_flags fla
     new_data->system = make_shared_from_this(this);
     {
         const auto self = const_cast<window_system_data*>(this);
-        auto new_ptr = make_unique<window_data>(self, m_next);
+        auto new_ptr = make_unique<window_data>(self, m_next, flags);
         if (!new_ptr)
             return make_stdlib_error(std::errc::not_enough_memory);
         
@@ -869,7 +873,7 @@ error_type window::data_type::repaint(window_repaint_type&& repaint) noexcept
     return error_type();
 }
 
-error_type icy::create_event_system(shared_ptr<window_system>& system) noexcept
+error_type icy::create_window_system(shared_ptr<window_system>& system) noexcept
 {
     shared_ptr<window_system_data> new_ptr;
     ICY_ERROR(make_shared(new_ptr));

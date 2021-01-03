@@ -140,7 +140,7 @@ namespace icy
             if ((key_mod(need_any_shift) & rhs) == 0)
                 return false;
         }
-        return true;
+        return need_any_ctrl || need_any_alt || need_any_shift ? true : rhs == key_mod::none;
 	}
     string_view to_string(const input_type type) noexcept;
 	error_type to_string(const input_message& key, string& str) noexcept;

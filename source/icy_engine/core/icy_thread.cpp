@@ -8,7 +8,7 @@
 #include <process.h>
 #include <thread>
 #if _MSC_VER >= 1900
-#include <thr/xthreads.h>
+#include <xthreads.h>
 #else
 #include <thr/threads.h>
 #endif
@@ -18,6 +18,35 @@ ICY_STATIC_NAMESPACE_BEG
 icy::detail::rw_spin_lock g_lock;
 icy::thread_system* g_list = nullptr;
 ICY_STATIC_NAMESPACE_END
+
+
+void thread_local_data::shutdown() noexcept
+{
+    if (m_index)
+        TlsFree(m_index);
+    m_index = 0;
+}
+error_type thread_local_data::initialize() noexcept
+{
+    shutdown();
+    m_index = TlsAlloc();
+    if (m_index == TLS_OUT_OF_INDEXES)
+    {
+        m_index = 0;
+        return last_system_error();
+    }
+    return error_type();
+}
+error_type thread_local_data::assign(void* ptr) noexcept
+{
+    if (TlsSetValue(m_index, ptr))
+        return error_type();
+    return last_system_error();
+}
+void* thread_local_data::query() const noexcept
+{
+    return TlsGetValue(m_index);
+}
 
 /*
 #define LDRP_IMAGE_DLL                          0x00000004

@@ -56,4 +56,25 @@ namespace icy
     };
     const thread* this_thread() noexcept;
     void sleep(const clock_type::duration duration) noexcept;
+
+    class thread_local_data
+    {
+    public:
+        thread_local_data() noexcept = default;
+        thread_local_data(const thread_local_data&) = delete;
+        ~thread_local_data() noexcept
+        {
+            shutdown();
+        }
+        void shutdown() noexcept;
+        error_type initialize() noexcept;
+        error_type assign(void* ptr) noexcept;
+        void* query() const noexcept;
+        explicit operator bool() const noexcept
+        {
+            return m_index != 0;
+        }
+    private:
+        uint32_t m_index = 0;
+    };
 }

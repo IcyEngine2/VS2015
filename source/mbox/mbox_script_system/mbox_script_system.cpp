@@ -3,6 +3,8 @@
 #include <icy_engine/core/icy_file.hpp>
 #include <icy_engine/core/icy_thread.hpp>
 #include <icy_engine/core/icy_map.hpp>
+#define NOMINMAX
+#include <Windows.h>
 
 using namespace icy;
 using namespace mbox;
@@ -26,21 +28,37 @@ struct mbox_group
 };
 enum class mbox_event_type : uint32_t
 {
-    user,
-    timer,
+    on_user,
+    on_timer,
     on_key_press,
     on_key_release,
+    on_party_init,
 };
 struct mbox_event
 {
     mbox_character* character = nullptr;
     lua_variable lua;
-    mbox_event_type type = mbox_event_type::user;
+    mbox_event_type type = mbox_event_type::on_user;
     uint64_t uid = 0;
     key key = key::none;
     key_mod mods = key_mod::none;
     mbox_index ref;
     string name;
+};
+struct mbox_timer : public timer
+{
+    mbox_timer() noexcept = default;
+    mbox_timer(mbox_timer&& rhs) noexcept
+    {
+        
+    }
+    ICY_DEFAULT_MOVE_ASSIGN(mbox_timer);
+    enum
+    {
+        none,
+        running,
+        paused,
+    } state = none;
 };
 struct mbox_character
 {
@@ -57,6 +75,7 @@ struct mbox_character
     lua_variable func_profile;
     map<mbox_index, mbox_macro> macros;
     map<mbox_index, map<mbox_index, mbox_macro>> var_macros;
+    map<mbox_index, mbox_timer> timers;
 };
 struct mbox_send
 {
@@ -66,6 +85,8 @@ struct mbox_send
     key key = key::none;
     key_mod mods = key_mod::none;
     double priority = 0;
+    double point_x = DBL_MAX;
+    double point_y = DBL_MAX;
 };
 class mbox_thread : public thread
 {
@@ -111,8 +132,8 @@ private:
     error_type initialize(mbox_character& chr) noexcept;
     error_type initialize_funcs(lua_variable& var) noexcept;
     error_type post(const mbox_index& character, const input_message& input) noexcept override;
-    //error_type prefix(const mbox_object& object, const string_view cmd) LUA_NOEXCEPT;
     error_type on_input(mbox_character& chr, const input_message& input) noexcept;
+    error_type on_timer(mbox_character& chr, const mbox_timer& timer) noexcept;
     error_type execute() LUA_NOEXCEPT;
     error_type compile(const mbox_object& object, lua_variable& function) LUA_NOEXCEPT;
     error_type parse_input(const string_view str, input_message& msg) LUA_NOEXCEPT;
@@ -180,12 +201,43 @@ private:
     }
     error_type add_user_event(mbox_character& chr, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
     {
-        return add_event(chr, mbox_event_type::user, input, output);
+        return add_event(chr, mbox_event_type::on_user, input, output);
+    }
+    error_type add_timer_event(mbox_character& chr, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
+    {
+        return add_event(chr, mbox_event_type::on_timer, input, output);
+    }
+    error_type add_init_event(mbox_character& chr, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
+    {
+        return add_event(chr, mbox_event_type::on_party_init, input, output);
+    }
+    error_type timer_action(mbox_character& chr, const mbox_reserved_name action, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT;
+    error_type start_timer(mbox_character& chr, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
+    {
+        return timer_action(chr, mbox_reserved_name::start_timer, input, output);
+    }
+    error_type stop_timer(mbox_character& chr, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
+    {
+        return timer_action(chr, mbox_reserved_name::stop_timer, input, output);
+    }
+    error_type pause_timer(mbox_character& chr, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
+    {
+        return timer_action(chr, mbox_reserved_name::pause_timer, input, output);
+    }
+    error_type resume_timer(mbox_character& chr, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
+    {
+        return timer_action(chr, mbox_reserved_name::resume_timer, input, output);
     }
 private:
     const mbox_system_init m_init;
     mutex m_mutex;
     cvar m_cvar;
+    library m_user32_lib = "user32"_lib;
+    decltype(&GetForegroundWindow) m_win32_get_foreground_window = nullptr;
+    decltype(&ScreenToClient) m_win32_screen_to_client = nullptr;
+    decltype(&GetCursorPos) m_win32_get_cursor_pos = nullptr;
+    decltype(&GetClientRect) m_win32_get_client_rect = nullptr;
+    decltype(&GetDesktopWindow) m_win32_get_desktop_window = nullptr;
     shared_ptr<lua_system> m_lua;
     shared_ptr<mbox_thread> m_thread;
     mbox_system_info m_info;
@@ -198,6 +250,7 @@ private:
     array<mbox_send> m_send;
     uint32_t m_action = 0;
     array<mbox_character*> m_stack;
+    map<mbox_timer*, mbox_character*> m_timers;
 };
 ICY_STATIC_NAMESPACE_END
 
@@ -207,7 +260,23 @@ error_type mbox_system_data::initialize(const mbox_array& data) noexcept
     if (party_obj.type != mbox_type::party || party_obj.value.empty())
         return make_stdlib_error(std::errc::invalid_argument);
 
+
     ICY_ERROR(m_mutex.initialize());
+    ICY_ERROR(m_user32_lib.initialize());
+    m_win32_get_foreground_window = ICY_FIND_FUNC(m_user32_lib, GetForegroundWindow);
+    m_win32_screen_to_client = ICY_FIND_FUNC(m_user32_lib, ScreenToClient);
+    m_win32_get_cursor_pos = ICY_FIND_FUNC(m_user32_lib, GetCursorPos);
+    m_win32_get_client_rect = ICY_FIND_FUNC(m_user32_lib, GetClientRect);
+    m_win32_get_desktop_window = ICY_FIND_FUNC(m_user32_lib, GetDesktopWindow);
+    if (false
+        || !m_win32_get_foreground_window
+        || !m_win32_screen_to_client 
+        || !m_win32_get_cursor_pos
+        || !m_win32_get_client_rect
+        || !m_win32_get_desktop_window
+        )
+        return last_system_error();
+
     ICY_ERROR(create_lua_system(m_lua));
 
     for (auto&& pair : data.objects())
@@ -287,6 +356,38 @@ error_type mbox_system_data::initialize(const mbox_array& data) noexcept
     ICY_ERROR(compile(party_obj, party_func));
     ICY_ERROR(party_func());
 
+    for (auto&& pair : m_slots)
+    {
+        auto& chr = *pair.value;
+        auto offset = 0_z;
+        while (true)
+        {
+            auto it = chr.events.upper_bound(offset);
+            if (it == chr.events.end())
+                break;
+
+            for (; it != chr.events.end(); ++it)
+            {
+                offset = *it;
+                auto event = m_events.try_find(offset);
+                if (!event || event->type != mbox_event_type::on_party_init)
+                    continue;
+
+                ICY_ERROR(m_stack.push_back(&chr));
+                ICY_SCOPE_EXIT{ m_stack.pop_back(); };
+
+                if (m_init.pfunc)
+                    ICY_ERROR(print_newline("%1.OnPartyInit "_s, string_view(chr.name), string_view(event->name)));
+
+                lua_variable copy_callback;
+                ICY_ERROR(m_lua->copy(event->lua, copy_callback));
+                ICY_ERROR(copy_callback());
+                break;
+            }
+        }
+    }
+  
+
     auto max_macros = 0_z;
     for (auto&& pair : characters_trees)
     {
@@ -308,6 +409,10 @@ error_type mbox_system_data::initialize(const mbox_array& data) noexcept
             else if (ptr->type == mbox_type::action_macro)
             {
                 ICY_ERROR(pair.key->macros.insert(ptr->index, mbox_macro()));
+            }
+            else if (ptr->type == mbox_type::action_timer)
+            {
+                ICY_ERROR(pair.key->timers.insert(ptr->index, mbox_timer()));
             }
         }
         max_macros = std::max(max_macros, pair.key->macros.size() + pair.key->var_macros.size() * characters_trees.size());
@@ -402,9 +507,10 @@ error_type mbox_system_data::initialize(const mbox_array& data) noexcept
         }
     }
 
+
     ICY_ERROR(make_shared(m_thread));
     m_thread->system = this;
-    filter(event_type::global_quit);
+    filter(event_type::global_quit | event_type::global_timer);
     return error_type();
 }
 error_type mbox_system_data::exec() noexcept
@@ -416,13 +522,150 @@ error_type mbox_system_data::exec() noexcept
             if (event->type == event_type::global_quit)
                 return error_type();
 
+            m_send.clear();
+
+            mbox_index source;
             if (event->type == event_type::system_internal)
             {
                 const auto& event_data = event->data<internal_event>();
-                const auto chr = m_characters.try_find(event_data.character);
+                auto chr = m_characters.try_find(source = event_data.character);
                 if (!chr)
                     continue;
                 ICY_ERROR(on_input(*chr, event_data.input));
+            }
+            else if (event->type == event_type::global_timer)
+            {
+                const auto& event_data = event->data<timer::pair>();
+                const auto chr = m_timers.try_find(event_data.timer);
+                if (!chr)
+                    continue;
+                source = (*chr)->index;
+                ICY_ERROR(on_timer(*(*chr), *static_cast<mbox_timer*>(event_data.timer)));
+            }
+            else
+            {
+                continue;
+            }
+
+            using send_pair_type = std::pair<key_mod, mbox_event_send_input>;
+            map<mbox_index, send_pair_type> map;
+
+            double point_x = 0.0;
+            double point_y = 0.0;
+
+            for (auto&& send : m_send)
+            {
+                if (send.key >= key::mouse_left && send.key <= key::mouse_x2)
+                {
+                    if (send.point_x == DBL_MAX || send.point_y == DBL_MAX)
+                    {
+                        POINT point;
+                        if (!m_win32_get_cursor_pos(&point))
+                            return last_system_error();
+                        
+                        auto hwnd = m_win32_get_foreground_window();
+                        if (!hwnd)
+                            hwnd = m_win32_get_desktop_window();
+                        if (!hwnd)
+                            return last_system_error();
+
+                        if (!m_win32_screen_to_client(hwnd, &point))
+                            return last_system_error();
+
+                        RECT rect;
+                        if (!m_win32_get_client_rect(hwnd, &rect))
+                            return last_system_error();
+
+                        point_x = double(point.x - rect.left) / (rect.right - rect.left);
+                        point_y = double(point.y - rect.top) / (rect.bottom - rect.top);
+                        break;
+                    }
+                }
+            }
+
+            for (auto&& send : m_send)
+            {
+                auto it = map.find(send.character);
+                if (it == map.end())
+                    ICY_ERROR(map.insert(send.character, send_pair_type(), &it));
+
+                auto px = llround((send.point_x == DBL_MAX ? point_x : send.point_x) * INT16_MAX);
+                auto py = llround((send.point_y == DBL_MAX ? point_y : send.point_y) * INT16_MAX);
+                
+                it->value.second.priority = std::max(it->value.second.priority, send.priority);
+                auto& mods = it->value.first;
+                const auto press = [px, py, it, &mods](const key key) noexcept
+                {
+                    auto type = input_type::key_press;
+                    if (key >= key::mouse_left && key <= key::mouse_x2)
+                        type = input_type::mouse_press;
+                    ICY_ERROR(it->value.second.messages.push_back(input_message(type, key, mods)));
+                    if (type == input_type::mouse_press)
+                    {
+                        it->value.second.messages.back().point_x = px;
+                        it->value.second.messages.back().point_y = py;
+                    }
+
+                    /* if (key == key::left_ctrl) mods = mods | key_mod::lctrl;
+                     if (key == key::left_alt) mods = mods | key_mod::lalt;
+                     if (key == key::left_shift) mods = mods | key_mod::lshift;
+                     if (key == key::right_ctrl) mods = mods | key_mod::rctrl;
+                     if (key == key::right_alt) mods = mods | key_mod::ralt;
+                     if (key == key::right_shift) mods = mods | key_mod::rshift;*/
+                    return error_type();
+                };
+                const auto release = [px, py, it, &mods](const key key) noexcept
+                {
+                    auto type = input_type::key_release;
+                    if (key >= key::mouse_left && key <= key::mouse_x2)
+                        type = input_type::mouse_release;
+
+                    ICY_ERROR(it->value.second.messages.push_back(input_message(type, key, mods)));
+                    if (type == input_type::mouse_release)
+                    {
+                        it->value.second.messages.back().point_x = px;
+                        it->value.second.messages.back().point_y = py;
+                    }
+
+                    /* if (key == key::left_ctrl) mods = key_mod(uint32_t(mods) & ~uint32_t(key_mod::lctrl));
+                     if (key == key::left_alt) mods = key_mod(uint32_t(mods) & ~uint32_t(key_mod::lalt));
+                     if (key == key::left_shift) mods = key_mod(uint32_t(mods) & ~uint32_t(key_mod::lshift));
+                     if (key == key::right_ctrl) mods = key_mod(uint32_t(mods) & ~uint32_t(key_mod::rctrl));
+                     if (key == key::right_alt) mods = key_mod(uint32_t(mods) & ~uint32_t(key_mod::ralt));
+                     if (key == key::right_shift) mods = key_mod(uint32_t(mods) & ~uint32_t(key_mod::rshift));*/
+                    return error_type();
+                };
+
+                if (send.action & mbox_send::press)
+                {
+                    if (send.mods & key_mod::lctrl) { ICY_ERROR(press(key::left_ctrl)); }
+                    if (send.mods & key_mod::lalt) { ICY_ERROR(press(key::left_alt)); }
+                    if (send.mods & key_mod::lshift) { ICY_ERROR(press(key::left_shift)); }
+                    if (send.mods & key_mod::rctrl) { ICY_ERROR(press(key::right_ctrl)); }
+                    if (send.mods & key_mod::ralt) { ICY_ERROR(press(key::right_alt)); }
+                    if (send.mods & key_mod::rshift) { ICY_ERROR(press(key::right_shift)); }
+                    ICY_ERROR(press(send.key));
+                }
+                if (send.action & mbox_send::release)
+                {
+                    ICY_ERROR(release(send.key));
+                    if (send.mods & key_mod::rshift) { ICY_ERROR(release(key::right_shift)); }
+                    if (send.mods & key_mod::lalt) { ICY_ERROR(release(key::right_alt)); }
+                    if (send.mods & key_mod::rctrl) { ICY_ERROR(release(key::right_ctrl)); }
+                    if (send.mods & key_mod::lshift) { ICY_ERROR(release(key::left_shift)); }
+                    if (send.mods & key_mod::lalt) { ICY_ERROR(release(key::left_alt)); }
+                    if (send.mods & key_mod::lctrl) { ICY_ERROR(release(key::left_ctrl)); }
+                }
+            }
+            for (auto&& pair : map)
+            {
+                auto& send = pair.value.second;
+                mbox_event_send_input event;
+                event.character = pair.key;
+                event.messages = std::move(send.messages);
+                event.priority = send.priority;
+                event.source = source;
+                ICY_ERROR(event::post(this, mbox_event_type_send_input, std::move(event)));
             }
         }
         ICY_ERROR(m_cvar.wait(m_mutex));
@@ -501,6 +744,12 @@ error_type mbox_system_data::initialize_funcs(lua_variable& var) noexcept
     ICY_ERROR(append(mbox_reserved_name::on_key_press, var, &mbox_system_data::add_key_press_event));
     ICY_ERROR(append(mbox_reserved_name::on_key_release, var, &mbox_system_data::add_key_release_event));
     ICY_ERROR(append(mbox_reserved_name::on_event, var, &mbox_system_data::add_user_event));
+    ICY_ERROR(append(mbox_reserved_name::on_timer, var, &mbox_system_data::add_timer_event));
+    ICY_ERROR(append(mbox_reserved_name::start_timer, var, &mbox_system_data::start_timer));
+    ICY_ERROR(append(mbox_reserved_name::stop_timer, var, &mbox_system_data::stop_timer));
+    ICY_ERROR(append(mbox_reserved_name::pause_timer, var, &mbox_system_data::pause_timer));
+    ICY_ERROR(append(mbox_reserved_name::resume_timer, var, &mbox_system_data::resume_timer));
+    ICY_ERROR(append(mbox_reserved_name::on_party_init, var, &mbox_system_data::add_init_event));
     return error_type();
 };
 error_type mbox_system_data::compile(const mbox_object& object, lua_variable& var) LUA_NOEXCEPT
@@ -517,6 +766,8 @@ error_type mbox_system_data::compile(const mbox_object& object, lua_variable& va
         || object.type == mbox_type::account 
         || object.type == mbox_type::profile 
         || object.type == mbox_type::group 
+        || object.type == mbox_type::action_macro
+        || object.type == mbox_type::action_timer
         || object.type == mbox_type::action_script)
     {
         ;
@@ -571,6 +822,13 @@ error_type mbox_system_data::compile(const mbox_object& object, lua_variable& va
     ICY_ERROR(lib_base.map(keys, vals));
     for (auto n = 0u; n < keys.size(); ++n)
         ICY_ERROR(var.insert(keys[n], vals[n]));
+
+    for (auto&& lib_type : { lua_default_library::math, lua_default_library::string, lua_default_library::table })
+    {
+        lua_variable lib;
+        ICY_ERROR(m_lua->make_library(lib, lib_type));
+        ICY_ERROR(var.insert(to_string(lib_type), lib));
+    }    
 
     for (auto&& ref : object.refs)
     {
@@ -662,7 +920,7 @@ error_type mbox_system_data::post(const mbox_index& character, const input_messa
 }
 error_type mbox_system_data::on_input(mbox_character& chr, const input_message& input) noexcept
 {
-    auto event_type = mbox_event_type::user;
+    auto event_type = mbox_event_type::on_user;
     if (input.type == input_type::key_press)
         event_type = mbox_event_type::on_key_press;
     else if (input.type == input_type::key_release)
@@ -670,7 +928,6 @@ error_type mbox_system_data::on_input(mbox_character& chr, const input_message& 
     else
         return error_type();
 
-    m_send.clear();
     if (m_init.pfunc)
     {
         string input_str(m_lua->realloc(), m_lua->user());
@@ -689,14 +946,14 @@ error_type mbox_system_data::on_input(mbox_character& chr, const input_message& 
         {
             offset = *it;
             auto event = m_events.try_find(offset);
-            if (!event || event->type != event_type || event->key != input.key || event->mods != key_mod::none && !key_mod_and(event->mods, key_mod(input.key)))
+            if (!event || event->type != event_type || event->key != input.key || !key_mod_and(event->mods, key_mod(input.mods)))
                 continue;
 
             ICY_ERROR(m_stack.push_back(&chr));
             ICY_SCOPE_EXIT{ m_stack.pop_back(); };
 
             if (m_init.pfunc)
-                ICY_ERROR(print_newline("%1.Callback(\"%2\")"_s, string_view(chr.name), string_view(event->name)));
+                ICY_ERROR(print_newline("%1. InputCallback(\"%2\")"_s, string_view(chr.name), string_view(event->name)));
 
             lua_variable copy_callback;
             ICY_ERROR(m_lua->copy(event->lua, copy_callback));
@@ -704,98 +961,62 @@ error_type mbox_system_data::on_input(mbox_character& chr, const input_message& 
             break;
         }
     }
-
-    using send_pair_type = std::pair<key_mod, mbox_event_send_input>;
-    map<mbox_index, send_pair_type> map;
-    for (auto&& send : m_send)
+    return error_type();
+}
+error_type mbox_system_data::on_timer(mbox_character& chr, const mbox_timer& timer) noexcept
+{
+    auto timer_find = chr.timers.begin();
+    for (timer_find; timer_find != chr.timers.end(); ++timer_find)
     {
-        auto it = map.find(send.character);
-        if (it == map.end())
-            ICY_ERROR(map.insert(send.character, send_pair_type(), &it));
-
-        it->value.second.priority = std::max(it->value.second.priority, send.priority);
-        auto& mods = it->value.first;
-        const auto press = [it, &mods](const key key) noexcept
-        {
-            ICY_ERROR(it->value.second.messages.push_back(input_message(input_type::key_press, key, mods)));
-           /* if (key == key::left_ctrl) mods = mods | key_mod::lctrl;
-            if (key == key::left_alt) mods = mods | key_mod::lalt;
-            if (key == key::left_shift) mods = mods | key_mod::lshift;
-            if (key == key::right_ctrl) mods = mods | key_mod::rctrl;
-            if (key == key::right_alt) mods = mods | key_mod::ralt;
-            if (key == key::right_shift) mods = mods | key_mod::rshift;*/
-            return error_type();
-        };
-        const auto release = [it, &mods](const key key) noexcept
-        {
-            ICY_ERROR(it->value.second.messages.push_back(input_message(input_type::key_release, key, mods)));
-           /* if (key == key::left_ctrl) mods = key_mod(uint32_t(mods) & ~uint32_t(key_mod::lctrl));
-            if (key == key::left_alt) mods = key_mod(uint32_t(mods) & ~uint32_t(key_mod::lalt));
-            if (key == key::left_shift) mods = key_mod(uint32_t(mods) & ~uint32_t(key_mod::lshift));
-            if (key == key::right_ctrl) mods = key_mod(uint32_t(mods) & ~uint32_t(key_mod::rctrl));
-            if (key == key::right_alt) mods = key_mod(uint32_t(mods) & ~uint32_t(key_mod::ralt));
-            if (key == key::right_shift) mods = key_mod(uint32_t(mods) & ~uint32_t(key_mod::rshift));*/
-            return error_type();
-        };
-
-        if (send.action & mbox_send::press)
-        {
-            if (send.mods & key_mod::lctrl) { ICY_ERROR(press(key::left_ctrl)); }
-            if (send.mods & key_mod::lalt) { ICY_ERROR(press(key::left_alt)); }
-            if (send.mods & key_mod::lshift) { ICY_ERROR(press(key::left_shift)); }
-            if (send.mods & key_mod::rctrl) { ICY_ERROR(press(key::right_ctrl)); }
-            if (send.mods & key_mod::ralt) { ICY_ERROR(press(key::right_alt)); }
-            if (send.mods & key_mod::rshift) { ICY_ERROR(press(key::right_shift)); }
-            ICY_ERROR(press(send.key));
-        }
-        if (send.action & mbox_send::release)
-        {
-            ICY_ERROR(release(send.key));
-            if (send.mods & key_mod::rshift) { ICY_ERROR(release(key::right_shift)); }
-            if (send.mods & key_mod::lalt) { ICY_ERROR(release(key::right_alt)); }
-            if (send.mods & key_mod::rctrl) { ICY_ERROR(release(key::right_ctrl)); }
-            if (send.mods & key_mod::lshift) { ICY_ERROR(release(key::left_shift)); }
-            if (send.mods & key_mod::lalt) { ICY_ERROR(release(key::left_alt)); }
-            if (send.mods & key_mod::lctrl) { ICY_ERROR(release(key::left_ctrl)); }
-        }
+        if (&timer_find->value == &timer)
+            break;
     }
+    if (timer_find == chr.timers.end())
+        return error_type();
 
-    for (auto&& pair : map)
+    const auto& object = find(timer_find->key);
+
+    if (m_init.pfunc)
+        ICY_ERROR(print_newline("Event: %1.OnTimer(%2)"_s, string_view(chr.name), string_view(object.name)));
+
+    ICY_ERROR(m_stack.push_back(&chr));
+    ICY_SCOPE_EXIT{ m_stack.pop_back(); };
+
+    if (!object.value.empty())
     {
-        auto& send = pair.value.second;
-
-       /* for (auto k = 0u; k < vec.size();)
+        auto it = chr.scripts.find(object.index);
+        if (it == chr.scripts.end())
         {
-            if (vec[k].type != input_type::key_release)
-            {
-                ++k;
+            lua_variable script;
+            ICY_ERROR(compile(object, script));
+            ICY_ERROR(chr.scripts.insert(object.index, std::move(script), &it));
+        }
+        ICY_ERROR(print_newline("%1: RunScript(%2)"_s, string_view(chr.name), string_view(object.name)));
+        ICY_ERROR(it->value());
+    }    
+    auto offset = 0_z;
+    while (true)
+    {
+        auto it = chr.events.upper_bound(offset);
+        if (it == chr.events.end())
+            break;
+
+        for (; it != chr.events.end(); ++it)
+        {
+            offset = *it;
+            auto event = m_events.try_find(offset);
+            if (!event || event->type != mbox_event_type::on_timer || event->ref != timer_find->key)
                 continue;
-            }
 
-            auto skip = false;
-            auto n = k + 1;
-            for (; n < vec.size(); ++n)
-            {
-                if (vec[n].type == input_type::none)
-                    continue;
+            if (m_init.pfunc)
+                ICY_ERROR(print_newline("%1.TimerCallback(\"%2\")"_s, string_view(chr.name), string_view(event->name)));
 
-                skip = vec[n].type == input_type::key_press && vec[n].key == vec[k].key && vec[n].mods == vec[k].mods;
-                break;
-            }
-            if (skip)
-            {
-                vec[n] = input_message();
-                vec[k] = input_message();
-                if (k) --k;
-            }
-        }*/
-        mbox_event_send_input event;
-        event.character = pair.key;
-        event.messages = std::move(send.messages);
-        event.priority = send.priority;        
-        ICY_ERROR(event::post(this, mbox_event_type_send_input, std::move(event)));
+            lua_variable copy_callback;
+            ICY_ERROR(m_lua->copy(event->lua, copy_callback));
+            ICY_ERROR(copy_callback());
+            break;
+        }
     }
-
     return error_type();
 }
 error_type mbox_system_data::append(const mbox_reserved_name name, lua_variable& table, const func_type func) LUA_NOEXCEPT
@@ -1026,8 +1247,23 @@ error_type mbox_system_data::send_key(mbox_character& chr, const uint32_t action
     send.character = chr.index;
     send.key = input_msg.key;
     send.mods = key_mod(input_msg.mods);
+
     if (input.size() > 1)
         send.priority = input[1].as_number();
+
+    if (send.key >= key::mouse_left && send.key <= key::mouse_x2)
+    {
+        if (input.size() > 3)
+        {
+            send.point_x = input[2].as_number();
+            send.point_y = input[3].as_number();
+            if (send.point_x < 0 || send.point_x > 1)
+                return m_lua->post_error("%1.SendKey: expected valid mouse X [0, 1] as input[3]"_s, string_view(chr.name));
+            if (send.point_y < 0 || send.point_y > 1)
+                return m_lua->post_error("%1.SendKey: expected valid mouse Y [0, 1] as input[4]"_s, string_view(chr.name));
+        }
+    }
+
     ICY_ERROR(m_send.push_back(send));
     return error_type();
 }
@@ -1054,6 +1290,9 @@ error_type mbox_system_data::send_macro(mbox_character& chr, const const_array_v
     send.character = chr.index;
     send.key = macro->key;
     send.mods = macro->mods;
+    if (input.size() > 1 && input[1].type() == lua_type::number)
+        send.priority = input[1].as_number();
+
     ICY_ERROR(m_send.push_back(send));
     return error_type();
 }
@@ -1155,13 +1394,13 @@ error_type mbox_system_data::post_event(mbox_character& chr, const const_array_v
             offset = *it;
             const auto event = m_events.try_find(offset);
 
-            if (!event || event->type != mbox_event_type::user || event->ref != object->index)
+            if (!event || event->type != mbox_event_type::on_user || event->ref != object->index)
                 continue;
 
             ICY_ERROR(m_stack.push_back(event->character));
             ICY_SCOPE_EXIT{ m_stack.pop_back(); };
             if (m_init.pfunc)
-                ICY_ERROR(print_newline("%1.Callback(\"%2\")"_s, string_view(event->character->name), string_view(event->name)));
+                ICY_ERROR(print_newline("%1.UserCallback(\"%2\")"_s, string_view(event->character->name), string_view(event->name)));
             
             lua_variable copy_callback;
             ICY_ERROR(m_lua->copy(event->lua, copy_callback));
@@ -1174,14 +1413,19 @@ error_type mbox_system_data::post_event(mbox_character& chr, const const_array_v
 }
 error_type mbox_system_data::add_event(mbox_character& chr, const mbox_event_type type, const const_array_view<lua_variable> input, array<lua_variable>* output) LUA_NOEXCEPT
 {
-    if (input.size() < 2 || input[1].type() != lua_type::function)
+    auto callback_index = 1u;
+    if (type == mbox_event_type::on_party_init)
+        callback_index = 0u;
+
+    if (input.size() < callback_index + 1 || input[callback_index].type() != lua_type::function)
         return m_lua->post_error("%1.AddEvent"_s, string_view(chr.name), ": expected valid callback as input[2]"_s);
 
     mbox_event new_event;
     new_event.character = &chr;
     new_event.uid = ++m_event;
     new_event.type = type;
-    if (type == mbox_event_type::user)
+
+    if (type == mbox_event_type::on_user)
     {
         const mbox_object* object = nullptr;
         if (input.size() > 0 && input[0].type() == lua_type::pointer)
@@ -1190,6 +1434,10 @@ error_type mbox_system_data::add_event(mbox_character& chr, const mbox_event_typ
             return m_lua->post_error("%1.OnEvent"_s, string_view(chr.name), ": expected valid event as input[1]"_s);
         new_event.ref = object->index;
         ICY_ERROR(print("(%1)"_s, string_view(object->name)));
+    }
+    else if (type == mbox_event_type::on_party_init)
+    {
+
     }
     else if (type == mbox_event_type::on_key_press || type == mbox_event_type::on_key_release)
     {
@@ -1203,7 +1451,7 @@ error_type mbox_system_data::add_event(mbox_character& chr, const mbox_event_typ
         new_event.mods = key_mod(input_msg.mods);
         ICY_ERROR(print("(%1)"_s, input[0].as_string()));
     }
-    else if (type == mbox_event_type::timer)
+    else if (type == mbox_event_type::on_timer)
     {
         const mbox_object* object = nullptr;
         if (input.size() > 0 && input[0].type() == lua_type::pointer)
@@ -1217,10 +1465,10 @@ error_type mbox_system_data::add_event(mbox_character& chr, const mbox_event_typ
     {
         return error_type();
     }
-    ICY_ERROR(m_lua->copy(input[1], new_event.lua));
+    ICY_ERROR(m_lua->copy(input[callback_index], new_event.lua));
     if (m_init.pfunc)
     {
-        const auto str = input[1].name();
+        const auto str = input[callback_index].name();
         if (!str.empty())
         {
             auto beg = 0u;
@@ -1331,6 +1579,82 @@ error_type mbox_system_data::add_event(mbox_character& chr, const mbox_event_typ
 
     ICY_ERROR(m_events.insert(new_event.uid, std::move(new_event)));
     ICY_ERROR(chr.events.insert(m_event));
+
+    return error_type();
+}
+error_type mbox_system_data::timer_action(mbox_character& chr, const mbox_reserved_name action, const const_array_view<lua_variable> input, array<lua_variable>* output)
+{
+    const mbox_object* object = nullptr;
+    if (input.size() > 0 && input[0].type() == lua_type::pointer)
+        object = static_cast<const mbox_object*>(input[0].as_pointer());
+
+    auto timer = object ? chr.timers.try_find(object->index) : nullptr;
+    if (!object || object->type != mbox_type::action_timer || !timer)
+        return m_lua->post_error("%1.%2: expected valid timer as input[1]"_s, to_string(action), string_view(chr.name));
+
+    switch (action)
+    {
+    case mbox_reserved_name::start_timer:
+    {
+        duration_type timeout = {};
+        if (input.size() > 1 && input[1].type() == lua_type::number)
+            timeout = std::chrono::milliseconds(llround(input[1].as_number()));
+        if (timeout.count() <= 0)
+            return m_lua->post_error("%1.StartTimer: invalid timeout (input[2]), (expected >0 ms)"_s, string_view(chr.name));
+
+        auto count = SIZE_MAX;
+        if (input.size() > 2 && input[2].type() == lua_type::number)
+        {
+            auto number = llround(input[2].as_number());
+            if (number <= 0)
+                return m_lua->post_error("%1.StartTimer: invalid repeat count (expected number > 0)"_s, string_view(chr.name));
+            count = number;
+        }
+        ICY_ERROR(timer->initialize(count, timeout));
+        timer->state = mbox_timer::running;
+        break;
+    }
+    case mbox_reserved_name::stop_timer:
+    {
+        timer->state = mbox_timer::none;
+        timer->cancel();
+        break;
+    }
+    case mbox_reserved_name::pause_timer:
+    {
+        if (timer->state == mbox_timer::running)
+        {
+            timer->cancel();
+            timer->state = mbox_timer::paused;
+        }
+        break;
+    }
+    case mbox_reserved_name::resume_timer:
+    {
+        if (timer->state == mbox_timer::paused)
+        {
+            const auto count = timer->count();
+            if (count)
+            {
+                ICY_ERROR(timer->initialize(count, timer->timeout()));
+                timer->state = mbox_timer::running;
+            }
+        }
+        break;
+    }
+    default:
+        return error_type();
+    }
+
+    auto it = m_timers.find(timer);
+    if (timer->state == mbox_timer::running && it == m_timers.end())
+    {
+        ICY_ERROR(m_timers.insert(timer, &chr));
+    }
+    else if (timer->state != mbox_timer::running && it != m_timers.end())
+    {
+        m_timers.erase(it);
+    }
 
     return error_type();
 }

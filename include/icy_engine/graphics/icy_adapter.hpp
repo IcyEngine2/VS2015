@@ -4,7 +4,16 @@
 
 namespace icy
 {
-    enum class render_flags : uint32_t;
+    enum class render_flags : uint32_t
+    {
+        none = 0x00,
+        msaa_x2 = 0x01,
+        msaa_x4 = 0x02,
+        msaa_x8 = 0x04,
+        msaa_x16 = 0x08,
+        msaa_hardware = 0x10,
+        sRGB = 0x20,
+    };
     enum class adapter_flags : uint32_t
     {
         none = 0x00,
@@ -14,6 +23,28 @@ namespace icy
         d3d12 = 0x08,
         debug = 0x10,
     };
+
+    inline constexpr bool operator&(const render_flags lhs, const render_flags rhs) noexcept
+    {
+        return !!(uint32_t(lhs) & uint32_t(rhs));
+    }
+    inline constexpr render_flags operator|(const render_flags lhs, const render_flags rhs) noexcept
+    {
+        return render_flags(uint32_t(lhs) | uint32_t(rhs));
+    }
+    inline uint32_t sample_count(const render_flags flag) noexcept
+    {
+        if (flag & render_flags::msaa_x16)
+            return 16;
+        else if (flag & render_flags::msaa_x8)
+            return 8;
+        else if (flag & render_flags::msaa_x4)
+            return 4;
+        else if (flag & render_flags::msaa_x2)
+            return 2;
+        else
+            return 1;
+    }
 
     inline constexpr bool operator&(const adapter_flags lhs, const adapter_flags rhs) noexcept
     {

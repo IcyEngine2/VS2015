@@ -31,28 +31,70 @@ error_type mbox_launcher_app::character_thread::run() noexcept
                     ICY_ERROR(next_msg_priority.push_back(std::move(event_data)));
                 }
                 else
+                {
                     next_msg = std::move(event_data);
+                }
             }
             ICY_ERROR(queue->pop(event, duration_type()));
         }
         std::reverse(next_msg_priority.begin(), next_msg_priority.end());
         std::stable_sort(next_msg_priority.begin(), next_msg_priority.end(),
             [](const mbox::mbox_event_send_input& lhs, const mbox::mbox_event_send_input& rhs) { return lhs.priority < rhs.priority; });
-        for (auto it = next_msg_priority.rbegin(); it != next_msg_priority.rend(); ++it)
+
+
+        auto has_mouse = false;
+        for (auto&& msg : next_msg.messages)
+        {
+            if (msg.type >= input_type::mouse_wheel && msg.type <= input_type::mouse_double)
+            {
+                has_mouse = true;
+                break;
+            }
+        }
+        for (auto it = next_msg_priority.begin(); it != next_msg_priority.end() && !has_mouse; ++it)
         {
             for (auto&& msg : it->messages)
             {
-                if (msg.type != input_type::none)
-                    window.send(msg, std::chrono::milliseconds(500));
+                if (msg.type >= input_type::mouse_wheel && msg.type <= input_type::mouse_double)
+                {
+                    has_mouse = true;
+                    break;
+                }
             }
+        }
+        window_size size;
+        if (has_mouse)
+            ICY_ERROR(window.size(size));
+        
+        const auto send = [this, size](const mbox::mbox_event_send_input& vec, input_message& msg)
+        {
+            if (msg.type == input_type::none)
+                return error_type();
+
+            const auto timeout = std::chrono::milliseconds(500);
+            if (msg.type >= input_type::mouse_wheel && msg.type <= input_type::mouse_double)
+            {
+                auto mouse_move = input_message(input_type::mouse_move, key::none, key_mod(msg.mods));
+                msg.point_x = mouse_move.point_x = msg.point_x * size.x / INT16_MAX;
+                msg.point_y = mouse_move.point_y = msg.point_y * size.y / INT16_MAX;
+                //ICY_ERROR(this->window.send(mouse_move, timeout));
+                ICY_ERROR(this->pipe.write(mouse_move));
+            }
+            //return this->window.send(msg, timeout);
+            ICY_ERROR(this->pipe.write(msg));
+            return error_type();
+        };
+
+        for (auto it = next_msg_priority.rbegin(); it != next_msg_priority.rend(); ++it)
+        {
+            for (auto&& msg : it->messages)
+                send(*it, msg);
         }
         next_msg_priority.clear();
 
         for (auto&& msg : next_msg.messages)
-        {
-            if (msg.type != input_type::none)
-                window.send(msg, std::chrono::milliseconds(500));
-        }
+            send(next_msg, msg);
+
         next_msg = {};
     }
     return error_type();
@@ -306,13 +348,13 @@ error_type mbox_launcher_app::run() noexcept
                 const auto& event_data = event->data<window_message>();
                 if (event_data.data.bytes.size() == sizeof(input_message))
                 {
-                    const auto input = reinterpret_cast<const input_message*>(event_data.data.bytes.data());
+                    auto input = *reinterpret_cast<const input_message*>(event_data.data.bytes.data());
                     auto set_focus = 0u;
 
                     for (auto&& focus : m_config.focus)
                     {
-                        if (focus.input.type == input->type && focus.input.key == input->key 
-                            && key_mod_and(key_mod(input->mods), key_mod(focus.input.mods)))
+                        if (focus.input.type == input.type && focus.input.key == input.key 
+                            && key_mod_and(key_mod(input.mods), key_mod(focus.input.mods)))
                         {
                             set_focus = focus.index;
                             break;
@@ -332,7 +374,15 @@ error_type mbox_launcher_app::run() noexcept
                     {
                         if (chr.window.process() == process)
                         {
-                            ICY_ERROR(m_data.system->post(chr.index, *input));
+                            if (input.type >= input_type::mouse_move &&
+                                input.type <= input_type::mouse_double)
+                            {
+                                window_size size;
+                                ICY_ERROR(chr.window.size(size));
+                                input.point_x = input.point_x * INT16_MAX / size.x;
+                                input.point_y = input.point_y * INT16_MAX / size.y;
+                            }
+                            ICY_ERROR(m_data.system->post(chr.index, input));
                             break;
                         }
                     }
@@ -357,7 +407,6 @@ error_type mbox_launcher_app::run() noexcept
                     return error_type();
 
                 auto& event_data = const_cast<mbox::mbox_event_send_input&>(event->data<mbox::mbox_event_send_input>());
-
                 for (auto&& chr : m_data.characters)
                 {
                     if (chr.index != event_data.character)
@@ -365,7 +414,7 @@ error_type mbox_launcher_app::run() noexcept
 
                     if (!chr.thread)
                         break;
-
+                            
                     ICY_ERROR(chr.thread->post(std::move(event_data)));
                     break;
                 }
@@ -964,7 +1013,10 @@ error_type mbox_launcher_app::hook(character_type& chr) noexcept
         return error_type();
 
     mbox::mbox_dll_config config;
-    config.thread = m_local->thread().index();
+    config.server_thread = m_local->thread().index();
+    config.server_hwnd = m_overlay.handle();
+    config.client_thread = chr.window.thread();
+    config.client_hwnd = chr.window.handle();
 
     config.pause_count = std::min(_countof(config.pause_array), m_config.pause.size());
     for (auto k = 0u; k < config.pause_count; ++k)
@@ -982,10 +1034,13 @@ error_type mbox_launcher_app::hook(character_type& chr) noexcept
     ICY_ERROR(config.save(chr.window.process()));
     ICY_ERROR(chr.window.hook(hook_lib, GetMessageHook));
     ICY_ERROR(chr.window.rename(chr.name));
-
+    string pipe_name;
+    ICY_ERROR(pipe_name.appendf("mbox_dll_%1"_s, chr.window.process()));
+    
     ICY_ERROR(make_shared(chr.thread));
     ICY_ERROR(create_event_system(chr.thread->queue, event_type::system_internal));
     chr.thread->window = chr.window;
+    ICY_ERROR(chr.thread->pipe.create(pipe_name));
     ICY_ERROR(chr.thread->launch());
 
     return error_type();
@@ -1008,7 +1063,7 @@ error_type mbox_launcher_app::launch_mbox() noexcept
 
     if (const auto error = create_event_system(m_data.system, m_library.data, init))
     {
-        ICY_ERROR(show_error(error, "Create mbox system"_s));
+        return show_error(error, "Create mbox system"_s);
     }
     else
     {
@@ -1028,8 +1083,11 @@ error_type mbox::mbox_dll_config::save(const uint32_t process) noexcept
     ICY_ERROR(path.appendf("%1%2.txt"_s, "mbox_config/"_s, process));
 
     json json_main = json_type::object;
-    ICY_ERROR(json_main.insert("thread"_s, thread));
-    
+    ICY_ERROR(json_main.insert("server_thread"_s, server_thread));
+    ICY_ERROR(json_main.insert("client_thread"_s, client_thread));
+    ICY_ERROR(json_main.insert("server_window"_s, uint64_t(server_hwnd)));
+    ICY_ERROR(json_main.insert("client_window"_s, uint64_t(client_hwnd)));
+
     json json_event = json_type::array;
     json json_pause = json_type::array;
     for (auto k = 0u; k < pause_count; ++k)

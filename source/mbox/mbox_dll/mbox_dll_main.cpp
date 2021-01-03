@@ -16,6 +16,16 @@
 
 using namespace icy;
 
+class mbox_application : public named_read_pipe
+{
+public:
+    error_type create() noexcept;
+    void read(const error_type error, const const_array_view<uint8_t> bytes) noexcept override;
+    mbox::mbox_dll_config config;
+    //WNDPROC proc = nullptr;
+    //void* user = nullptr;
+};
+
 static std::bitset<256> key_state() noexcept
 {
     uint8_t keyboard[0x100];
@@ -31,12 +41,47 @@ static std::bitset<256> key_state() noexcept
     return keys;
 }
 
+error_type mbox_application::create() noexcept
+{
+    array<remote_window> vec;
+    ICY_ERROR(remote_window::enumerate(vec, GetCurrentThreadId()));
+    if (vec.empty())
+        return make_unexpected_error();
+
+    ICY_ERROR(config.load());
+    string name;
+    ICY_ERROR(name.appendf("mbox_dll_%1"_s, GetCurrentProcessId()));
+    ICY_ERROR(named_read_pipe::create(name, sizeof(input_message)));
+
+    /*proc = reinterpret_cast<WNDPROC>(GetWindowLongPtrW(client_hwnd, GWLP_WNDPROC));
+    user = reinterpret_cast<void*>(GetWindowLongPtrW(client_hwnd, GWLP_USERDATA));
+
+    const auto wndproc = [](HWND, UINT, WPARAM, LPARAM) -> LRESULT
+    {
+        return 0;
+    };
+    SetWindowLongPtrW(client_hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
+    SetWindowLongPtrW(client_hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(WNDPROC(wndproc)));
+    */
+    return error_type();
+}
+void mbox_application::read(const error_type error, const const_array_view<uint8_t> bytes) noexcept
+{
+    if (error || bytes.size() != sizeof(input_message))
+        return;
+
+    const auto msg = reinterpret_cast<const input_message*>(bytes.data());
+    SetForegroundWindow(config.client_hwnd);
+    SetFocus(config.client_hwnd);
+    auto win_msg = detail::to_winapi(*msg);
+    SendMessageW(config.client_hwnd, win_msg.message, win_msg.wParam, win_msg.lParam);
+}
+
 LRESULT WINAPI GetMessageHook(int code, WPARAM wParam, LPARAM lParam)
 {
     static thread_local error_type error;
     if (error)
         return CallNextHookEx(nullptr, code, wParam, lParam);
-
 
     const auto show_error = [](const error_type& error)
     {
@@ -46,11 +91,11 @@ LRESULT WINAPI GetMessageHook(int code, WPARAM wParam, LPARAM lParam)
         return 0;
     };
 
-    static thread_local mbox::mbox_dll_config g_config;
-    static thread_local HWND g_hwnd = nullptr;
-    if (!g_hwnd)
+    static thread_local mbox_application app;
+
+    if (!app.config.server_hwnd)
     {
-        error = g_config.load(g_hwnd);
+        error = app.create();
         if (error)
         {
             show_error(error);
@@ -88,19 +133,22 @@ LRESULT WINAPI GetMessageHook(int code, WPARAM wParam, LPARAM lParam)
 
     input_message input;
     if (msg->message == WM_KEYDOWN || msg->message == WM_KEYUP)
+    {
         detail::from_winapi(input, *msg, key_state());
+    }
     else
+    {
         detail::from_winapi(input, 0, 0, *msg, key_state());
-    
+    }
     auto pause_type = mbox::mbox_pause_type::none;
-    for (auto k = 0u; k < g_config.pause_count; ++k)
+    for (auto k = 0u; k < app.config.pause_count; ++k)
     {
         if (true
-            && g_config.pause_array[k].input.type == input.type 
-            && g_config.pause_array[k].input.key == input.key
-            && key_mod_and(key_mod(g_config.pause_array[k].input.mods), key_mod(input.mods)))
+            && app.config.pause_array[k].input.type == input.type
+            && app.config.pause_array[k].input.key == input.key
+            && key_mod_and(key_mod(app.config.pause_array[k].input.mods), key_mod(input.mods)))
         {
-            pause_type = g_config.pause_array[k].type;
+            pause_type = app.config.pause_array[k].type;
         }
     }
 
@@ -123,12 +171,12 @@ LRESULT WINAPI GetMessageHook(int code, WPARAM wParam, LPARAM lParam)
         return CallNextHookEx(nullptr, code, wParam, lParam);
 
     auto skip = true;
-    for (auto k = 0u; k < g_config.event_count; ++k)
+    for (auto k = 0u; k < app.config.event_count; ++k)
     {
         if (true
-            && g_config.event_array[k].type == input.type
-            && g_config.event_array[k].key == input.key
-            && key_mod_and(key_mod(g_config.event_array[k].mods), key_mod(input.mods)))
+            && app.config.event_array[k].type == input.type
+            && app.config.event_array[k].key == input.key
+            && key_mod_and(key_mod(app.config.event_array[k].mods), key_mod(input.mods)))
         {
             skip = false;
         }
@@ -140,7 +188,7 @@ LRESULT WINAPI GetMessageHook(int code, WPARAM wParam, LPARAM lParam)
     cdata.dwData = GetCurrentProcessId();
     cdata.cbData = sizeof(input);
     cdata.lpData = &input;
-    SendMessageW(g_hwnd, WM_COPYDATA, 0, reinterpret_cast<LPARAM>(&cdata));
+    SendMessageW(app.config.server_hwnd, WM_COPYDATA, 0, reinterpret_cast<LPARAM>(&cdata));
     if (const auto code = GetLastError())
     {
         error = make_system_error(make_system_error_code(code));
@@ -161,7 +209,7 @@ LRESULT WINAPI GetMessageHook(int code, WPARAM wParam, LPARAM lParam)
     return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
-error_type mbox::mbox_dll_config::load(HWND__*& hwnd) noexcept
+error_type mbox::mbox_dll_config::load() noexcept
 {
     string path;
     ICY_ERROR(process_directory(path));
@@ -186,12 +234,14 @@ error_type mbox::mbox_dll_config::load(HWND__*& hwnd) noexcept
         || !json_pause || json_pause->type() != json_type::array)
         return make_stdlib_error(std::errc::invalid_argument);
 
-    ICY_ERROR(json.get("thread"_s, thread));    
-    array<remote_window> vec;
-    ICY_ERROR(remote_window::enumerate(vec, thread));
-    if (vec.empty())
-        return make_stdlib_error(std::errc::invalid_argument);
-    hwnd = vec[0].handle();
+    uint64_t server_hwnd_val = 0;
+    uint64_t client_hwnd_val = 0;
+    ICY_ERROR(json.get("server_thread"_s, server_thread));
+    ICY_ERROR(json.get("client_thread"_s, client_thread));
+    ICY_ERROR(json.get("server_window"_s, server_hwnd_val));
+    ICY_ERROR(json.get("client_window"_s, client_hwnd_val));
+    server_hwnd = HWND(server_hwnd_val);
+    client_hwnd = HWND(server_hwnd_val);
 
     pause_count = std::min(_countof(pause_array), json_pause->size());
     for (auto k = 0u; k < pause_count; ++k)

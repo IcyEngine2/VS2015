@@ -820,6 +820,16 @@ string_view icy::to_string(const mbox::mbox_reserved_name name) noexcept
         return "Character"_s;
     case mbox_reserved_name::group:
         return "Group"_s;
+    case mbox_reserved_name::start_timer:
+        return "StartTimer"_s;
+    case mbox_reserved_name::stop_timer:
+        return "StopTimer"_s;
+    case mbox_reserved_name::pause_timer:
+        return "PauseTimer"_s;
+    case mbox_reserved_name::resume_timer:
+        return "ResumeTimer"_s;
+    case mbox_reserved_name::on_party_init:
+        return "OnPartyInit"_s;
     }
     return ""_s;
 }

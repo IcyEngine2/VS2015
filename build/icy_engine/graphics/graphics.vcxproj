@@ -98,14 +98,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_adapter.cpp" />
-    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_d3d11.cpp" />
     <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_display.cpp" />
-    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_remote_window.cpp" />
-    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_render_commands_2d.cpp" />
-    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_render_commands_3d.cpp" />
-    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_render_factory.cpp" />
-    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_render_svg_geometry.cpp" />
-    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_render_svg_text.cpp" />
     <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_texture.cpp" />
     <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_window.cpp" />
   </ItemGroup>
@@ -113,21 +106,20 @@
     <ClInclude Include="..\..\..\include\icy_engine\graphics\icy_adapter.hpp" />
     <ClInclude Include="..\..\..\include\icy_engine\graphics\icy_display.hpp" />
     <ClInclude Include="..\..\..\include\icy_engine\graphics\icy_remote_window.hpp" />
-    <ClInclude Include="..\..\..\include\icy_engine\graphics\icy_render.hpp" />
-    <ClInclude Include="..\..\..\include\icy_engine\graphics\icy_render_math.hpp" />
-    <ClInclude Include="..\..\..\include\icy_engine\graphics\icy_render_svg.hpp" />
+    <ClInclude Include="..\..\..\include\icy_engine\graphics\icy_texture.hpp" />
     <ClInclude Include="..\..\..\include\icy_engine\graphics\icy_window.hpp" />
     <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_adapter.hpp" />
-    <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_display.hpp" />
-    <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_render_commands.hpp" />
-    <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_render_factory.hpp" />
-    <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_render_svg.hpp" />
-    <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_shader.hpp" />
-    <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_system.hpp" />
-    <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_texture.hpp" />
     <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_window.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <FxCompile Include="..\..\..\source\icy_engine\graphics\shaders\draw_simple_ps.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="..\..\..\source\icy_engine\graphics\shaders\draw_simple_vs.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
+    </FxCompile>
     <FxCompile Include="..\..\..\source\icy_engine\graphics\shaders\msaa_ps16.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>

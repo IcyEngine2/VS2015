@@ -1,0 +1,7 @@
+#include "shaders/draw_texture_vs.hpp"
+#include "shaders/draw_texture_ps.hpp"
+#include "shaders/screen_vs.hpp"
+#include "shaders/msaa_ps2.hpp"
+#include "shaders/msaa_ps4.hpp"
+#include "shaders/msaa_ps8.hpp"
+#include "shaders/msaa_ps16.hpp"

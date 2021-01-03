@@ -66,6 +66,7 @@ private:
             return queue->post(nullptr, icy::event_type::system_internal, std::move(msg));
         }
         icy::remote_window window;
+        icy::named_write_pipe pipe;
         icy::shared_ptr<icy::event_queue> queue;
     };
     struct character_type

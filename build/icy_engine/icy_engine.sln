@@ -3,16 +3,18 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.29411.108
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "core", "core\core.vcxproj", "{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_engine_core", "core\core.vcxproj", "{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "network", "network\network.vcxproj", "{9902EF57-99B8-4977-B390-8C1CB00E9688}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_engine_network", "network\network.vcxproj", "{9902EF57-99B8-4977-B390-8C1CB00E9688}"
 	ProjectSection(ProjectDependencies) = postProject
 		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC} = {B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}
 	EndProjectSection
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "graphics", "graphics\graphics.vcxproj", "{2529D4F5-C845-4B41-B789-4FCFFF27B9BA}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_engine_graphics", "graphics\graphics.vcxproj", "{2529D4F5-C845-4B41-B789-4FCFFF27B9BA}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "image", "image\image.vcxproj", "{93F213D6-C10B-4300-89C3-28C242CEFAB7}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_engine_image", "image\image.vcxproj", "{93F213D6-C10B-4300-89C3-28C242CEFAB7}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_engine_audio", "audio\audio.vcxproj", "{C85F3C45-A158-4803-BDC4-5AE36A2DFF34}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -36,6 +38,10 @@ Global
 		{93F213D6-C10B-4300-89C3-28C242CEFAB7}.Debug|x64.Build.0 = Debug|x64
 		{93F213D6-C10B-4300-89C3-28C242CEFAB7}.Release|x64.ActiveCfg = Release|x64
 		{93F213D6-C10B-4300-89C3-28C242CEFAB7}.Release|x64.Build.0 = Release|x64
+		{C85F3C45-A158-4803-BDC4-5AE36A2DFF34}.Debug|x64.ActiveCfg = Debug|x64
+		{C85F3C45-A158-4803-BDC4-5AE36A2DFF34}.Debug|x64.Build.0 = Debug|x64
+		{C85F3C45-A158-4803-BDC4-5AE36A2DFF34}.Release|x64.ActiveCfg = Release|x64
+		{C85F3C45-A158-4803-BDC4-5AE36A2DFF34}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

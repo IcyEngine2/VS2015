@@ -18,8 +18,8 @@ namespace icy
             bitcnt_network  =   0x04,
             bitcnt_console  =   0x03,
             bitcnt_window   =   0x04,
-            bitcnt_gui      =   0x06,
-            bitcnt_render   =   0x01,
+            bitcnt_gui      =   0x01,
+            bitcnt_display  =   0x01,
 
             bitcnt_user     =   0x20,
         };
@@ -32,7 +32,7 @@ namespace icy
             offset_console  =   offset_network + bitcnt_network,
             offset_window   =   offset_console + bitcnt_console,
             offset_gui      =   offset_window + bitcnt_window,
-            offset_render   =   offset_gui + bitcnt_gui,
+            offset_display  =   offset_gui + bitcnt_gui,
 
             offset_user     =   0x20,
         };
@@ -45,7 +45,7 @@ namespace icy
             mask_console    =   ((1ui64 << bitcnt_console)  - 1)    <<  offset_console,
             mask_window     =   ((1ui64 << bitcnt_window)   - 1)    <<  offset_window,
             mask_gui        =   ((1ui64 << bitcnt_gui)      - 1)    <<  offset_gui,
-            mask_render     =   ((1ui64 << bitcnt_render)   - 1)    <<  offset_render,
+            mask_display    =   ((1ui64 << bitcnt_display)   - 1)   <<  offset_display,
             mask_user       =   ((1ui64 << bitcnt_user)     - 1)    <<  offset_user,
         };
         enum : uint64_t
@@ -83,21 +83,23 @@ namespace icy
             window_data             =   1ui64   <<  (offset_window + 0x03),
             window_any              =   mask_window,
 
-            gui_action              =   1ui64   <<  (offset_gui + 0x00),    //  action index
+            /*gui_action              =   1ui64   <<  (offset_gui + 0x00),    //  action index
             gui_update              =   1ui64   <<  (offset_gui + 0x01),    //  widget index + variant
             gui_context             =   1ui64   <<  (offset_gui + 0x02),    //  widget(view) + node
             gui_select              =   1ui64   <<  (offset_gui + 0x03),    //  widget(view) + node
             gui_double              =   1ui64   <<  (offset_gui + 0x04),    //  widget(view) + node
             gui_dragdrop            =   1ui64   <<  (offset_gui + 0x05),    //  widget(target) + nodes[src, dst]
+            */
+            gui_update              =   1ui64   <<  (offset_gui + 0x00),
             gui_any                 =   mask_gui,
 
-            render_frame            =   1ui64   <<  (offset_render + 0x00),
-            render_any              =   mask_render,
+            display_update          =   1ui64   <<  (offset_display + 0x00),
+            display_any             =   mask_display,
 
             user                    =   1ui64   <<  (offset_user + 0x00),
             user_any                =   mask_user,
         };
-        static_assert(offset_user >= offset_render + bitcnt_render, "INVALID USER MESSAGE OFFSET");
+        static_assert(offset_user >= offset_display + bitcnt_display, "INVALID USER MESSAGE OFFSET");
     }
     
     using event_type = decltype(event_type_enum::none);
@@ -115,6 +117,7 @@ namespace icy
             event_data* value;
         };
     public:
+        event_system() noexcept;
         virtual ~event_system() noexcept = 0
         {
 
@@ -124,7 +127,7 @@ namespace icy
         template<typename T> error_type post(event_system* const source, const event_type type, T&& arg) noexcept;
     protected:
         void filter(const uint64_t mask) noexcept;
-        event pop() noexcept;        
+        event pop() noexcept;
     private:
         virtual error_type signal(const event_data& event) noexcept = 0;
         error_type post(event_data& new_event) noexcept;
@@ -134,6 +137,7 @@ namespace icy
         uint64_t m_mask = 0;
         static detail::rw_spin_lock g_lock;
         static event_system* g_list;
+        event_system::event_ptr m_quit;
     };
 
     class event_queue final : public event_system
@@ -187,6 +191,11 @@ namespace icy
         const clock_type::time_point time;
         const event_type type;
         const weak_ptr<event_system> source;
+        static event_data& event_quit() noexcept
+        {
+            static event_data global;
+            return global;
+        }
     private:
 #if ICY_EVENT_CHECK_TYPE
         static uint32_t next_type() noexcept
@@ -201,9 +210,13 @@ namespace icy
             return index;
         }
 #endif
+        event_data() : time(clock_type::now()), type(event_type::global_quit), m_ref(INT32_MAX)
+        {
+            
+        }
         event_data(const event_type type, weak_ptr<event_system>&& source) noexcept : time(clock_type::now()), type(type), source(std::move(source))
         {
-
+            
         }
         static error_type post(event_data& new_event) noexcept;
         static error_type create(const event_type type, event_system* const source, const size_t type_size, event_data*& new_event) noexcept;
@@ -304,10 +317,18 @@ namespace icy
             cancel();
         }
         void cancel() noexcept;
-        error_type initialize(const size_t count, const duration_type timeout) noexcept;        
+        error_type initialize(const size_t count, const duration_type timeout) noexcept;
+        size_t count() const noexcept
+        {
+            return m_count.load(std::memory_order_acquire);
+        }
+        duration_type timeout() const noexcept
+        {
+            return m_timeout;
+        }
     private:
         void* m_data = nullptr;
-        size_t m_count = 0;
+        std::atomic<size_t> m_count = 0;
         duration_type m_timeout = {};
     };
 

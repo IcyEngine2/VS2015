@@ -3,6 +3,7 @@
 
 using namespace icy;
 
+
 error_type event::post(event_system* const source, const event_type type) noexcept
 {
     event_data* new_event = nullptr;
@@ -47,6 +48,11 @@ error_type event_data::create(const event_type type, event_system* const source,
 
     new (new_event) event_data(type, make_shared_from_this(source));
     return error_type();
+}
+
+event_system::event_system() noexcept
+{
+    m_quit.value = &event_data::event_quit();
 }
 void event_system::filter(const uint64_t mask) noexcept
 {
@@ -93,17 +99,27 @@ event event_system::pop() noexcept
     if (ptr)
     {
         value.m_ptr = ptr->value;
-        icy::realloc(ptr, 0);
+
+        if (ptr->value != &event_data::event_quit())
+            icy::realloc(ptr, 0);
     }
     return value;
 }
 error_type event_system::post(event_system* const source, const event_type type) noexcept
 {
-    event_data* new_event = nullptr;
-    ICY_ERROR(event_data::create(type, source, 0, new_event));
-    const auto error = post(*new_event);
-    new_event->release();
-    return error;
+    if (type == event_type::global_quit && source == nullptr)
+    {
+        m_queue.push(&m_quit);
+        return signal(event_data::event_quit());
+    }
+    else
+    {
+        event_data* new_event = nullptr;
+        ICY_ERROR(event_data::create(type, source, 0, new_event));
+        const auto error = post(*new_event);
+        new_event->release();
+        return error;
+    }
 }
 error_type event_system::post(event_data& event) noexcept
 {

@@ -2,6 +2,7 @@
 
 #include <icy_engine/core/icy_event.hpp>
 #include <icy_engine/core/icy_input.hpp>
+#include <icy_engine/core/icy_array.hpp>
 
 struct HWND__;
 
@@ -38,7 +39,6 @@ namespace icy
     {
         return window_style(uint32_t(lhs) | uint32_t(rhs));
     }
-
     class window
     {
     public:
@@ -74,6 +74,7 @@ namespace icy
     struct window_message
     {
         uint32_t index = 0u;
+        void* handle = nullptr;
         window_state state = window_state::none;
         window_size size;
         struct
@@ -91,8 +92,8 @@ namespace icy
         {
             return const_cast<icy::thread&>(static_cast<const window_system*>(this)->thread());
         }
-        virtual error_type create(window& window, const window_flags flags = default_window_flags) const noexcept = 0;        
+        virtual error_type create(icy::window& window, const window_flags flags = default_window_flags) const noexcept = 0;        
     };
 
-    error_type create_event_system(shared_ptr<window_system>& system) noexcept;
+    error_type create_window_system(shared_ptr<window_system>& system) noexcept;
 }

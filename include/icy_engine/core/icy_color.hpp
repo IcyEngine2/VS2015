@@ -244,6 +244,10 @@ namespace icy
         {
             return uint32_t((r << shift_red) + (g << shift_green) + (b << shift_blue));
         }
+		uint32_t to_rgba() const noexcept
+		{
+			return uint32_t((r << shift_red) + (g << shift_green) + (b << shift_blue) + (a << shift_alpha));
+		}
 		void to_rgbaf(float_array rgba_array) const noexcept
 		{
 			const auto k = 1.0F / 255.0F;

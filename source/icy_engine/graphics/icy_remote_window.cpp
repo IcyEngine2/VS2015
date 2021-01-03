@@ -16,6 +16,7 @@ static decltype(&::SetWindowTextW) win32_set_window_text;
 static decltype(&::GetWindowTextW) win32_get_window_text;
 static decltype(&::GetWindowTextLengthW) win32_get_window_text_length;
 static decltype(&::GetWindowRect) win32_get_window_rect;
+static decltype(&::GetClientRect) win32_get_client_rect;
 static decltype(&::PostThreadMessageW) win32_post_thread_message;
 static decltype(&::SetWindowsHookExW) win32_set_windows_hook_ex;
 static decltype(&::UnhookWindowsHookEx) win32_unhook_windows_hook_ex;
@@ -24,6 +25,7 @@ static decltype(&::SendMessageW) win32_send_message;
 static decltype(&::SetForegroundWindow) win32_set_foreground_window;
 static decltype(&::GetForegroundWindow) win32_get_foreground_window;
 static decltype(&keybd_event) win32_keybd_event;
+static decltype(&::SetFocus) win32_set_focus;
 
 class remote_window_system_data;
 class remote_window_thread : public icy::thread
@@ -76,6 +78,36 @@ public:
     uint32_t process = 0;
     uint32_t thread = 0;
     HHOOK msghook = nullptr;
+};
+class named_write_pipe::data_type
+{
+public:
+    ~data_type() noexcept
+    {
+        if (ovl.hEvent)
+            CloseHandle(ovl.hEvent);
+        if (handle != INVALID_HANDLE_VALUE)
+            CloseHandle(handle);
+    }
+    OVERLAPPED ovl = {};
+    void* handle = INVALID_HANDLE_VALUE;
+};
+class named_read_pipe::data_type
+{
+public:
+    data_type(named_read_pipe& pipe) noexcept : pipe(pipe)
+    {
+
+    }
+    ~data_type()
+    {
+        if (handle != INVALID_HANDLE_VALUE)
+            CloseHandle(handle);
+    }
+    OVERLAPPED ovl = {};
+    named_read_pipe& pipe;
+    void* handle = INVALID_HANDLE_VALUE;
+    array<uint8_t> bytes;
 };
 
 error_type remote_window::data_type::hook(const char* const lib_name, const char* const func, const int type) noexcept
@@ -141,12 +173,14 @@ error_type remote_window::enumerate(array<remote_window>& vec, const uint32_t th
 
     ICY_WIN32_FUNC(win32_get_window_text_length, GetWindowTextLengthW);
     ICY_WIN32_FUNC(win32_get_window_text, GetWindowTextW);
+    ICY_WIN32_FUNC(win32_get_client_rect, GetClientRect);
     ICY_WIN32_FUNC(win32_get_window_rect, GetWindowRect);
     ICY_WIN32_FUNC(win32_send_message_timeout, SendMessageTimeoutW);
     ICY_WIN32_FUNC(win32_send_message, SendMessageW);
     ICY_WIN32_FUNC(win32_set_foreground_window, SetForegroundWindow);
     ICY_WIN32_FUNC(win32_get_foreground_window, GetForegroundWindow);
     ICY_WIN32_FUNC(win32_keybd_event, keybd_event);
+    ICY_WIN32_FUNC(win32_set_focus, SetFocus);
 
     library dwm = "dwmapi"_lib;
     if (dwm.initialize() == error_type())
@@ -331,6 +365,18 @@ uint32_t remote_window::process() const noexcept
 HWND__* remote_window::handle() const noexcept
 {
     return data ? data->handle : nullptr;
+}
+error_type remote_window::size(window_size& size) const noexcept
+{
+    if (!data)
+        return make_stdlib_error(std::errc::invalid_argument);
+
+    RECT rect;
+    if (!win32_get_client_rect(data->handle, &rect))
+        return last_system_error();
+    size.x = uint32_t(rect.right - rect.left);
+    size.y = uint32_t(rect.bottom - rect.top);
+    return error_type();
 }
 error_type remote_window::screen(const icy::render_d2d_rectangle_u& rect, matrix_view<color>& colors) const noexcept
 {
@@ -540,6 +586,154 @@ error_type icy::create_event_system(shared_ptr<remote_window_system>& system) no
     ICY_ERROR(make_shared(new_ptr));
     ICY_ERROR(new_ptr->initialize());
     system = std::move(new_ptr);
+    return error_type();
+}
+
+named_write_pipe::~named_write_pipe() noexcept
+{
+    if (data)
+    {
+        allocator_type::destroy(data);
+        allocator_type::deallocate(data);
+    }
+}
+error_type named_write_pipe::create(const string_view name) noexcept
+{
+    if (name.empty())
+        return make_stdlib_error(std::errc::invalid_argument);
+
+    string str;
+    ICY_ERROR(str.appendf("\\\\.\\pipe\\%1"_s, name));
+    array<wchar_t> wname;
+    ICY_ERROR(to_utf16(str, wname));
+
+    named_write_pipe copy;
+    copy.data = allocator_type::allocate<data_type>(1);
+    if (!copy.data)
+        return make_stdlib_error(std::errc::not_enough_memory);
+    allocator_type::construct(copy.data);
+
+    copy.data->handle = CreateNamedPipeW(wname.data(), PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
+        PIPE_READMODE_MESSAGE | PIPE_WAIT | PIPE_TYPE_MESSAGE, 
+        PIPE_UNLIMITED_INSTANCES, 0, 0, NMPWAIT_USE_DEFAULT_WAIT, nullptr);
+    if (copy.data->handle == INVALID_HANDLE_VALUE)
+        return last_system_error();
+
+    copy.data->ovl.hEvent = ::CreateEventW(nullptr, TRUE, TRUE, nullptr);
+    if (!copy.data->ovl.hEvent)
+        return last_system_error();
+
+    if (ConnectNamedPipe(copy.data->handle, &copy.data->ovl))
+    {
+        if (!SetEvent(copy.data->ovl.hEvent))
+            return last_system_error();
+    }
+    else
+    {
+        const auto error = last_system_error();
+        if (error.code == make_system_error_code(ERROR_IO_PENDING))
+        {
+            ;
+        }
+        else if (error.code == make_system_error_code(ERROR_PIPE_CONNECTED))
+        {
+            if (!SetEvent(copy.data->ovl.hEvent))
+                return last_system_error();
+        }
+        else
+        {
+            return error;
+        }
+    }
+
+    std::swap(data, copy.data);
+    return error_type();
+}
+error_type named_write_pipe::wait(const duration_type timeout) noexcept
+{
+    if (!data)
+        return make_stdlib_error(std::errc::invalid_argument);
+
+    auto val = ::WaitForSingleObjectEx(data->ovl.hEvent, ms_timeout(timeout), TRUE);
+    if (val == WAIT_OBJECT_0)
+        return error_type();
+    else if (val == WAIT_TIMEOUT)
+        return make_stdlib_error(std::errc::timed_out);
+
+    return last_system_error();
+}
+error_type named_write_pipe::write(const const_array_view<uint8_t> msg) noexcept
+{
+    if (!data || !msg.size())
+        return make_stdlib_error(std::errc::invalid_argument);
+
+    auto count = 0ul;
+    if (!WriteFile(data->handle, msg.data(), DWORD(msg.size()), &count, nullptr))
+        return last_system_error();
+
+    return error_type();
+}
+
+named_read_pipe::~named_read_pipe() noexcept
+{
+    if (data)
+    {
+        allocator_type::destroy(data);
+        allocator_type::deallocate(data);
+    }
+}
+error_type named_read_pipe::create(const string_view name, const size_t buffer) noexcept
+{
+    if (!buffer || name.empty())
+        return make_stdlib_error(std::errc::invalid_argument);
+
+    string str;
+    ICY_ERROR(str.appendf("\\\\.\\pipe\\%1"_s, name));
+    array<wchar_t> wname;
+    ICY_ERROR(to_utf16(str, wname));
+
+    auto new_data = allocator_type::allocate<data_type>(1);
+    if (!new_data)
+        return make_stdlib_error(std::errc::not_enough_memory);
+    ICY_SCOPE_EXIT{ allocator_type::deallocate(new_data); };
+
+    allocator_type::construct(new_data, *this);
+    ICY_SCOPE_EXIT{ allocator_type::destroy(new_data); };
+
+    ICY_ERROR(new_data->bytes.resize(buffer));
+    new_data->handle = CreateFileW(wname.data(), GENERIC_READ | FILE_WRITE_ATTRIBUTES, 
+        FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, nullptr);
+    if (new_data->handle == INVALID_HANDLE_VALUE)
+        return last_system_error();
+    
+    DWORD mode = PIPE_READMODE_MESSAGE;
+    if (!SetNamedPipeHandleState(new_data->handle, &mode, nullptr, nullptr))
+        return last_system_error();
+
+    static const LPOVERLAPPED_COMPLETION_ROUTINE func = [](DWORD error, DWORD bytes, OVERLAPPED* ovl)
+    {
+        const auto ptr = reinterpret_cast<data_type*>(ovl);
+        bytes = std::min(bytes, DWORD(ptr->bytes.size()));
+        ptr->pipe.read(error ? make_system_error(make_system_error_code(error)) : error_type(),
+            const_array_view<uint8_t>(ptr->bytes.data(), bytes));
+        if (!ReadFileEx(ptr->handle, ptr->bytes.data(), DWORD(ptr->bytes.size()), &ptr->ovl, func))
+        {
+            const auto e = last_system_error();
+            if (e.code == ERROR_IO_PENDING)
+                ;
+            else
+                ptr->pipe.read(e, const_array_view<uint8_t>());
+        }
+    };
+    if (!::ReadFileEx(new_data->handle, new_data->bytes.data(), DWORD(buffer), &new_data->ovl, func))
+    {
+        const auto e = last_system_error();
+        if (e.code == ERROR_IO_PENDING)
+            ;
+        else
+            return e;
+    }
+    std::swap(new_data, data);
     return error_type();
 }
 

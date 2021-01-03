@@ -57,11 +57,14 @@ namespace mbox
     struct mbox_dll_config
     {
         icy::error_type save(const uint32_t process) noexcept;
-        icy::error_type load(HWND__*& hwnd) noexcept;
-        uint32_t thread = 0;
+        icy::error_type load() noexcept;
+        uint32_t server_thread = 0;
+        uint32_t client_thread = 0;
         mbox_pause pause_array[0x010];
         icy::input_message event_array[0x100];
         size_t pause_count = 0;
         size_t event_count = 0;
+        HWND__* server_hwnd = nullptr;
+        HWND__* client_hwnd = nullptr;
     };
 }
