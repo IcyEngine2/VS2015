@@ -15,17 +15,13 @@ namespace icy
     struct texture;
     class thread;
 
-    struct display_event
+    struct display_message
     {
         uint64_t index = 0;
-        duration_type time = duration_type(0);
+        duration_type frame = duration_type(0);
     };
     struct display_system : public icy::event_system
     {
-        virtual ~display_system() noexcept = 0
-        {
-
-        }
         virtual const icy::thread& thread() const noexcept = 0;
         icy::thread& thread() noexcept
         {
@@ -34,7 +30,7 @@ namespace icy
         virtual error_type repaint(const texture& texture) noexcept = 0;
         virtual error_type repaint(const texture& texture, const window_size offset, const window_size size) noexcept = 0;
         virtual error_type resize(const window_size size) noexcept = 0;
-        virtual error_type frame(const duration_type duration) noexcept = 0;
+        virtual error_type frame(const duration_type delta) noexcept = 0;
     };
     error_type create_display_system(shared_ptr<display_system>& system, void* const handle, const adapter adapter) noexcept;
 }

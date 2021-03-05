@@ -20,6 +20,7 @@ namespace icy
             bitcnt_window   =   0x04,
             bitcnt_gui      =   0x01,
             bitcnt_display  =   0x01,
+            bitcnt_render   =   0x02,
 
             bitcnt_user     =   0x20,
         };
@@ -33,6 +34,7 @@ namespace icy
             offset_window   =   offset_console + bitcnt_console,
             offset_gui      =   offset_window + bitcnt_window,
             offset_display  =   offset_gui + bitcnt_gui,
+            offset_render   =   offset_display + bitcnt_display,
 
             offset_user     =   0x20,
         };
@@ -45,7 +47,8 @@ namespace icy
             mask_console    =   ((1ui64 << bitcnt_console)  - 1)    <<  offset_console,
             mask_window     =   ((1ui64 << bitcnt_window)   - 1)    <<  offset_window,
             mask_gui        =   ((1ui64 << bitcnt_gui)      - 1)    <<  offset_gui,
-            mask_display    =   ((1ui64 << bitcnt_display)   - 1)   <<  offset_display,
+            mask_display    =   ((1ui64 << bitcnt_display)  - 1)    <<  offset_display,
+            mask_render     =   ((1ui64 << bitcnt_render)   - 1)    <<  offset_render,
             mask_user       =   ((1ui64 << bitcnt_user)     - 1)    <<  offset_user,
         };
         enum : uint64_t
@@ -83,23 +86,22 @@ namespace icy
             window_data             =   1ui64   <<  (offset_window + 0x03),
             window_any              =   mask_window,
 
-            /*gui_action              =   1ui64   <<  (offset_gui + 0x00),    //  action index
-            gui_update              =   1ui64   <<  (offset_gui + 0x01),    //  widget index + variant
-            gui_context             =   1ui64   <<  (offset_gui + 0x02),    //  widget(view) + node
-            gui_select              =   1ui64   <<  (offset_gui + 0x03),    //  widget(view) + node
-            gui_double              =   1ui64   <<  (offset_gui + 0x04),    //  widget(view) + node
-            gui_dragdrop            =   1ui64   <<  (offset_gui + 0x05),    //  widget(target) + nodes[src, dst]
-            */
-            gui_update              =   1ui64   <<  (offset_gui + 0x00),
+            //gui_update              =   1ui64   <<  (offset_gui + 0x00),
+            gui_render              =   1ui64   <<  (offset_gui + 0x00),
+            //gui_query               =   1ui64   <<  (offset_gui + 0x02),
             gui_any                 =   mask_gui,
 
             display_update          =   1ui64   <<  (offset_display + 0x00),
             display_any             =   mask_display,
 
+            render_update           =   1ui64   <<  (offset_render + 0x00),
+            render_save             =   1ui64   <<  (offset_render + 0x01),
+            render_any              =   mask_render,
+
             user                    =   1ui64   <<  (offset_user + 0x00),
             user_any                =   mask_user,
         };
-        static_assert(offset_user >= offset_display + bitcnt_display, "INVALID USER MESSAGE OFFSET");
+        static_assert(offset_user >= offset_render + bitcnt_render, "INVALID USER MESSAGE OFFSET");
     }
     
     using event_type = decltype(event_type_enum::none);

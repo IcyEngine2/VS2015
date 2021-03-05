@@ -1,9 +1,9 @@
-#include <icy_gui\icy_gui.hpp>
-#include <icy_engine\core\icy_thread.hpp>
-#include <icy_engine\core\icy_string.hpp>
-#include <icy_engine\graphics\icy_window.hpp>
-#include <icy_engine\graphics\icy_adapter.hpp>
-#include <icy_engine\graphics\icy_display.hpp>
+#include <icy_gui/icy_gui.hpp>
+#include <icy_engine/core/icy_thread.hpp>
+#include <icy_engine/core/icy_file.hpp>
+#include <icy_engine/graphics/icy_adapter.hpp>
+#include <icy_engine/graphics/icy_display.hpp>
+#include <icy_engine/graphics/icy_window.hpp>
 #pragma comment(lib, "icy_engine_cored")
 #pragma comment(lib, "icy_engine_graphicsd")
 #pragma comment(lib, "icy_guid")
@@ -12,62 +12,63 @@ using namespace icy;
 
 error_type main_func()
 {
-    shared_ptr<window_system> ws;
-    ICY_ERROR(create_window_system(ws));
-    ICY_ERROR(ws->thread().launch());
-
     array<adapter> gpu;
     ICY_ERROR(adapter::enumerate(adapter_flags::d3d11 | adapter_flags::hardware | adapter_flags::debug, gpu));
     if (gpu.empty())
         return error_type();
 
-    window window;
-    ICY_ERROR(ws->create(window));
-    ICY_ERROR(window.show(true));
+    const auto adapter = gpu[0];
 
-    shared_ptr<gui_system> gui;
-    ICY_ERROR(create_gui_system(gui, render_flags::msaa_hardware, gpu[0], window.handle()));
+    shared_ptr<window_system> window_system;
+    ICY_ERROR(create_window_system(window_system));
+    ICY_ERROR(window_system->thread().launch());
+    ICY_ERROR(window_system->thread().rename("Window Thread"_s));
+
+    shared_ptr<window> window;
+    ICY_ERROR(window_system->create(window));
+    ICY_ERROR(window->show(true));
+    ICY_ERROR(window->restyle(window_style::windowed));
+
+    shared_ptr<display_system> display_system;
+    ICY_ERROR(create_display_system(display_system, window->handle(), adapter));
+    ICY_ERROR(display_system->thread().launch());
+    ICY_ERROR(display_system->thread().rename("Display Thread"_s));
+    ICY_ERROR(display_system->frame(std::chrono::milliseconds(200)));
+        
+    shared_ptr<gui_system> gui_system;
+    ICY_ERROR(create_gui_system(gui_system, adapter));
+    ICY_ERROR(gui_system->thread().launch());
+    ICY_ERROR(gui_system->thread().rename("GUI Thread"_s));
     
+    shared_ptr<gui_window> gui_window;
+    ICY_ERROR(gui_system->create_window(gui_window, window));
+    
+    array<char> bytes;
+    {
+        icy::file f1;
+        f1.open("D:/VS2015/dat/html_example.html"_s, file_access::read, file_open::open_existing, file_share::read);
+        auto size = f1.info().size;
+
+        bytes.resize(size);
+        f1.read(bytes.data(), size);
+    }
+
+    gui_layout layout;
+    layout.initialize(string_view(bytes.data(), bytes.size()));
+
+    gui_window->layout(gui_widget(), layout);
+
+
     shared_ptr<event_queue> loop;
-    ICY_ERROR(create_event_system(loop, 
-        event_type::gui_update | 
-        event_type::display_update |
-        event_type::window_input |
-        event_type::window_resize | 
-        event_type::system_error));
+    ICY_ERROR(create_event_system(loop, event_type::global_quit 
+        | event_type::gui_render
+        | event_type::display_update 
+        | event_type::window_resize 
+        | event_type::system_error));
 
-    auto main_window  = 0u;
-    auto child_window = 0u;
-    auto action = gui->action();
-    ICY_ERROR(action.modify(0, gui_widget_prop::bkcolor, gui_variant(colors::cyan)));
+    auto query = 0u;
+    gui_window->render(gui_widget(), query);
 
-    ICY_ERROR(action.create(gui_widget_type::window, main_window));
-    ICY_ERROR(action.modify(main_window, gui_widget_prop::size_width, "10%"_s));
-    ICY_ERROR(action.modify(main_window, gui_widget_prop::size_height, "250"_s));
-    ICY_ERROR(action.modify(main_window, gui_widget_prop::bkcolor, gui_variant(colors::orange)));
-    ICY_ERROR(action.modify(main_window, gui_widget_prop::offset_x, "20%"_s));
-    ICY_ERROR(action.modify(main_window, gui_widget_prop::offset_y, "125"_s));
-    
-    /*ICY_ERROR(action.create(gui_widget_type::window, child_window));
-    ICY_ERROR(action.modify(child_window, gui_widget_prop::size_width, "50%"_s));
-    ICY_ERROR(action.modify(child_window, gui_widget_prop::size_height, "50%"_s));
-    ICY_ERROR(action.modify(child_window, gui_widget_prop::bkcolor, gui_variant(colors::medium_purple)));
-    ICY_ERROR(action.modify(child_window, gui_widget_prop::offset_x, "20%"_s));
-    ICY_ERROR(action.modify(child_window, gui_widget_prop::offset_y, "20%"_s));
-    ICY_ERROR(action.modify(child_window, gui_widget_prop::parent, main_window));*/
-
-    ICY_ERROR(action.exec());
-
-    shared_ptr<texture_system> tex_system;
-    ICY_ERROR(create_texture_system(gpu[0], tex_system));
-    shared_ptr<render_texture> tex;
-    ICY_ERROR(tex_system->create(window_size(500, 500), render_flags::msaa_hardware, tex));
-
-    shared_ptr<display_system> display;
-    ICY_ERROR(create_display_system(display, window.handle(), gpu[0]));
-    ICY_ERROR(display->thread().launch());
-    ICY_ERROR(display->frame(std::chrono::milliseconds(200)));
-    
     while (true)
     {
         event event;
@@ -76,23 +77,33 @@ error_type main_func()
             break;
         
         //ICY_ERROR(gui->process(event));
-        if (event->type == event_type::gui_update)
+        if (event->type == event_type::gui_render)
         {
-            ICY_ERROR(gui->render(*tex));
-            ICY_ERROR(display->repaint(*tex));
+            const auto& event_data = event->data<gui_event>();
+            if (event_data.texture && event_data.query == query)
+            {
+                ICY_ERROR(display_system->repaint(*event_data.texture, window_size(0, 0),
+                    event_data.texture->size()));
+            }
         }
         else if (event->type == event_type::window_resize)
         {
             const auto& event_data = event->data<window_message>();
-            ICY_ERROR(display->resize(event_data.size));
+            ICY_ERROR(display_system->resize(event_data.size));
+            ICY_ERROR(gui_window->resize(event_data.size));
+            ICY_ERROR(gui_window->render(gui_widget(), query));
         }
         else if (event->type == event_type::display_update)
         {
-            const auto new_frame = event->data<display_event>();
-            const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(new_frame.time);
+            const auto event_data = event->data<display_message>();
+            const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(event_data.frame);
             string new_name;
-            ICY_ERROR(to_string("%1ms [%2]"_s, new_name, ms.count(), new_frame.index));
-            ICY_ERROR(window.rename(new_name));
+            ICY_ERROR(to_string("%1ms [%2]"_s, new_name, ms.count(), event_data.index));
+            ICY_ERROR(window->rename(new_name));
+        }
+        else if (event->type == event_type::system_error)
+        {
+            return event->data<error_type>();
         }
     }
     

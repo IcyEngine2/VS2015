@@ -1027,7 +1027,7 @@ static void css_select__finalise_selection_state(lwc_context* ctx,
 		css_select_state *state)
 {
 	if (state->results != NULL) {
-		css_select_results_destroy(ctx, state->results);
+		css_select_results_destroy(state->results);
 	}
 
 	if (state->node_data != NULL) {
@@ -1382,6 +1382,7 @@ complete:
 		goto cleanup;
 	}
 
+	state.results->ctx = ctx->ctx;
 	/* Steal the results from the selection state, so they don't get
 	 * freed when the selection state is finalised */
 	*result = state.results;
@@ -1401,11 +1402,11 @@ cleanup:
  * \param results  Result set to destroy
  * \return CSS_OK on success, appropriate error otherwise
  */
-css_error css_select_results_destroy(lwc_context* ctx, css_select_results *results)
+css_error css_select_results_destroy(css_select_results *results)
 {
 	uint32_t i;
 
-	if (results == NULL || ctx == NULL)
+	if (results == NULL)
 		return CSS_BADPARM;
 
 	for (i = 0; i < CSS_PSEUDO_ELEMENT_COUNT; i++) {
@@ -1413,8 +1414,7 @@ css_error css_select_results_destroy(lwc_context* ctx, css_select_results *resul
 			css_computed_style_destroy(results->styles[i]);
 	}
 
-	ctx->realloc(results, 0, ctx->user);
-
+	results->ctx->realloc(results, 0, results->ctx->user);
 	return CSS_OK;
 }
 
@@ -1509,6 +1509,7 @@ css_error css_select_font_faces(css_select_ctx *ctx,
 						state.author_font_faces.count);
 		}
 
+		results->ctx = ctx->ctx;
 		*result = results;
 	}
 
@@ -1533,8 +1534,7 @@ cleanup:
  * \param results  Result set to destroy
  * \return CSS_OK on success, appropriate error otherwise
  */
-css_error css_select_font_faces_results_destroy(lwc_context* ctx,
-		css_select_font_faces_results *results)
+css_error css_select_font_faces_results_destroy(css_select_font_faces_results *results)
 {
 	if (results == NULL)
 		return CSS_BADPARM;
@@ -1542,10 +1542,10 @@ css_error css_select_font_faces_results_destroy(lwc_context* ctx,
 	if (results->font_faces != NULL) {
 		/* Don't destroy the individual css_font_faces, they're owned
 		   by their respective sheets */
-		ctx->realloc(results->font_faces, 0, ctx->user);
+		results->ctx->realloc(results->font_faces, 0, results->ctx->user);
 	}
 
-	ctx->realloc(results, 0, ctx->user);
+	results->ctx->realloc(results, 0, results->ctx->user);
 
 	return CSS_OK;
 }

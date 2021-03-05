@@ -80,4 +80,15 @@ namespace icy
         class data_type;
         data_type* data = nullptr;
     };
+
+    struct texture
+    {
+        virtual ~texture() noexcept = 0
+        {
+
+        }
+        virtual void* handle() const noexcept = 0;
+        virtual window_size size() const noexcept = 0;
+        virtual icy::adapter adapter() const noexcept = 0;
+    };
 }

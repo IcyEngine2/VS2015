@@ -414,5 +414,13 @@ namespace icy
             return make_stdlib_error(std::errc::not_enough_memory);
         return error_type();
     }
+    template<typename T>
+    error_type make_unique(T&& src, unique_ptr<T>& dst) noexcept
+    {
+        dst = make_unique<T>(std::move(src));
+        if (!dst)
+            return make_stdlib_error(std::errc::not_enough_memory);
+        return error_type();
+    }
 }
 #pragma pop_macro("small")

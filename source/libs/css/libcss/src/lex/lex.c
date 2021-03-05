@@ -197,6 +197,8 @@ css_error css__lexer_create(parserutils_inputstream *input, css_lexer **lexer)
 	lex->emit_comments = false;
 	lex->currentCol = 1;
 	lex->currentLine = 1;
+	lex->realloc = input->realloc;
+	lex->user = input->user;
 
 	*lexer = lex;
 

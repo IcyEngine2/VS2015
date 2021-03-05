@@ -41,6 +41,7 @@ typedef struct css_select_results {
 	 * the corresponding pointer will be set to NULL
 	 */
 	css_computed_style *styles[CSS_PSEUDO_ELEMENT_COUNT];
+	lwc_context* ctx;
 } css_select_results;
 
 typedef enum css_select_handler_version {
@@ -161,6 +162,7 @@ typedef struct css_select_font_faces_results {
 	 */
 	css_font_face **font_faces;
 	uint32_t n_font_faces;
+	lwc_context* ctx;
 } css_select_font_faces_results;
 
 typedef enum {
@@ -224,13 +226,12 @@ css_error css_select_style(css_select_ctx *ctx, void *node,
 		const css_media *media, const css_stylesheet *inline_style,
 		css_select_handler *handler, void *pw,
 		css_select_results **result);
-css_error css_select_results_destroy(lwc_context* ctx, css_select_results *results);
+css_error css_select_results_destroy(css_select_results *results);
 
 css_error css_select_font_faces(css_select_ctx *ctx,
 		const css_media *media, lwc_string *font_family,
 		css_select_font_faces_results **result);
-css_error css_select_font_faces_results_destroy(lwc_context* ctx,
-		css_select_font_faces_results *results);
+css_error css_select_font_faces_results_destroy(css_select_font_faces_results *results);
 
 #ifdef __cplusplus
 }

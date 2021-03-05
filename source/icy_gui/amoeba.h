@@ -83,7 +83,7 @@ AM_API int  am_add(am_Constraint* cons);
 AM_API void am_remove(am_Constraint* cons);
 
 AM_API int  am_addedit(am_Var* var, am_Num strength);
-AM_API void am_suggest(am_Var* var, am_Num value);
+AM_API void am_suggest(am_Var* var, am_Num value, am_Num strength);
 AM_API void am_deledit(am_Var* var);
 
 AM_API am_Var* am_newvariable(am_Solver* solver);
@@ -1062,12 +1062,12 @@ AM_API void am_deledit(am_Var* var) {
     var->edit_value = 0.0f;
 }
 
-AM_API void am_suggest(am_Var* var, am_Num value) {
+AM_API void am_suggest(am_Var* var, am_Num value, am_Num strength) {
     am_Solver* solver = var ? var->solver : NULL;
     am_Num delta;
     if (var == NULL) return;
     if (var->constraint == NULL) {
-        am_addedit(var, AM_MEDIUM);
+        am_addedit(var, strength);
         assert(var->constraint != NULL);
     }
     delta = value - var->edit_value;
