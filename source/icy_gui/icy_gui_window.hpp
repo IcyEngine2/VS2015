@@ -2,35 +2,61 @@
 
 #include <icy_engine/core/icy_input.hpp>
 #include <icy_engine/core/icy_queue.hpp>
-#include <icy_gui/icy_gui.hpp>
+#include <icy_engine/core/icy_thread.hpp>
 #include <icy_engine/graphics/icy_window.hpp>
-#include "icy_gui_style.hpp"
+#include <icy_gui/icy_gui.hpp>
 #include "icy_gui_render.hpp"
+#include "icy_gui_attr.hpp"
 #include <cfloat>
 
+namespace icy
+{
+    class json;
+}
 class gui_texture;
+class gui_system_data;
 struct IUnknown;
-
-enum gui_widget_state : uint32_t
+struct am_Var;
+struct am_Solver;
+enum class gui_widget_item_type : uint32_t
 {
-    gui_widget_state_none       =   0x0000,
-    gui_widget_state_enabled    =   0x0001,
-    gui_widget_state_visible    =   0x0002,
-    gui_widget_state_link       =   0x0004,
-    gui_widget_state_visited    =   0x0008,
-    gui_widget_state_hovered    =   0x0010,
-    gui_widget_state_active     =   0x0020,
-    gui_widget_state_focused    =   0x0040,
-    gui_widget_state_checked    =   0x0080,
-    gui_widget_state_target     =   0x0100,
-    gui_widget_state_collapse   =   0x0200,
-    gui_widget_state_has_border =   0x0400,
+    none,
+    text,
+    vscroll_bk,
+    vscroll_min,
+    vscroll_max,
+    vscroll_val,
+    hscroll_bk,
+    hscroll_min,
+    hscroll_max,
+    hscroll_val,
 };
-struct gui_widget_text
+struct gui_widget_item_state_enum
 {
+    enum : uint32_t
+    {
+        none        =   0x00,
+        visible     =   0x01,
+        enabled     =   0x02,
+    };
+};
+using gui_widget_item_state = decltype(gui_widget_item_state_enum::none);
+struct gui_widget_item
+{
+    gui_widget_item(const gui_widget_item_type type = gui_widget_item_type::none) noexcept : type(type)
+    {
+
+    }
+    gui_widget_item_type type;
+    uint32_t state = 0u;
     icy::gui_variant value;
-    icy::color color;
-    gui_text layout;
+    icy::color color = icy::colors::white;
+    gui_text text;
+    gui_image image;
+    float x = 0;
+    float y = 0;
+    float w = 0;
+    float h = 0;
 };
 struct gui_widget_data
 {
@@ -40,139 +66,80 @@ public:
         uint32_t parent = 0;
         uint32_t index = 0;
         uint32_t offset = 0;
-        icy::string type;
-        icy::string text;
-        icy::map<icy::string, icy::string> attr;
+        icy::gui_widget_type type = icy::gui_widget_type::none;
+        icy::gui_widget_layout layout = icy::gui_widget_layout::none;
+    };
+    struct modify_args
+    {
+        uint32_t index = 0;
+        icy::string key;
+        icy::gui_variant val;
     };
     struct border_type
     {
-        int32_t size = 0;
+        float size = 0;
+        icy::color color;
     };
     struct offset_type
     {
-        //float size = 0;
+        float size = 0;
     };
     struct margin_type
     {
-        //float size = 0;
+        float size = 0;
     };
+    struct scroll_type
+    {
+        void clamp() noexcept
+        {
+            val = std::max(0.0f, std::min(std::max(0.0f, max - view_size), val));
+            exp = std::max(0.0f, std::min(std::max(0.0f, max - view_size), exp));
+        }
+        float step = 0;
+        float val = 0;
+        float exp = 0;
+        float max = 0;
+        float area_size = 0;
+        float view_size = 0;
+    };
+    static icy::error_type initialize(icy::map<uint32_t, icy::unique_ptr<gui_widget_data>>& map, const uint32_t index, const icy::json& json);
     static icy::error_type insert(icy::map<uint32_t, icy::unique_ptr<gui_widget_data>>& map, const insert_args& args) noexcept;
-    static icy::error_type modify(icy::map<uint32_t, icy::unique_ptr<gui_widget_data>>& map, const insert_args& args) noexcept;
+    static icy::error_type modify(icy::map<uint32_t, icy::unique_ptr<gui_widget_data>>& map, const modify_args& args) noexcept;
     static bool erase(icy::map<uint32_t, icy::unique_ptr<gui_widget_data>>& map, const uint32_t index) noexcept;
 public:
     gui_widget_data(const gui_widget_data* const parent = nullptr, const uint32_t index = 0) noexcept : 
         parent(parent), index(index)
     {
-        state = (gui_widget_state_enabled | gui_widget_state_visible);
-        display = 0;
-        position = 0;
         static_assert(std::is_nothrow_constructible<gui_widget_data>::value, "");
     }
-    /*void initialize(am_Solver& solver) noexcept
-    {
-        for (auto&& ref : size)
-        {
-            ref.var = am_newvariable(&solver);
-            ref.con = am_newconstraint(&solver, AM_WEAK);
-            am_addterm(ref.con, ref.var, 1);
-            am_setrelation(ref.con, AM_GREATEQUAL);
-            am_addconstant(ref.con, 0);
-            am_add(ref.con);
-        }
-        dx.var_min = am_newvariable(&solver);
-        dx.var_val = am_newvariable(&solver);
-        dx.var_max = am_newvariable(&solver);
-
-        dy.var_min = am_newvariable(&solver);
-        dy.var_val = am_newvariable(&solver);
-        dy.var_max  = am_newvariable(&solver);
-
-        dx.con_size = am_newconstraint(&solver, AM_MEDIUM);
-        dx.con_min = am_newconstraint(&solver, AM_MEDIUM);
-        dx.con_val = am_newconstraint(&solver, AM_MEDIUM);
-        dx.con_max = am_newconstraint(&solver, AM_MEDIUM);
-
-        dy.con_size = am_newconstraint(&solver, AM_MEDIUM);
-        dy.con_min = am_newconstraint(&solver, AM_MEDIUM);
-        dy.con_val = am_newconstraint(&solver, AM_MEDIUM);
-        dy.con_max = am_newconstraint(&solver, AM_MEDIUM);
-
-        am_suggest(dx.var_min, 0);
-        am_suggest(dx.var_val, 0);
-        am_suggest(dx.var_max, 0);
-
-        am_suggest(dy.var_min, 0);
-        am_suggest(dy.var_val, 0);
-        am_suggest(dy.var_max, 0);
-
-        {
-            auto con = dx.con_size;
-            am_addterm(con, size[0].var, -1);
-            am_addterm(con, size[2].var, +1);
-            am_setrelation(con, AM_EQUAL);
-            am_addterm(con, dx.var_val, 1);
-            am_add(con);
-        }
-        {
-            auto con = dy.con_size;
-            am_addterm(con, size[1].var, -1);
-            am_addterm(con, size[3].var, +1);
-            am_setrelation(con, AM_EQUAL);
-            am_addterm(con, dy.var_val, 1);
-            am_add(con);
-        }
-        {
-            auto con = dx.con_min;
-            am_addterm(con, dx.var_val, 1);
-            am_setrelation(con, AM_GREATEQUAL);
-            am_addterm(con, dx.var_min, 1);
-            am_add(con);
-        }
-        {
-            auto con = dx.con_max;
-            am_addterm(con, dx.var_val, 1);
-            am_setrelation(con, AM_LESSEQUAL);
-            am_addterm(con, dx.var_max, 1);
-            am_add(con);
-        }
-        {
-            auto con = dy.con_min;
-            am_addterm(con, dy.var_val, 1);
-            am_setrelation(con, AM_GREATEQUAL);
-            am_addterm(con, dy.var_min, 1);
-            am_add(con);
-        }
-        {
-            auto con = dy.con_max;
-            am_addterm(con, dy.var_val, 1);
-            am_setrelation(con, AM_LESSEQUAL);
-            am_addterm(con, dy.var_max, 1);
-            am_add(con);
-        }
-    }*/
 public:
     const uint32_t index;
     const gui_widget_data* parent;
     mutable icy::array<gui_widget_data*> children;
-    icy::string type;
-    struct
-    {
-        uint32_t state      :   0x10;
-        uint32_t display    :   0x05;
-        uint32_t position   :   0x03;
-    };
-    gui_widget_text text;
-    icy::map<icy::string, icy::gui_variant> attr;
-    gui_style_data inline_style;
+    icy::gui_widget_type type = icy::gui_widget_type::none;
+    icy::gui_widget_layout layout = icy::gui_widget_layout::none;
+    uint32_t state = icy::gui_widget_state::_default;
+    icy::array<gui_widget_item> items;
+    icy::map<gui_widget_attr, icy::gui_variant> attr;
 public:
-    float font_size = 0;
-    float line_size = 0;
-    gui_select_output css;
+    //float font_size = 0;
     border_type borders[4];
     margin_type margins[4];
     offset_type padding[4];
-    int32_t content_box[4] = {};
-    icy::color bkcolor;
+    am_Var* min_x = nullptr;
+    am_Var* min_y = nullptr;
+    am_Var* max_x = nullptr;
+    am_Var* max_y = nullptr;
+    float size_x = 0;
+    float size_y = 0;
+    float weight_x = 0;
+    float weight_y = 0;
+    scroll_type scroll_x;
+    scroll_type scroll_y;
+/*    float scroll_x_val = 0;
+    float scroll_x_max = 0;
+    float scroll_y_val = 0;
+    float scroll_y_max = 0;*/
 };
 struct gui_window_event_type
 {
@@ -180,6 +147,7 @@ struct gui_window_event_type
     enum { none, create, destroy, modify, render, resize } type = none;
     uint32_t index = 0;
     icy::gui_variant val;
+    const uint32_t thread = icy::thread::this_index();
     static icy::error_type make(gui_window_event_type*& new_event, const decltype(none) type) noexcept
     {
         new_event = icy::allocator_type::allocate<gui_window_event_type>(1);
@@ -199,7 +167,6 @@ struct gui_window_event_type
         new_event = nullptr;
     }
 };
-
 class gui_window_data_usr : public icy::gui_window
 {
 public:
@@ -212,28 +179,40 @@ public:
     {
         return static_cast<gui_window_event_type*>(m_events.pop());
     }
-    icy::error_type initialize() noexcept
+    icy::error_type initialize(const icy::json& json) noexcept
     {
         icy::unique_ptr<gui_widget_data> root;
         ICY_ERROR(icy::make_unique(gui_widget_data(), root));
         ICY_ERROR(m_data.insert(0u, std::move(root)));
+        ICY_ERROR(gui_widget_data::initialize(m_data, 0u, json));
+        m_index = uint32_t(m_data.size());
         return icy::error_type();
     }
 private:
     void notify(gui_window_event_type*& event) const noexcept;
-    icy::gui_widget child(const icy::gui_widget parent, const size_t offset) noexcept override;
-    icy::error_type insert(const icy::gui_widget parent, const size_t offset, const icy::string_view type, icy::gui_widget& widget) noexcept override;
-    icy::error_type erase(const icy::gui_widget widget) noexcept override;
-    icy::error_type layout(const icy::gui_widget widget, icy::gui_layout& value) noexcept override;
     icy::error_type render(const icy::gui_widget widget, uint32_t& query) const noexcept override;
     icy::error_type resize(const icy::window_size size) noexcept override;
+    icy::error_type update() noexcept override;
+    icy::gui_widget parent(const icy::gui_widget widget) const noexcept override;
+    icy::gui_widget child(const icy::gui_widget widget, size_t offset) const noexcept override;
+    size_t offset(const icy::gui_widget widget) const noexcept override;
+    icy::gui_variant query(const icy::gui_widget widget, const icy::string_view prop) const noexcept override;
+    icy::gui_widget_type type(const icy::gui_widget widget) const noexcept override;
+    icy::gui_widget_layout layout(const icy::gui_widget widget) const noexcept override;
+    icy::gui_widget_state state(const icy::gui_widget widget) const noexcept override;
+    icy::error_type modify(const icy::gui_widget widget, const icy::string_view prop, const icy::gui_variant& value) noexcept override;
+    icy::error_type insert(const icy::gui_widget parent, const size_t offset, const icy::gui_widget_type type, const icy::gui_widget_layout layout, icy::gui_widget& widget) noexcept override;
+    icy::error_type destroy(const icy::gui_widget widget) noexcept override;
+    icy::error_type find(const icy::string_view prop, const icy::gui_variant value, icy::array<icy::gui_widget>& list) const noexcept override;
 private:
     icy::weak_ptr<icy::gui_system> m_system;
     mutable icy::detail::intrusive_mpsc_queue m_events;
     icy::map<uint32_t, icy::unique_ptr<gui_widget_data>> m_data;
     uint32_t m_index = 1;
 };
-class gui_system_data;
+
+struct gui_node_data;
+class gui_model_data_sys;
 class gui_window_data_sys
 {
 public:
@@ -244,13 +223,13 @@ public:
     gui_window_data_sys(const gui_window_data_sys&) = delete;
     gui_window_data_sys(gui_window_data_sys&& rhs) noexcept = default;
     ICY_DEFAULT_MOVE_ASSIGN(gui_window_data_sys);
-    icy::error_type initialize(const icy::shared_ptr<icy::window> window) noexcept;
-    icy::error_type input(const icy::input_message& msg) noexcept;
+    icy::error_type initialize(const icy::shared_ptr<icy::window> window, const icy::json& json) noexcept;
+    icy::error_type input(const icy::input_message& msg, icy::array<icy::gui_widget>& output) noexcept;
     icy::error_type resize(const icy::window_size size) noexcept;
-    icy::error_type process(const gui_window_event_type& event) noexcept;
-    void* handle() const noexcept
+    icy::error_type process(const gui_window_event_type& event, icy::array<icy::gui_widget>& output) noexcept;
+    uint32_t window() const noexcept
     {
-        return m_window->handle();
+        return m_window_index;
     }
     icy::error_type update() noexcept;
     icy::error_type render(gui_texture& texture) noexcept;
@@ -267,46 +246,77 @@ public:
         return m_dpi;
     }
     icy::window_size size(const uint32_t widget) const noexcept;
+    icy::error_type send_data(gui_model_data_sys& model, const icy::gui_widget widget, const icy::gui_node node, const icy::gui_data_bind& func, bool& erase) const noexcept;
+    icy::error_type recv_data(const icy::gui_data_model& proxy, const gui_node_data& node, const icy::gui_widget widget, const icy::gui_data_bind& func, bool& erase) noexcept;
+    icy::error_type timer(icy::timer::pair& pair) noexcept;
+    icy::error_type reset() noexcept;
 private:
-    icy::error_type update(gui_select_system& css, gui_widget_data& widget) noexcept;
-    icy::error_type input_key_press(const icy::key key, const icy::key_mod mods) noexcept;
-    icy::error_type input_key_hold(const icy::key key, const icy::key_mod mods) noexcept;
-    icy::error_type input_key_release(const icy::key key, const icy::key_mod mods) noexcept;
-    icy::error_type input_mouse_move(const int32_t px, const int32_t py, const icy::key_mod mods) noexcept;
-    icy::error_type input_mouse_wheel(const int32_t px, const int32_t py, const icy::key_mod mods, const int32_t wheel) noexcept;
-    icy::error_type input_mouse_release(const icy::key key, const int32_t px, const int32_t py, const icy::key_mod mods) noexcept;
-    icy::error_type input_mouse_press(const icy::key key, const int32_t px, const int32_t py, const icy::key_mod mods) noexcept;
-    icy::error_type input_mouse_hold(const icy::key key, const int32_t px, const int32_t py, const icy::key_mod mods) noexcept;
-    icy::error_type input_mouse_double(const icy::key key, const int32_t px, const int32_t py, const icy::key_mod mods) noexcept;
-    icy::error_type input_text(const icy::string_view text) noexcept;
-private:
-    //struct jmp_type { jmp_buf buf; };
-    /*struct solver_type
+    struct jmp_type { jmp_buf buf; };
+    struct solver_type
     {
         solver_type()noexcept = default;
         solver_type(solver_type&& rhs) noexcept : system(rhs.system)
         {
             rhs.system = nullptr;
         }
-        ~solver_type() noexcept
-        {
-            if (system)
-                am_delsolver(system);
-        }
+        ICY_DEFAULT_MOVE_ASSIGN(solver_type);
+        ~solver_type() noexcept;
         am_Solver& operator*() const noexcept
         {
             return *system;
         }
+        operator am_Solver* () const noexcept
+        {
+            return system;
+        }
         am_Solver* system = nullptr;
-    };*/
+    };
+    struct state_type
+    {
+        explicit operator bool() const noexcept
+        {
+            return widget != 0;
+        }
+        uint32_t widget = 0;
+        uint32_t item = 0;
+        uint32_t dx = 0;
+        uint32_t dy = 0;
+    };
+    struct hover_type : state_type { };
+    struct press_type : state_type { };
+    struct focus_type : state_type { };
+private:
+    icy::error_type update(gui_widget_data& widget) noexcept;
+    //icy::error_type recalc(const gui_widget_box& parent, gui_widget_box& box) noexcept;
+    icy::error_type render(gui_texture& texture, const gui_widget_data& widget) noexcept;
+    icy::error_type input_key_press(const icy::key key, const icy::key_mod mods, icy::array<icy::gui_widget>& output) noexcept;
+    icy::error_type input_key_hold(const icy::key key, const icy::key_mod mods, icy::array<icy::gui_widget>& output) noexcept;
+    icy::error_type input_key_release(const icy::key key, const icy::key_mod mods, icy::array<icy::gui_widget>& output) noexcept;
+    icy::error_type input_mouse_move(const int32_t px, const int32_t py, const icy::key_mod mods, icy::array<icy::gui_widget>& output) noexcept;
+    icy::error_type input_mouse_wheel(const int32_t px, const int32_t py, const icy::key_mod mods, const int32_t wheel, icy::array<icy::gui_widget>& output) noexcept;
+    icy::error_type input_mouse_release(const icy::key key, const int32_t px, const int32_t py, const icy::key_mod mods, icy::array<icy::gui_widget>& output) noexcept;
+    icy::error_type input_mouse_press(const icy::key key, const int32_t px, const int32_t py, const icy::key_mod mods, icy::array<icy::gui_widget>& output) noexcept;
+    icy::error_type input_mouse_hold(const icy::key key, const int32_t px, const int32_t py, const icy::key_mod mods, icy::array<icy::gui_widget>& output) noexcept;
+    icy::error_type input_mouse_double(const icy::key key, const int32_t px, const int32_t py, const icy::key_mod mods, icy::array<icy::gui_widget>& output) noexcept;
+    icy::error_type input_text(const icy::string_view text, icy::array<icy::gui_widget>& output) noexcept;
+    icy::error_type solve_item(gui_widget_data& widget, gui_widget_item& item, const gui_font& font) noexcept;
+    icy::error_type make_view(const icy::gui_data_model& proxy, const gui_node_data& node, const icy::gui_data_bind& func, gui_widget_data& widget) noexcept;
+    icy::error_type hover_widget(const gui_widget_data& widget, const int32_t px, const int32_t py, hover_type& new_hover) const noexcept;
+    icy::error_type hover_item(const gui_widget_data& widget, const int32_t px, const int32_t py, hover_type& new_hover) const noexcept;
+private:
     gui_system_data* m_system = nullptr;
-    icy::shared_ptr<icy::window> m_window;
+    icy::weak_ptr<icy::window> m_window;
+    uint32_t m_window_index = 0;
     icy::map<uint32_t, icy::unique_ptr<gui_widget_data>> m_data;
-    //icy::unique_ptr<jmp_type> m_jmp;
-    //solver_type m_solver;
-    icy::array<gui_widget_data*> m_list;
+    icy::unique_ptr<jmp_type> m_jmp;
+    solver_type m_solver;
     uint32_t m_state = 0;
     gui_font m_font;
     float m_dpi = 96;
     icy::window_size m_size;
+    hover_type m_hover;
+    press_type m_press;
+    focus_type m_focus;
+    icy::unique_ptr<icy::timer> m_timer_scroll;
+    icy::clock_type::time_point m_timer_point;
 };

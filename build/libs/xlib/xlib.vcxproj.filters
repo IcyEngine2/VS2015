@@ -1,0 +1,699 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="Header Files\Xtrans">
+      <UniqueIdentifier>{87d8c5fa-4074-4522-a591-5b983df1f94e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\sys">
+      <UniqueIdentifier>{caf62209-7008-458b-8d9b-a35e95958cf6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\lcUniConv">
+      <UniqueIdentifier>{cb821f6f-5b42-4cb5-9a84-ce3f9fe0447b}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\..\include\libs\X11\keysymdef.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\libs\X11\X.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\libs\X11\Xfuncproto.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\libs\X11\Xlib.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\libs\X11\Xosdefs.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\libs\X11\Xutil.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\libs\X11\keysym.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\libs\X11\Xproto.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\libs\X11\XlibConf.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\libs\X11\Xatom.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\Xlibint.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\Xxcbint.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\Xintconn.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\libs\X11\Xmd.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\libs\X11\Xprotostr.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\libs\X11\Xfuncs.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\libs\X11\Xlibint.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\libs\X11\Xwinsock.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\locking.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\libs\X11\Xthreads.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\libs\X11\Xwindows.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\libs\X11\Xtrans\Xtrans.h">
+      <Filter>Header Files\Xtrans</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\libs\X11\Xos.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\libs\X11\Xw32defs.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\libs\X11\Xarch.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\libs\X11\Xauth.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\libs\X11\sys\param.h">
+      <Filter>Header Files\sys</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\ImUtil.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\Cr.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\Xprivate.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\Xatomtype.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\utlist.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\libs\X11\Xresource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\XlcPubI.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\XlcPublic.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\XlcGeneric.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\big5.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\big5_emacs.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\big5hkscs.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\cp1133.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\cp1251.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\cp1255.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\cp1256.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\gb2312.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\gbk.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\georgian_academy.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\georgian_ps.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_1.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_2.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_3.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_4.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_5.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_6.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_7.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_8.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_9.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_9e.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_10.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_11.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_13.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_14.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_15.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_16.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\jisx0201.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\jisx0208.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\jisx0212.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\koi8_c.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\koi8_r.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\koi8_u.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\ksc5601.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\mulelao.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\tatar_cyr.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\tcvn.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\tis620.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\ucs2be.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\utf8.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\viscii.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\armscii_8.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\ascii.h">
+      <Filter>Header Files\lcUniConv</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\pathmax.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\XimImSw.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\XimintL.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\XimintP.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\XimProto.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\XimTrInt.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\ks_tables.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\Key.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\XimThai.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\libs\xlib\XimTrX.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\..\source\libs\xlib\OpenDis.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\ImUtil.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\FreeGC.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\CrGC.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\CrWindow.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\ClDisplay.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\Clear.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\locking.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\DestWind.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\Macros.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\GetWAttrs.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\MapRaised.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\MapWindow.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\NextEvent.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\SelInput.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\SetBack.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\SetFore.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\ErrHndlr.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\Sync.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\SetHints.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\XlibInt.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\xcb_io.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\globals.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\ChProp.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\GetGeom.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\Pending.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\PutImage.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\UnldFont.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\ErrDes.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\Xrm.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\xcb_disp.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\Synchro.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\Quarks.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\StName.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\FreeEData.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\XlibAsync.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\lcWrap.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\lcInit.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\lcDefConv.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\lcPubWrap.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\lcUTF8.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\lcGeneric.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\lcGenConv.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\lcCharSet.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\lcCT.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\lcUtil.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\lcDB.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\lcFile.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\SetLocale.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\lcConv.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\lcPublic.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\omGeneric.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\imInt.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\Font.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\FontInfo.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\FontNames.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\TextToStr.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\GetAtomNm.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\XDefaultOMIF.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\omDefault.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\omImText.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\ImText.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\ChGC.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\Text.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\FillRcts.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\FillRct.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\omText.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\SetFont.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\SetFunc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\Text16.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\TextExt.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\TextExt16.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\lcPrTxt.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\omTextPer.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\omTextExt.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\imInsClbk.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\GetFProp.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\GetGCVals.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\GetSOwner.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\GetProp.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\IntAtom.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\lcTxtPr.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\omXChar.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\omTextEsc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\GCMisc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\imImSw.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\imLcIm.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\imThaiIm.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\imLcIc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\imLcLkup.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\lcStd.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\imRm.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\imLcFlt.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\imLcGIc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\FSWrap.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\OMWrap.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\OCWrap.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\GetRGBCMap.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\lcRM.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\lcUTF8Load.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\RegstFlt.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\PutBEvent.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\imDefIm.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\imDefLkup.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\imTransR.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\imLcPrs.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\imThaiIc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\imDefIc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\ConvSel.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\IfEvent.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\imDispch.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\imRmAttr.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\imExten.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\imDefFlt.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\imCallbk.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\imLcSIc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\imConv.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\IMWrap.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\imKStoUCS.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\imThaiFlt.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\ICWrap.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\imEvToWire.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\ModMap.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\imTrX.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\Bell.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\Flush.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\SendEvent.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\KeyBind.c">
+      <Filter>Header Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\EvToWire.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\GetPntMap.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\InitExt.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\QuExt.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\StrKeysym.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\xlib\ChWindow.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>

@@ -1,6 +1,8 @@
 #include "icy_gui_render.hpp"
 #include <icy_engine/core/icy_string.hpp>
 #include <icy_engine/graphics/icy_adapter.hpp>
+#include <icy_engine/graphics/icy_window.hpp>
+#include <icy_engine/image/icy_image.hpp>
 #include <dwrite_3.h>
 #include <d2d1_3.h>
 #include <d3d11.h>
@@ -15,6 +17,15 @@ static D2D1::ColorF d2d_color(const icy::color color) noexcept
 IDWriteTextLayout* gui_text::operator->() const noexcept
 {
 	return static_cast<IDWriteTextLayout*>(value.get());
+}
+ID2D1Bitmap* gui_image::operator->() const noexcept
+{
+	return static_cast<ID2D1Bitmap*>(value.get());
+}
+window_size gui_image::size() const noexcept
+{
+	auto value = (*this)->GetSize();
+	return window_size(lround(value.width), lround(value.height));
 }
 
 error_type gui_texture::initialize() noexcept
@@ -39,8 +50,6 @@ error_type gui_texture::initialize() noexcept
 
 	com_ptr<ID2D1Bitmap1> texture_d2d;
 	ICY_COM_ERROR(context->CreateBitmapFromDxgiSurface(dxgi, d2d_desc, &texture_d2d));
-
-	context->SetTarget(texture_d2d);
 	context->SetUnitMode(D2D1_UNIT_MODE_PIXELS);
 	m_texture_d3d = texture_d3d;
 	m_texture_d2d = texture_d2d;
@@ -63,6 +72,7 @@ adapter gui_texture::adapter() const noexcept
 void gui_texture::draw_begin(const icy::color color) noexcept
 {
 	const auto context = static_cast<ID2D1DeviceContext*>(m_context.get());
+	context->SetTarget(static_cast<ID2D1Image*>(m_texture_d2d.get()));
 	context->BeginDraw();
 	//context->SetTransform(D2D1::Matrix3x2F::Scale(0.5f, 0.5f));
 	context->Clear(d2d_color(color));
@@ -71,29 +81,56 @@ error_type gui_texture::draw_end() noexcept
 {
 	const auto context_d2d = static_cast<ID2D1DeviceContext*>(m_context.get());
 	ICY_COM_ERROR(context_d2d->EndDraw());
+	m_context = com_ptr<IUnknown>();
 	
 	auto& device = *static_cast<ID3D11Device*>(m_system->m_device_d3d.get());
 	com_ptr<ID3D11DeviceContext> context_d3d;
 	device.GetImmediateContext(&context_d3d);
 	context_d3d->Flush();
-
+	context_d3d = com_ptr<IUnknown>();
+	//context_d3d->ClearState();
 	return error_type();
 }
 error_type gui_texture::draw_text(const float x, const float y, const icy::color color, icy::com_ptr<IUnknown> text) noexcept
 {
+	if (!text || color.a == 0)
+		return error_type();
 	const auto context = static_cast<ID2D1DeviceContext*>(m_context.get());
 	com_ptr<ID2D1SolidColorBrush> brush;
 	ICY_COM_ERROR(context->CreateSolidColorBrush(d2d_color(color), &brush));
-	context->DrawTextLayout(D2D1::Point2F(x, y), static_cast<IDWriteTextLayout*>(text.get()), brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+	context->DrawTextLayout(D2D1::Point2F(x, y), static_cast<IDWriteTextLayout*>(text.get()), brush, D2D1_DRAW_TEXT_OPTIONS_NONE);
 	return error_type();
 }
 error_type gui_texture::fill_rect(const rect_type& rect, const color color) noexcept
 {
+	if (color.a == 0)
+		return error_type();
+
 	const auto context = static_cast<ID2D1DeviceContext*>(m_context.get());
 	com_ptr<ID2D1SolidColorBrush> brush;
 	ICY_COM_ERROR(context->CreateSolidColorBrush(d2d_color(color), &brush));
 	context->FillRectangle(D2D1::RectF(rect.min_x, rect.min_y, rect.max_x, rect.max_y), brush);
 	return error_type();
+}
+void gui_texture::push_clip(const rect_type& rect) noexcept
+{
+	const auto context = static_cast<ID2D1DeviceContext*>(m_context.get());
+	const auto crect = D2D1::RectF(rect.min_x, rect.min_y, rect.max_x, rect.max_y);
+	context->PushAxisAlignedClip(&crect, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+}
+void gui_texture::pop_clip() noexcept
+{
+	const auto context = static_cast<ID2D1DeviceContext*>(m_context.get());
+	context->PopAxisAlignedClip();
+}
+void gui_texture::draw_image(const rect_type& rect, const icy::com_ptr<IUnknown> image) noexcept
+{
+	if (!image)
+		return;
+
+	const auto context = static_cast<ID2D1DeviceContext*>(m_context.get());
+	const auto dst = D2D1::RectF(rect.min_x, rect.min_y, rect.max_x, rect.max_y);
+	context->DrawBitmap(static_cast<ID2D1Bitmap*>(image.get()), dst);
 }
 
 error_type gui_render_system::initialize() noexcept
@@ -118,9 +155,10 @@ error_type gui_render_system::initialize() noexcept
 		const auto level = m_adapter.flags() & adapter_flags::d3d10 ? D3D_FEATURE_LEVEL_10_1 : D3D_FEATURE_LEVEL_11_0;
 		const auto adapter = static_cast<IDXGIAdapter*>(m_adapter.handle());
 		uint32_t flags = 
-			D3D11_CREATE_DEVICE_BGRA_SUPPORT | 
-			D3D11_CREATE_DEVICE_SINGLETHREADED | 
-			D3D11_CREATE_DEVICE_PREVENT_INTERNAL_THREADING_OPTIMIZATIONS;
+			D3D11_CREATE_DEVICE_BGRA_SUPPORT 
+			//| D3D11_CREATE_DEVICE_SINGLETHREADED 
+			//| D3D11_CREATE_DEVICE_PREVENT_INTERNAL_THREADING_OPTIMIZATIONS
+			;
 		
 		if (m_adapter.flags() & adapter_flags::debug)
 			flags |= D3D11_CREATE_DEVICE_DEBUG;
@@ -140,7 +178,7 @@ error_type gui_render_system::initialize() noexcept
 		ICY_COM_ERROR(device_d3d->QueryInterface(&dxgi_device));
 
 		auto func_type = reinterpret_cast<HRESULT(WINAPI*)(IDXGIDevice*, const D2D1_CREATION_PROPERTIES*, ID2D1Device**)>(func);
-		auto props = D2D1::CreationProperties(D2D1_THREADING_MODE_SINGLE_THREADED,
+		auto props = D2D1::CreationProperties(D2D1_THREADING_MODE_MULTI_THREADED,
 			m_adapter.flags() & adapter_flags::debug ? D2D1_DEBUG_LEVEL_INFORMATION : D2D1_DEBUG_LEVEL_NONE,
 			D2D1_DEVICE_CONTEXT_OPTIONS_NONE);
 		ICY_COM_ERROR(func_type(dxgi_device, &props, &device_d2d));
@@ -195,19 +233,9 @@ error_type gui_render_system::enum_font_names(array<string>& fonts) const noexce
 	}
 	return error_type();
 }
-error_type gui_render_system::create_font(gui_font& font, HWND__* hwnd, const gui_system_font_type type) const noexcept
+error_type gui_render_system::create_font(gui_font& font, shared_ptr<icy::window> hwnd, const gui_system_font_type type) const noexcept
 {
-	auto dpi = 0u;
-	if (const auto func = ICY_FIND_FUNC(m_lib_user32, GetDpiForWindow))
-	{
-		dpi = func(hwnd);
-		if (!dpi)
-			return last_system_error();
-	}
-	else
-	{
-		dpi = 96u;// make_stdlib_error(std::errc::function_not_supported);
-	}
+	const auto dpi = hwnd->dpi();
 
 	auto ncm = NONCLIENTMETRICS{ sizeof(NONCLIENTMETRICS) };
 	if (const auto func = ICY_FIND_FUNC(m_lib_user32, SystemParametersInfoW))
@@ -276,28 +304,31 @@ error_type gui_render_system::create_text(gui_text& text, const gui_font& font, 
 	text.value = layout;
 	return error_type();
 }
+error_type gui_render_system::create_image(gui_image& output, const icy::const_array_view<uint8_t> bytes) const noexcept
+{
+	image image;
+	ICY_ERROR(image.load(global_realloc, nullptr, bytes, image_type::png));
+	matrix<color> colors(image.size().y, image.size().x);
+	if (colors.empty())
+		return make_stdlib_error(std::errc::not_enough_memory);
+	ICY_ERROR(image.view(image_size(), colors));
+
+	com_ptr<ID2D1DeviceContext> context;
+	ICY_COM_ERROR(static_cast<ID2D1Device*>(m_device_d2d.get())->CreateDeviceContext(
+		D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &context));
+
+	com_ptr<ID2D1Bitmap> bitmap;
+	auto props = D2D1::BitmapProperties(D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
+	ICY_COM_ERROR(context->CreateBitmap(D2D1::SizeU(image.size().x, image.size().y),
+		colors.data(), uint32_t(colors.cols() * 4), props, &bitmap));
+
+	output.value = std::move(bitmap);
+	return error_type();
+}
+
 error_type gui_render_system::create_texture(shared_ptr<gui_texture>& texture, const window_size size, const render_flags flags) const noexcept
 {
 	ICY_ERROR(make_shared(texture, make_shared_from_this(this), size, flags));
 	ICY_ERROR(texture->initialize());
 	return error_type();
 }
-
-/*
-	com_ptr<ID3D11Texture2D> cpu_texture;
-ICY_COM_ERROR(device.CreateTexture2D(&CD3D11_TEXTURE2D_DESC(DXGI_FORMAT_B8G8R8A8_UNORM,
-	m_size.x, m_size.y, 1, 1, 0, D3D11_USAGE_STAGING, D3D11_CPU_ACCESS_READ), nullptr, &cpu_texture));
-
-D3D11_BOX box = { 0, 0, 0, m_size.x, m_size.y, 1 };
-context_d3d->CopySubresourceRegion(cpu_texture, 0, 0, 0, 0, static_cast<ID3D11Texture2D*>(m_texture_d3d.get()), 0, &box);
-
-D3D11_MAPPED_SUBRESOURCE map;
-ICY_COM_ERROR(context_d3d->Map(cpu_texture, 0, D3D11_MAP_READ, 0, &map));
-ICY_SCOPE_EXIT{ context_d3d->Unmap(cpu_texture, 0); };
-auto dst = colors.data();
-for (auto row = 0u; row < m_size.y; ++row)
-{
-	auto ptr = reinterpret_cast<const uint32_t*>(static_cast<char*>(map.pData) + row * map.RowPitch);
-	for (auto col = 0u; col < m_size.x; ++col, ++dst)
-		*dst = color::from_rgba(ptr[col]);
-}*/

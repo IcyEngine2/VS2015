@@ -81,7 +81,7 @@ struct __declspec(align(SYSTEM_CACHE_ALIGNMENT_SIZE)) heap_unit_data
 };
 struct __declspec(align(SYSTEM_CACHE_ALIGNMENT_SIZE)) heap_tloc_data
 {
-    detail::rw_spin_lock lock;
+    mutex lock;
     size_t count = 0;
     size_t capacity = 0;
     detail::intrusive_mpsc_queue queue;
@@ -92,7 +92,7 @@ struct __declspec(align(SYSTEM_CACHE_ALIGNMENT_SIZE)) heap_stat_data
 };
 struct __declspec(align(SYSTEM_CACHE_ALIGNMENT_SIZE)) heap_trac_data 
 {
-    icy::detail::rw_spin_lock lock;
+    mutex lock;
     debug_trace_unit* units = nullptr;
 };
 class heap_base
@@ -130,6 +130,12 @@ class heap_multi : public heap_base, public thread_system
 {
 public:
     using heap_base::heap_base;
+    error_type initialize(void* const base) noexcept
+    {
+        ICY_ERROR(thread_system::initialize());
+        ICY_ERROR(heap_base::initialize(base));
+        return error_type();
+    }
     void operator()(const uint32_t, const bool attach) noexcept override
     {
         if (!attach)
@@ -402,6 +408,8 @@ error_type heap_base::initialize(void* base) noexcept
     m_tlocs.capacity = capacity.tloc / sizeof(heap_tloc_data);
     m_units.capacity = capacity.unit / page_size;
     
+    ICY_ERROR(m_tlocs.lock.initialize());
+
     if (!system_realloc(m_init.sizes, capacity.size, system_flag_commit))
         return last_system_error();
     
@@ -470,7 +478,7 @@ void* heap_base::raw_alloc(size_t size) noexcept
         }
         else
         {
-            ICY_LOCK_GUARD_READ(m_tlocs.lock);
+            ICY_LOCK_GUARD(m_tlocs.lock);
             if (m_tlocs.count)
                 tloc = m_init.tlocs;
         }
@@ -479,7 +487,7 @@ void* heap_base::raw_alloc(size_t size) noexcept
             auto next = m_tlocs.queue.pop();
             if (!next)
             {
-                ICY_LOCK_GUARD_WRITE(m_tlocs.lock);
+                ICY_LOCK_GUARD(m_tlocs.lock);
                 if (m_tlocs.count >= m_tlocs.capacity)
                     return nullptr;
 
@@ -492,7 +500,8 @@ void* heap_base::raw_alloc(size_t size) noexcept
                         return nullptr;
                 }
                 next = m_init.tlocs + m_tlocs.count;
-                new (next) heap_node_tloc;
+                tloc = new (next) heap_node_tloc;
+                
                 if (m_init.multithread)
                 {
                     if (!TlsSetValue(m_init.tls, next))
@@ -500,7 +509,7 @@ void* heap_base::raw_alloc(size_t size) noexcept
                 }
                 m_tlocs.count += 1;
             }
-            tloc = static_cast<heap_node_tloc*>(next);
+            //tloc = static_cast<heap_node_tloc*>(next);
         }
         auto& node = tloc->sizes[size_class].current;
 
@@ -638,7 +647,7 @@ void* heap_base::alloc(size_t size) noexcept
         trace_ptr->hash = hash;
         trace_ptr->func_count = trace_len;
         memcpy(trace_ptr->func_data, stack, trace_len * sizeof(void*));
-        ICY_LOCK_GUARD_WRITE(m_trace.lock);
+        ICY_LOCK_GUARD(m_trace.lock);
         trace_ptr->prev = m_trace.units;
         m_trace.units = trace_ptr;
 
@@ -665,7 +674,7 @@ void heap_base::free(const void* data_ptr) noexcept
     }
     if (m_init.debug_trace)
     {
-        ICY_LOCK_GUARD_WRITE(m_trace.lock);
+        ICY_LOCK_GUARD(m_trace.lock);
         debug_trace_unit* prev = nullptr;
         debug_trace_unit* next = m_trace.units;
         while (next)
@@ -812,7 +821,7 @@ heap_node_unit* heap_node_list::pop(heap_base& heap) noexcept
 }
 size_t icy::align_size(const size_t size) noexcept { size_t tmp; return ::align_size(size, tmp); }
 
-void detail::rw_spin_lock::lock_write() noexcept
+/*void detail::rw_spin_lock::lock_write() noexcept
 {
     AcquireSRWLockExclusive(reinterpret_cast<SRWLOCK*>(this));
 }
@@ -835,7 +844,7 @@ void detail::rw_spin_lock::unlock_read() noexcept
 void detail::rw_spin_lock::unlock_write() noexcept
 {
     ReleaseSRWLockExclusive(reinterpret_cast<SRWLOCK*>(this));
-}
+}*/
 
 error_type heap_report::create(heap_report& report, const heap& heap, void* user, error_type(*func)(void* user, const trace_info& info))
 {
@@ -847,7 +856,7 @@ error_type heap_report::create(heap_report& report, const heap& heap, void* user
     report.memory_passive = mem->m_units.count.load(std::memory_order_acquire) * unit_data_size;
     report.memory_reserved = mem->m_units.capacity * unit_data_size;
     {
-        ICY_LOCK_GUARD_READ(mem->m_tlocs.lock);
+        ICY_LOCK_GUARD(mem->m_tlocs.lock);
         report.threads_reserved = mem->m_tlocs.capacity;
         report.threads_active = mem->m_tlocs.count;
     }
@@ -866,7 +875,7 @@ error_type heap_report::create(heap_report& report, const heap& heap, void* user
 
         ICY_SCOPE_EXIT{ sym_exit(GetCurrentProcess()); };
 
-        ICY_LOCK_GUARD_WRITE(mem->m_trace.lock);
+        ICY_LOCK_GUARD(mem->m_trace.lock);
         const auto debug_trace = mem->m_init.debug_trace;
         ICY_SCOPE_EXIT{ mem->m_init.debug_trace = debug_trace; };
         mem->m_init.debug_trace = 0;

@@ -18,7 +18,7 @@ namespace icy
             bitcnt_network  =   0x04,
             bitcnt_console  =   0x03,
             bitcnt_window   =   0x04,
-            bitcnt_gui      =   0x01,
+            bitcnt_gui      =   0x02,
             bitcnt_display  =   0x01,
             bitcnt_render   =   0x02,
 
@@ -86,8 +86,8 @@ namespace icy
             window_data             =   1ui64   <<  (offset_window + 0x03),
             window_any              =   mask_window,
 
-            //gui_update              =   1ui64   <<  (offset_gui + 0x00),
-            gui_render              =   1ui64   <<  (offset_gui + 0x00),
+            gui_update              =   1ui64   <<  (offset_gui + 0x00),
+            gui_render              =   1ui64   <<  (offset_gui + 0x01),
             //gui_query               =   1ui64   <<  (offset_gui + 0x02),
             gui_any                 =   mask_gui,
 
@@ -119,6 +119,7 @@ namespace icy
             event_data* value;
         };
     public:
+        static error_type initialize() noexcept;
         event_system() noexcept;
         virtual ~event_system() noexcept = 0
         {
@@ -137,7 +138,7 @@ namespace icy
         detail::intrusive_mpsc_queue m_queue;
         event_system* m_prev = nullptr;
         uint64_t m_mask = 0;
-        static detail::rw_spin_lock g_lock;
+        static mutex g_lock;
         static event_system* g_list;
         event_system::event_ptr m_quit;
     };
@@ -160,12 +161,11 @@ namespace icy
         }
         error_type signal(const event_data& event) noexcept override
         {
-            m_cvar.wake();
-            return error_type();
+            return m_cvar.wake();
         }
     private:
-        mutex m_mutex;
-        cvar m_cvar;
+        //mutex m_mutex;
+        sync_handle m_cvar;
     };
     //error_type create_event_system(shared_ptr<event_queue>& queue, const uint64_t mask) noexcept;
 
@@ -195,7 +195,7 @@ namespace icy
         const weak_ptr<event_system> source;
         static event_data& event_quit() noexcept
         {
-            static event_data global;
+            static thread_local event_data global;
             return global;
         }
     private:

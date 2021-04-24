@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>16.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{3726e55c-09b2-4afc-aa53-a7ddc038be63}</ProjectGuid>
+    <RootNamespace>xcb</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\..\vsprops\LibDebugL2.props" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\..\vsprops\LibReleaseL2.props" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>true</LinkIncremental>
+    <IncludePath>$(ProjectDir)..\..\..\include\libs;$(ProjectDir)..\..\..\source\libs;$(ProjectDir)..\..\..\source\libs\pthreads;$(IncludePath)</IncludePath>
+    <TargetName>lib$(ProjectName)d</TargetName>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <IncludePath>$(ProjectDir)..\..\..\include\libs;$(ProjectDir)..\..\..\source\libs;$(ProjectDir)..\..\..\source\libs\pthreads;$(IncludePath)</IncludePath>
+    <TargetName>lib$(ProjectName)</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level1</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>XTHREADS;WIN32_LEAN_AND_MEAN;WIN32;_CRT_SECURE_NO_WARNINGS;HAVE_CONFIG_H;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level1</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>XTHREADS;WIN32_LEAN_AND_MEAN;WIN32;_CRT_SECURE_NO_WARNINGS;HAVE_CONFIG_H;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\..\source\libs\xcb\bigreq.c" />
+    <ClCompile Include="..\..\..\source\libs\xcb\ewmh.c" />
+    <ClCompile Include="..\..\..\source\libs\xcb\icccm.c" />
+    <ClCompile Include="..\..\..\source\libs\xcb\xcb_auth.c" />
+    <ClCompile Include="..\..\..\source\libs\xcb\xcb_aux.c" />
+    <ClCompile Include="..\..\..\source\libs\xcb\xcb_conn.c" />
+    <ClCompile Include="..\..\..\source\libs\xcb\xcb_ext.c" />
+    <ClCompile Include="..\..\..\source\libs\xcb\xcb_image.c" />
+    <ClCompile Include="..\..\..\source\libs\xcb\xcb_in.c" />
+    <ClCompile Include="..\..\..\source\libs\xcb\xcb_list.c" />
+    <ClCompile Include="..\..\..\source\libs\xcb\xcb_out.c" />
+    <ClCompile Include="..\..\..\source\libs\xcb\xcb_user.c" />
+    <ClCompile Include="..\..\..\source\libs\xcb\xcb_util.c" />
+    <ClCompile Include="..\..\..\source\libs\xcb\xcb_xid.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\..\source\libs\xcb\bigreq.h" />
+    <ClInclude Include="..\..\..\source\libs\xcb\dummyin6.h" />
+    <ClInclude Include="..\..\..\source\libs\xcb\shm.h" />
+    <ClInclude Include="..\..\..\source\libs\xcb\xcb.h" />
+    <ClInclude Include="..\..\..\source\libs\xcb\xcbext.h" />
+    <ClInclude Include="..\..\..\source\libs\xcb\xcbint.h" />
+    <ClInclude Include="..\..\..\source\libs\xcb\xcb_aux.h" />
+    <ClInclude Include="..\..\..\source\libs\xcb\xcb_bitops.h" />
+    <ClInclude Include="..\..\..\source\libs\xcb\xcb_ewmh.h" />
+    <ClInclude Include="..\..\..\source\libs\xcb\xcb_icccm.h" />
+    <ClInclude Include="..\..\..\source\libs\xcb\xcb_image.h" />
+    <ClInclude Include="..\..\..\source\libs\xcb\xcb_pixel.h" />
+    <ClInclude Include="..\..\..\source\libs\xcb\xcb_windefs.h" />
+    <ClInclude Include="..\..\..\source\libs\xcb\xc_misc.h" />
+    <ClInclude Include="..\..\..\source\libs\xcb\xproto.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

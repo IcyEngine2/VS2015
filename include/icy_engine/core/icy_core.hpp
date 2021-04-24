@@ -276,6 +276,10 @@ namespace icy
     {
         return int(rhs < lhs) - int(lhs < rhs);
     }
+    template<> inline int compare<unsigned long>(const unsigned long& lhs, const unsigned long& rhs) noexcept
+    {
+        return int(rhs < lhs) - int(lhs < rhs);
+    }
 
     template<> inline int compare<float>(const float& lhs, const float& rhs) noexcept
     {
@@ -436,7 +440,7 @@ namespace icy
     template<typename T> class array;
     enum class key : uint32_t;
     class color;
-    class cvar;
+    //class cvar;
     class mutex;
 
     using realloc_func = void* (*)(const void* const old_ptr, const size_t new_size, void* user);
@@ -545,7 +549,11 @@ namespace icy
     }
     inline error_type last_system_error() noexcept
     {
+#if _WIN32
         return error_type(make_system_error_code(GetLastError()), error_source_system);
+#else
+        return error_type(errno, error_source_system);
+#endif
     }
     error_type last_stdlib_error() noexcept;
     inline error_type make_stdlib_error(const std::errc code) noexcept
@@ -654,7 +662,6 @@ namespace icy
     
     class mutex
     {
-        friend cvar;
     public:
         mutex() noexcept = default;
         ~mutex() noexcept;
@@ -667,11 +674,26 @@ namespace icy
     private:
         char m_buffer[40] = {};
     };
-    class cvar
+    /*class cvar
     {
     public:
         void wake() noexcept;
         error_type wait(mutex& mutex, const duration_type timeout = max_timeout) noexcept;
+    private:
+        void* m_ptr = nullptr;
+    };*/
+    class sync_handle
+    {
+    public:
+        sync_handle() noexcept = default;
+        sync_handle(sync_handle&& rhs) noexcept : m_ptr(rhs.m_ptr)
+        {
+            rhs.m_ptr = nullptr;
+        }
+        ~sync_handle() noexcept;
+        error_type initialize() noexcept;
+        error_type wake() noexcept;
+        error_type wait(const duration_type timeout = max_timeout) noexcept;
     private:
         void* m_ptr = nullptr;
     };

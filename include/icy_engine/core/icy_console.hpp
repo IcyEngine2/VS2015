@@ -49,7 +49,7 @@ namespace icy
             return post(nullptr, event_type::console_read_key, std::move(event));
         }
     private:
-        mutex m_mutex;
-        cvar m_cvar;
+        //mutex m_mutex;
+        sync_handle m_sync;
     };
 }

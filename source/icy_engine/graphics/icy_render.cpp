@@ -161,8 +161,7 @@ private:
     error_type exec() noexcept override;
     error_type signal(const event_data& event) noexcept override
     {
-        m_cvar.wake();
-        return error_type();
+        return m_sync.wake();
     }
     const icy::thread& thread() const noexcept override
     {
@@ -178,8 +177,8 @@ private:
     error_type print(const render_texture_data& texture, const window_size offset, const window_size size, matrix<color>& colors) noexcept;
 private:
     const icy::adapter m_adapter;
-    mutex m_lock;
-    cvar m_cvar;
+    //mutex m_lock;
+    sync_handle m_sync;
     library m_lib_d3d = "d3d11"_lib;
     com_ptr<ID3D11Device> m_device;
     shared_ptr<render_system_thread> m_thread;   
@@ -315,7 +314,7 @@ render_system_data::~render_system_data() noexcept
 }
 error_type render_system_data::initialize() noexcept
 {
-    ICY_ERROR(m_lock.initialize());
+    ICY_ERROR(m_sync.initialize());
     ICY_ERROR(m_lib_d3d.initialize());
     ICY_ERROR(make_device(m_device));
 
@@ -404,7 +403,7 @@ error_type render_system_data::exec() noexcept
                 }
             }
         }
-        ICY_ERROR(m_cvar.wait(m_lock));
+        ICY_ERROR(m_sync.wait());
     }
     return error_type();
 }

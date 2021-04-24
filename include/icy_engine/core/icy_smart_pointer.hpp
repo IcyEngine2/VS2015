@@ -197,6 +197,10 @@ namespace icy
     {
         template<typename U> friend class shared_ptr;
         template<typename U> friend class weak_ptr;
+        friend inline int compare(const weak_ptr<T>& lhs, const weak_ptr<T>& rhs) noexcept
+        {
+            return icy::compare(lhs.m_ptr, rhs.m_ptr);
+        }
     public:
         rel_ops(weak_ptr);
         weak_ptr() noexcept = default;
@@ -212,14 +216,14 @@ namespace icy
         template<typename U>
         weak_ptr(const weak_ptr<U>& rhs) noexcept : m_ptr(rhs.m_ptr)
         {
-            static_assert(std::is_base_of<T, U>::value || std::is_same<T, U>::value, "INVALID WEAK_PTR ASSIGNMENT");
+            static_assert(std::is_base_of<T, U>::value || std::is_same<T, U>::value || std::is_same<U, T>::value, "INVALID WEAK_PTR ASSIGNMENT");
             if (m_ptr)
                 m_ptr->add_weak_ref();
         }
         template<typename U>
         weak_ptr(weak_ptr<U>&& rhs) noexcept : m_ptr(rhs.m_ptr)
         {
-            static_assert(std::is_base_of<T, U>::value || std::is_same<T, U>::value, "INVALID WEAK_PTR ASSIGNMENT");
+            static_assert(std::is_base_of<T, U>::value || std::is_same<T, U>::value || std::is_same<U, T>::value, "INVALID WEAK_PTR ASSIGNMENT");
             rhs.m_ptr = nullptr;
         }
         ICY_DEFAULT_MOVE_ASSIGN(weak_ptr);
@@ -239,7 +243,7 @@ namespace icy
         template<typename U>        
         weak_ptr(const shared_ptr<U>& rhs) noexcept : m_ptr(rhs.m_ptr)
         {
-            static_assert(std::is_base_of<T, U>::value || std::is_same<T, U>::value, "INVALID WEAK_PTR ASSIGNMENT");
+            static_assert(std::is_base_of<T, U>::value || std::is_same<T, U>::value || std::is_base_of<U, T>::value, "INVALID WEAK_PTR ASSIGNMENT");
             if (m_ptr)
                 m_ptr->add_weak_ref();
         }
@@ -289,14 +293,15 @@ namespace icy
         template<typename U>
         shared_ptr(const shared_ptr<U>& rhs) noexcept : m_ptr(rhs.m_ptr)
         {
-            static_assert(std::is_base_of<T, U>::value || std::is_same<T, U>::value, "INVALID SHARED_PTR ASSIGNMENT");
+            static_assert(std::is_base_of<T, U>::value || std::is_same<T, U>::value || std::is_base_of<U, T>::value, "INVALID SHARED_PTR ASSIGNMENT");
             if (m_ptr)
                 m_ptr->add_strong_ref();
         }
         template<typename U>
         shared_ptr(shared_ptr<U>&& rhs) noexcept : m_ptr(rhs.m_ptr)
         {
-            static_assert(std::is_base_of<T, U>::value || std::is_same<T, U>::value, "INVALID WEAK_PTR ASSIGNMENT");
+            static_assert(std::is_base_of<T, U>::value || std::is_same<T, U>::value ||
+                std::is_base_of<U, T>::value, "INVALID SHARED_PTR ASSIGNMENT");
             rhs.m_ptr = nullptr;
         }
         ICY_DEFAULT_MOVE_ASSIGN(shared_ptr);
@@ -422,5 +427,6 @@ namespace icy
             return make_stdlib_error(std::errc::not_enough_memory);
         return error_type();
     }
+
 }
 #pragma pop_macro("small")

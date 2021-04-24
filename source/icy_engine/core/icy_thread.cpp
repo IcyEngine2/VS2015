@@ -15,7 +15,8 @@
 using namespace icy;
 
 ICY_STATIC_NAMESPACE_BEG
-icy::detail::rw_spin_lock g_lock;
+std::atomic<uint64_t> g_count = 0;
+icy::mutex g_lock;
 icy::thread_system* g_list = nullptr;
 ICY_STATIC_NAMESPACE_END
 
@@ -131,36 +132,45 @@ ICY_STATIC_NAMESPACE_END*/
 
 void icy::thread_system::notify(const uint32_t index, const bool attach) noexcept
 {
-    ICY_LOCK_GUARD_WRITE(g_lock);
+    ICY_LOCK_GUARD(g_lock);
     for (auto ptr = g_list; ptr; ptr = ptr->m_prev)
         (*ptr)(index, attach);
 }
-icy::thread_system::thread_system() noexcept
+error_type thread_system::initialize() noexcept
 {
-    ICY_LOCK_GUARD_WRITE(g_lock);
-    m_prev = g_list;
-    //static const bool g_init = dll_init();
-    g_list = this;
+    if (g_count.fetch_add(1, std::memory_order_release) == 0)
+    {
+        ICY_ERROR(g_lock.initialize());
+    }
+    {
+        ICY_LOCK_GUARD(g_lock);
+        m_prev = g_list;
+        //static const bool g_init = dll_init();
+        g_list = this;
+    }
+    return error_type();
 }
 icy::thread_system::~thread_system() noexcept
 {
-    ICY_LOCK_GUARD_WRITE(g_lock);
-    thread_system* prev = nullptr;
-    thread_system* next = g_list;
-    while (next)
     {
-        if (next == this)
+        ICY_LOCK_GUARD(g_lock);
+        thread_system* prev = nullptr;
+        thread_system* next = g_list;
+        while (next)
         {
-            if (prev)
-                prev->m_prev = next->m_prev;
+            if (next == this)
+            {
+                if (prev)
+                    prev->m_prev = next->m_prev;
+                else
+                    g_list = next->m_prev;
+                break;
+            }
             else
-                g_list = next->m_prev;
-            break;
-        }
-        else
-        {
-            prev = next;
-            next = next->m_prev;
+            {
+                prev = next;
+                next = next->m_prev;
+            }
         }
     }
 }
@@ -177,9 +187,15 @@ struct thread::data_type
                 ICY_LOCK_GUARD(lock);
                 state = thread_state::done;
             }
-            cvar.wake();
-            WaitForSingleObject(handle, ms_timeout(timeout));
-            CloseHandle(handle);
+            if (const auto error_ = sync.wake())
+            {
+                error = error_;
+            }
+            else
+            {
+                WaitForSingleObject(handle, ms_timeout(timeout));
+                CloseHandle(handle);
+            }
             handle = nullptr;
         }
         return error;
@@ -191,7 +207,7 @@ struct thread::data_type
             thread_system::notify(index, false);
     }
     mutex lock;
-    cvar cvar;
+    sync_handle sync;
     thread_state state = thread_state::none;
     uint32_t index = 0u;
     uint32_t source = 0u;
@@ -287,6 +303,7 @@ error_type thread::launch() noexcept
     ICY_SCOPE_EXIT{ if (!success) wait(); };
     
     ICY_ERROR(m_data->lock.initialize());
+    ICY_ERROR(m_data->sync.initialize());
     m_data->source = this_index();
 
     const auto proc = [](void* ptr)
@@ -297,14 +314,14 @@ error_type thread::launch() noexcept
             ICY_LOCK_GUARD(thr->m_data->lock);
             thr->m_data->state = thread_state::run;
         }
-        thr->m_data->cvar.wake();
+        thr->m_data->sync.wake();
         const auto error = thr->run();
         {
             ICY_LOCK_GUARD(thr->m_data->lock);
             thr->m_data->state = thread_state::done;
             thr->m_data->error = error;
         }
-        thr->m_data->cvar.wake();
+        thr->m_data->sync.wake();
         return 0u;
     };
     m_data->handle = reinterpret_cast<HANDLE>(_beginthreadex(nullptr, 0, proc, this, 0, &m_data->index));
@@ -315,7 +332,7 @@ error_type thread::launch() noexcept
     
     while (true)
     {
-        if (const auto error = m_data->cvar.wait(m_data->lock, std::chrono::milliseconds(200)))
+        if (const auto error = m_data->sync.wait(std::chrono::milliseconds(200)))
         {
             if (error == make_stdlib_error(std::errc::timed_out))
                 ;

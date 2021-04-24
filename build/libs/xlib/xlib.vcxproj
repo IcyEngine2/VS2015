@@ -1,0 +1,328 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>16.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{db26f535-62a6-43bd-9103-cbb76109e0b0}</ProjectGuid>
+    <RootNamespace>xlib</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\..\vsprops\LibDebugL2.props" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\..\vsprops\LibReleaseL2.props" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>true</LinkIncremental>
+    <IncludePath>$(ProjectDir)..\..\..\include\libs;$(ProjectDir)..\..\..\source\libs;$(ProjectDir)..\..\..\source\libs\pthreads;$(IncludePath)</IncludePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <IncludePath>$(ProjectDir)..\..\..\include\libs;$(ProjectDir)..\..\..\source\libs;$(ProjectDir)..\..\..\source\libs\pthreads;$(IncludePath)</IncludePath>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level1</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>XKB;XTHREADS;WIN32_LEAN_AND_MEAN;WIN32;_CRT_SECURE_NO_WARNINGS;HAVE_CONFIG_H;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>true</LinkLibraryDependencies>
+    </ProjectReference>
+    <Lib>
+      <AdditionalDependencies>ws2_32.lib;libxcbd.lib;libxkbd.lib;libxpmd.lib;libxaud.lib;libpthreadsd.lib</AdditionalDependencies>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level1</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>XKB;XTHREADS;WIN32_LEAN_AND_MEAN;WIN32;_CRT_SECURE_NO_WARNINGS;HAVE_CONFIG_H;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>true</LinkLibraryDependencies>
+    </ProjectReference>
+    <Lib>
+      <AdditionalDependencies>ws2_32.lib;libxcb.lib;libxkb.lib;libxpm.lib;libxau.lib;libpthreads.lib</AdditionalDependencies>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\..\include\libs\X11\keysym.h" />
+    <ClInclude Include="..\..\..\include\libs\X11\keysymdef.h" />
+    <ClInclude Include="..\..\..\include\libs\X11\sys\param.h" />
+    <ClInclude Include="..\..\..\include\libs\X11\X.h" />
+    <ClInclude Include="..\..\..\include\libs\X11\Xarch.h" />
+    <ClInclude Include="..\..\..\include\libs\X11\Xatom.h" />
+    <ClInclude Include="..\..\..\include\libs\X11\Xauth.h" />
+    <ClInclude Include="..\..\..\include\libs\X11\Xfuncproto.h" />
+    <ClInclude Include="..\..\..\include\libs\X11\Xfuncs.h" />
+    <ClInclude Include="..\..\..\include\libs\X11\Xlib.h" />
+    <ClInclude Include="..\..\..\include\libs\X11\XlibConf.h" />
+    <ClInclude Include="..\..\..\include\libs\X11\Xlibint.h" />
+    <ClInclude Include="..\..\..\include\libs\X11\Xmd.h" />
+    <ClInclude Include="..\..\..\include\libs\X11\Xos.h" />
+    <ClInclude Include="..\..\..\include\libs\X11\Xosdefs.h" />
+    <ClInclude Include="..\..\..\include\libs\X11\Xproto.h" />
+    <ClInclude Include="..\..\..\include\libs\X11\Xprotostr.h" />
+    <ClInclude Include="..\..\..\include\libs\X11\Xresource.h" />
+    <ClInclude Include="..\..\..\include\libs\X11\Xthreads.h" />
+    <ClInclude Include="..\..\..\include\libs\X11\Xtrans\Xtrans.h" />
+    <ClInclude Include="..\..\..\include\libs\X11\Xutil.h" />
+    <ClInclude Include="..\..\..\include\libs\X11\Xw32defs.h" />
+    <ClInclude Include="..\..\..\include\libs\X11\Xwindows.h" />
+    <ClInclude Include="..\..\..\include\libs\X11\Xwinsock.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\Cr.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\ImUtil.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\Key.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\ks_tables.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\armscii_8.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\ascii.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\big5.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\big5hkscs.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\big5_emacs.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\cp1133.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\cp1251.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\cp1255.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\cp1256.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\gb2312.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\gbk.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\georgian_academy.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\georgian_ps.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_1.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_10.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_11.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_13.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_14.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_15.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_16.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_2.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_3.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_4.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_5.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_6.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_7.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_8.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_9.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\iso8859_9e.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\jisx0201.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\jisx0208.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\jisx0212.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\koi8_c.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\koi8_r.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\koi8_u.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\ksc5601.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\mulelao.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\tatar_cyr.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\tcvn.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\tis620.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\ucs2be.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\utf8.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\lcUniConv\viscii.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\locking.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\pathmax.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\utlist.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\Xatomtype.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\XimImSw.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\XimintL.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\XimintP.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\XimProto.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\XimThai.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\XimTrInt.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\XimTrX.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\Xintconn.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\XlcGeneric.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\XlcPubI.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\XlcPublic.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\Xlibint.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\Xprivate.h" />
+    <ClInclude Include="..\..\..\source\libs\xlib\Xxcbint.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\..\source\libs\xlib\Bell.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\ChGC.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\ChProp.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\ChWindow.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\ClDisplay.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\Clear.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\ConvSel.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\CrGC.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\CrWindow.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\DestWind.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\ErrDes.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\ErrHndlr.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\EvToWire.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\FillRct.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\FillRcts.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\Flush.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\Font.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\FontInfo.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\FontNames.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\FreeEData.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\FreeGC.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\FSWrap.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\GCMisc.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\GetAtomNm.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\GetFProp.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\GetGCVals.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\GetGeom.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\GetPntMap.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\GetProp.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\GetRGBCMap.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\GetSOwner.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\GetWAttrs.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\globals.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\ICWrap.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\IfEvent.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\imCallbk.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\imConv.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\imDefFlt.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\imDefIc.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\imDefIm.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\imDefLkup.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\imDispch.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\imEvToWire.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\imExten.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\imImSw.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\imInsClbk.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\imInt.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\imKStoUCS.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\imLcFlt.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\imLcGIc.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\imLcIc.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\imLcIm.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\imLcLkup.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\imLcPrs.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\imLcSIc.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\imRm.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\imRmAttr.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\ImText.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\imThaiFlt.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\imThaiIc.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\imThaiIm.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\imTransR.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\imTrX.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\ImUtil.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\IMWrap.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\InitExt.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\IntAtom.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\KeyBind.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\lcCharSet.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\lcConv.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\lcCT.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\lcDB.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\lcDefConv.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\lcFile.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\lcGenConv.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\lcGeneric.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\lcInit.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\lcPrTxt.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\lcPublic.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\lcPubWrap.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\lcRM.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\lcStd.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\lcTxtPr.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\lcUTF8.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\lcUTF8Load.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\lcUtil.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\lcWrap.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\locking.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\Macros.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\MapRaised.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\MapWindow.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\ModMap.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\NextEvent.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\OCWrap.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\omDefault.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\omGeneric.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\omImText.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\omText.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\omTextEsc.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\omTextExt.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\omTextPer.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\OMWrap.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\omXChar.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\OpenDis.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\Pending.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\PutBEvent.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\PutImage.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\Quarks.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\QuExt.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\RegstFlt.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\SelInput.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\SendEvent.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\SetBack.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\SetFont.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\SetFore.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\SetFunc.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\SetHints.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\SetLocale.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\StName.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\StrKeysym.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\Sync.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\Synchro.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\Text.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\Text16.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\TextExt.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\TextExt16.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\TextToStr.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\UnldFont.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\xcb_disp.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\xcb_io.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\XDefaultOMIF.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\XlibAsync.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\XlibInt.c" />
+    <ClCompile Include="..\..\..\source\libs\xlib\Xrm.c" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

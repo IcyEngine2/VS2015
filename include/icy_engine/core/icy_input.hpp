@@ -61,7 +61,7 @@ namespace icy
 	{
 		enum
 		{
-			u16_max = 2,
+			u8_max = 4,
 		};
 		explicit operator bool() const noexcept
 		{
@@ -80,16 +80,26 @@ namespace icy
         {
 
         }
-        explicit input_message(const wchar_t* const wstring) noexcept : type(input_type::text), text{}
+        input_message(const void*) = delete;
+        explicit input_message(const string_view str) noexcept : type(input_type::text), text{}
 		{
-			for (auto k = 0_z; k < u16_max && wstring && wstring[k]; ++k)
-				text[k] = wstring[k];
+            auto k = 0u;
+            for (auto it = str.begin(); it != str.end(); ++it)
+            {
+                const auto substr = string_view(it, it + 1);
+                const auto bytes = substr.bytes();
+                if (bytes.size() > u8_max)
+                    break;
+
+                for (auto n = 0u; n < bytes.size(); ++n, ++k)
+                    text[k] = bytes[n];
+            }
 		}
 		ICY_DEFAULT_COPY_ASSIGN(input_message);
         const input_type type;
         union
         {
-            wchar_t text[u16_max];
+            char text[u8_max];
             const bool active;
             key key;
         };

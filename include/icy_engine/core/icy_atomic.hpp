@@ -4,8 +4,8 @@
 #include <atomic>
 
 #define ICY_LOCK_GUARD(MUTEX) icy::detail::lock_guard<decltype(MUTEX)> ICY_ANONYMOUS_VARIABLE(ICY_LOCK_GUARD_) { MUTEX } 
-#define ICY_LOCK_GUARD_READ(MUTEX) icy::detail::lock_guard_read<decltype(MUTEX)> ICY_ANONYMOUS_VARIABLE(ICY_LOCK_GUARD_READ_) { MUTEX } 
-#define ICY_LOCK_GUARD_WRITE(MUTEX) icy::detail::lock_guard_write<decltype(MUTEX)> ICY_ANONYMOUS_VARIABLE(ICY_LOCK_GUARD_WRITE_) { MUTEX } 
+//#define ICY_LOCK_GUARD_READ(MUTEX) icy::detail::lock_guard_read<decltype(MUTEX)> ICY_ANONYMOUS_VARIABLE(ICY_LOCK_GUARD_READ_) { MUTEX } 
+//#define ICY_LOCK_GUARD_WRITE(MUTEX) icy::detail::lock_guard_write<decltype(MUTEX)> ICY_ANONYMOUS_VARIABLE(ICY_LOCK_GUARD_WRITE_) { MUTEX } 
 
 #pragma warning(push)
 #pragma warning(disable:4296)
@@ -67,7 +67,7 @@ namespace icy
 		private:
             std::atomic_flag m_flag;
         };*/
-        class rw_spin_lock
+        /*class rw_spin_lock
         {
         public:
             rw_spin_lock() noexcept = default;
@@ -80,7 +80,7 @@ namespace icy
             void unlock_write() noexcept;
         private:
             void* m_ptr = nullptr;
-        };
+        };*/
         /*template<size_t spin = 0> class rw_spin_lock
         {
         protected:

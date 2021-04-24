@@ -4,16 +4,16 @@
 
 namespace icy
 {
-   
     class thread_system
     {
     public:
         static void notify(const unsigned index, bool attach) noexcept;
-        thread_system() noexcept;
+        thread_system() noexcept = default;
         thread_system(const thread_system& rhs) noexcept = delete;
         ~thread_system() noexcept;
     protected:
         virtual void operator()(const unsigned index, const bool attach) noexcept = 0;
+        error_type initialize() noexcept;
     private:
         thread_system* m_prev = nullptr;
     };

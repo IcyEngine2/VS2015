@@ -3,6 +3,8 @@
 #include <icy_engine/core/icy_event.hpp>
 #include <icy_engine/core/icy_input.hpp>
 #include <icy_engine/core/icy_array.hpp>
+#include <icy_engine/core/icy_matrix.hpp>
+#include <icy_engine/core/icy_color.hpp>
 
 namespace icy
 {
@@ -49,14 +51,16 @@ namespace icy
 
         }
         virtual shared_ptr<window_system> system() noexcept = 0;
+        virtual uint32_t index() const noexcept = 0;
         virtual error_type restyle(const window_style style) noexcept = 0;
         virtual error_type rename(const string_view name) noexcept = 0;
         virtual error_type show(const bool value) noexcept = 0;
         virtual error_type cursor(const uint32_t priority, const shared_ptr<window_cursor> cursor) noexcept = 0;
-        virtual void* handle() const noexcept = 0;
+        virtual error_type win_handle(void*& handle) const noexcept = 0;
         virtual window_flags flags() const noexcept = 0;
         virtual window_size size() const noexcept = 0;
         virtual uint32_t dpi() const noexcept = 0;
+        virtual error_type repaint(matrix<color>&& colors) noexcept = 0;
     };
 
 
@@ -76,7 +80,7 @@ namespace icy
 
     struct window_message
     {
-        weak_ptr<window> window;
+        uint32_t window = 0;
         window_state state = window_state::none;
         window_size size;
         struct

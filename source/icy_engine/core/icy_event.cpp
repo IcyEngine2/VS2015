@@ -24,7 +24,7 @@ void event_data::release() noexcept
 }
 error_type event_data::post(event_data& new_event) noexcept
 {
-    ICY_LOCK_GUARD_READ(event_system::g_lock);
+    ICY_LOCK_GUARD(event_system::g_lock);
     auto next = event_system::g_list;
     auto error = error_type{};
     while (next)
@@ -50,6 +50,10 @@ error_type event_data::create(const event_type type, event_system* const source,
     return error_type();
 }
 
+error_type event_system::initialize() noexcept
+{
+    return g_lock.initialize();
+}
 event_system::event_system() noexcept
 {
     m_quit.value = &event_data::event_quit();
@@ -59,7 +63,7 @@ void event_system::filter(const uint64_t mask) noexcept
     if (mask == m_mask)
         return;
 
-    ICY_LOCK_GUARD_WRITE(g_lock);
+    ICY_LOCK_GUARD(g_lock);
     if (mask)
     {
         m_prev = g_list;
@@ -133,14 +137,15 @@ error_type event_system::post(event_data& event) noexcept
     ICY_ERROR(signal(event));
     return error_type();
 }
-detail::rw_spin_lock event_system::g_lock;
+mutex event_system::g_lock;
 event_system* event_system::g_list;
 
 error_type icy::create_event_system(shared_ptr<event_queue>& queue, const uint64_t mask) noexcept
 {
     shared_ptr<event_queue> new_queue;
     ICY_ERROR(make_shared(new_queue, event_queue::tag()));
-    ICY_ERROR(new_queue->m_mutex.initialize());
+    //ICY_ERROR(new_queue->m_mutex.initialize());
+    ICY_ERROR(new_queue->m_cvar.initialize());
     new_queue->filter(mask);
     queue = std::move(new_queue);
     return error_type();
@@ -154,7 +159,7 @@ error_type event_queue::pop(event& event, const duration_type timeout) noexcept
             break;
         if (timeout == duration_type())
             break;
-        ICY_ERROR(m_cvar.wait(m_mutex, timeout));
+        ICY_ERROR(m_cvar.wait(timeout));
     }
     return error_type();
 }

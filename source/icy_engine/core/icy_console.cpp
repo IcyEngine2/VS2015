@@ -34,7 +34,8 @@ error_type icy::create_event_system(shared_ptr<console_system>& system) noexcept
 
     shared_ptr<console_system> new_system;
     ICY_ERROR(make_shared(new_system, console_system::tag()));
-    ICY_ERROR(new_system->m_mutex.initialize());   
+    //ICY_ERROR(new_system->m_mutex.initialize());   
+    ICY_ERROR(new_system->m_sync.initialize());   
     new_system->filter(event_type::console_any);
     system = std::move(new_system);
     new_console = false;
@@ -142,7 +143,7 @@ error_type console_system::exec() noexcept
                 ICY_ERROR(event::post(this, event_type::console_read_line, std::move(new_event)));
             }
         }
-        ICY_ERROR(m_cvar.wait(m_mutex));
+        ICY_ERROR(m_sync.wait());
     }
     return error_type();
 }
@@ -157,7 +158,7 @@ error_type console_system::signal(const event_data& event) noexcept
         if (!WriteConsoleInputW(GetStdHandle(STD_INPUT_HANDLE), buffer, _countof(buffer), &count))
             return last_system_error();
     }
-    m_cvar.wake();
+    ICY_ERROR(m_sync.wake());
     return error_type();
 }
 /*error_type console_system::read_line(string& str) noexcept

@@ -2,6 +2,7 @@
 
 #include <icy_engine/core/icy_event.hpp>
 #include "icy_adapter.hpp"
+#include "icy_window.hpp"
 
 namespace icy
 {
@@ -32,5 +33,5 @@ namespace icy
         virtual error_type resize(const window_size size) noexcept = 0;
         virtual error_type frame(const duration_type delta) noexcept = 0;
     };
-    error_type create_display_system(shared_ptr<display_system>& system, void* const handle, const adapter adapter) noexcept;
+    error_type create_display_system(shared_ptr<display_system>& system, shared_ptr<window> window, const adapter adapter) noexcept;
 }

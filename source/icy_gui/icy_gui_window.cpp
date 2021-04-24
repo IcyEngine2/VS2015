@@ -1,14 +1,14 @@
+#include <icy_engine/core/icy_json.hpp>
 #include "icy_gui_window.hpp"
 #include "icy_gui_system.hpp"
 #include "icy_gui_render.hpp"
-#include "icy_gui_style.hpp"
 #include "icy_gui_system.hpp"
-#include "default_style.hpp"
+#include "icy_gui_attr.hpp"
+#include <dwrite.h>
+#include <d2d1.h>
 #define AM_USE_FLOAT
 #define AM_STATIC_API
 #include "amoeba.h"
-#include "../libs/css/libcss/include/libcss/libcss.h"
-#include <dwrite.h>
 using namespace icy;
 
 ICY_STATIC_NAMESPACE_BEG
@@ -16,29 +16,136 @@ ICY_STATIC_NAMESPACE_BEG
 enum gui_window_state
 {
     gui_window_state_none       =   0x00,
-    gui_window_state_has_list   =   0x01,
+    gui_window_state_updated    =   0x01,
 };
-struct gui_widget_box
-{
-	gui_widget_data* widget = nullptr;
-	am_Var* min_x = nullptr;
-	am_Var* min_y = nullptr;
-	am_Var* max_x = nullptr;
-	am_Var* max_y = nullptr;
-	array<gui_widget_block> children;
-};
-struct gui_widget_inline
-{
-
-};
-
 ICY_STATIC_NAMESPACE_END
 
+gui_window_data_sys::solver_type::~solver_type() noexcept
+{
+	if (system)
+		am_delsolver(system);
+}
+error_type gui_widget_data::initialize(map<uint32_t, unique_ptr<gui_widget_data>>& data, const uint32_t index, const json& json)
+{
+    if (json.type() != json_type::object)
+        return error_type();
+
+    auto it = data.find(index);
+    auto& widget = *it->value;
+
+    for (auto k = 0u; k < json.size(); ++k)
+    {
+        const auto& key = json.keys()[k];
+        if (hash(key) != "type"_hash)
+            continue;
+
+        const auto& val = json.vals()[k];
+        widget.type = gui_str_to_type(val.get());
+
+        switch (widget.type)
+        {
+        case gui_widget_type::edit_line:
+        case gui_widget_type::edit_text:
+        case gui_widget_type::view_combo:
+        {
+            gui_widget_item new_item;
+            new_item.type = gui_widget_item_type::text;
+            ICY_ERROR(widget.items.push_back(std::move(new_item)));
+            break;
+        }
+        break;
+
+        default:
+            break;
+        }        
+    }
+    for (auto k = 0u; k < json.size(); ++k)
+    {
+        const auto& key = json.keys()[k];
+        if (hash(key) == "type"_hash)
+            continue;
+
+        const auto& val = json.vals()[k];
+
+        switch (hash(key))
+        {
+        case "layout"_hash:
+        case "Layout"_hash:
+        {
+            it->value->layout = gui_str_to_layout(val.get());
+            break;
+        }
+
+        case "Widgets"_hash:
+        case "widgets"_hash:
+        {
+            if (val.type() != json_type::array)
+                break;
+
+            for (auto n = 0u; n < val.size(); ++n)
+            {
+                insert_args args;
+                args.index = uint32_t(data.size());
+                args.offset = UINT32_MAX;
+                args.parent = index;
+                ICY_ERROR(insert(data, args));
+                ICY_ERROR(initialize(data, args.index, val.vals()[n]));
+            }
+            break;
+        }
+
+        default:
+        {
+            modify_args args;
+            args.index = index;
+            ICY_ERROR(copy(key, args.key));
+            switch (val.type())
+            {
+            case json_type::boolean:
+            {
+                json_type_boolean value = false;
+                if (val.get(value) == error_type())
+                    args.val = value;
+                break;
+            }
+
+            case json_type::floating:
+            {
+                json_type_double value = 0.0f;
+                if (val.get(value) == error_type())
+                    args.val = value;
+                break;
+            }
+
+            case json_type::integer:
+            {
+                json_type_integer value = 0;
+                if (val.get(value) == error_type())
+                    args.val = value;
+                break;
+            }
+
+            case json_type::string:
+            {
+                args.val = val.get();
+                if (!args.val && !val.get().empty())
+                    return make_stdlib_error(std::errc::not_enough_memory);
+                break;
+            }
+            }
+            ICY_ERROR(modify(data, args));
+            break;
+        }
+        }
+    }
+
+    return error_type();
+}
 error_type gui_widget_data::insert(map<uint32_t, unique_ptr<gui_widget_data>>& data, const insert_args& args) noexcept
 {
     auto it = data.find(args.parent);
     auto& children = it->value->children;
-    const auto offset = std::max(size_t(args.offset), children.size());
+    const auto offset = std::min(size_t(args.offset), children.size());
         
     unique_ptr<gui_widget_data> new_widget;
     ICY_ERROR(make_unique(gui_widget_data(it->value.get(), args.index), new_widget));
@@ -49,58 +156,140 @@ error_type gui_widget_data::insert(map<uint32_t, unique_ptr<gui_widget_data>>& d
     for (auto k = offset + 1; k < children.size(); ++k)
         children[k] = std::move(children[k - 1]);
     children[offset] = new_widget.get();
+    new_widget->type = args.type;
+    new_widget->layout = args.layout;
     ICY_ERROR(data.insert(args.index, std::move(new_widget)));
-    ICY_ERROR(modify(data, args));
+    //ICY_ERROR(modify(data, args));
     return error_type();
 }
-error_type gui_widget_data::modify(map<uint32_t, unique_ptr<gui_widget_data>>& data, const insert_args& args) noexcept
+error_type gui_widget_data::modify(map<uint32_t, unique_ptr<gui_widget_data>>& data, const modify_args& args) noexcept
 {
     auto it = data.find(args.index);
-    ICY_ERROR(copy(args.type, it->value->type));
-    it->value->attr.clear();
-    for (auto&& pair : args.attr)
+    if (it == data.end())
+        return make_unexpected_error();
+    
+    auto& widget = *it->value;
+    //ICY_ERROR(copy(args.type, it->value->type));
+    //it->value->attr.clear();
+    string str_key;
+    ICY_ERROR(copy(args.key, str_key));
+
+    auto copy_val = args.val;
+    if (copy_val.type() != args.val.type())
+        return make_stdlib_error(std::errc::not_enough_memory);
+
+    if (str_key.empty() || str_key == "text"_s || str_key == "Text"_s)
     {
-        string str_key;
-        string str_val;
-        ICY_ERROR(copy(pair.key, str_key));
-        ICY_ERROR(copy(pair.value, str_val));
-        ICY_ERROR(it->value->attr.insert(std::move(str_key), std::move(str_val)));
-    }
-    if (args.text.empty())
-    {
-        it->value->text.value = gui_variant();
+        switch (widget.type)
+        {
+        case gui_widget_type::edit_line:
+        case gui_widget_type::edit_text:
+        {
+            for (auto&& item : widget.items)
+            {
+                if (item.type == gui_widget_item_type::text)
+                {
+                    item.value = std::move(copy_val);
+                    item.text = gui_text();
+                    break;
+                }
+            }
+            break;
+        }
+        default:
+            break;
+        }
     }
     else
     {
-		string new_text;
-		ICY_ERROR(new_text.reserve(args.text.bytes().size()));
-		char32_t last_chr = 0;
-		for (auto it = args.text.begin(); it != args.text.end(); ++it)
-		{
-			char32_t chr = 0;
-			ICY_ERROR(it.to_char(chr));
-			auto substr = string_view(it, it + 1);
-			if (chr == '\r' || chr == '\n' || chr == '\t' || chr == '\f')
-			{
-				chr = ' ';
-				substr = " "_s;
-			}
-			if (last_chr == ' ' && chr == ' ')
-				continue;	//	do not append multispace
-				
-			ICY_ERROR(new_text.append(substr));
-			last_chr = chr;
-		}
-		if (new_text.empty())
-		{
-			it->value->text.value = gui_variant();
-		}
-		else
-		{
-			it->value->text.value = gui_variant(string_view(new_text));
-			if (!it->value->text.value)
-				return make_stdlib_error(std::errc::not_enough_memory);
-		}
+        auto state = gui_widget_state::none;
+        switch (hash(args.key))
+        {
+        case "visible"_hash:
+        case "Visible"_hash:
+            state = gui_widget_state::visible;
+            break;
+
+        case "enabled"_hash:
+        case "Enabled"_hash:
+            state = gui_widget_state::enabled;
+            break;  
+        
+        case "vscroll"_hash:
+        case "vScroll"_hash:
+        case "VScroll"_hash:
+            state = gui_widget_state::vscroll;
+            break;
+
+        case "vscroll_auto"_hash:
+        case "vScrollAuto"_hash:
+        case "VScrollAuto"_hash:
+        case "auto_vscroll"_hash:
+        case "autoVScroll"_hash:
+        case "AutoVScroll"_hash:
+            state = gui_widget_state::vscroll_auto;
+            break;
+
+        case "vscroll_inv"_hash:
+        case "vScrollInv"_hash:
+        case "VScrollInv"_hash:
+        case "inv_vscroll"_hash:
+        case "invVScroll"_hash:
+        case "InvVScroll"_hash:
+            state = gui_widget_state::vscroll_inv;
+            break;
+
+        case "hscroll"_hash:
+        case "hScroll"_hash:
+        case "HScroll"_hash:
+            state = gui_widget_state::hscroll;
+            break;
+
+        case "hscroll_auto"_hash:
+        case "hScrollAuto"_hash:
+        case "HScrollAuto"_hash:
+        case "auto_hscroll"_hash:
+        case "autoHScroll"_hash:
+        case "AutoHScroll"_hash:
+            state = gui_widget_state::hscroll_auto;
+            break;
+
+        case "hscroll_inv"_hash:
+        case "hScrollInv"_hash:
+        case "HScrollInv"_hash:
+        case "inv_hscroll"_hash:
+        case "invHScroll"_hash:
+        case "InvHScroll"_hash:
+            state = gui_widget_state::hscroll_inv;
+            break;
+        }
+        if (state)
+        {
+            bool value = false;
+            if (args.val.get(value))
+            {
+                it->value->state &= ~state;
+                if (value)
+                    it->value->state |= state;
+            }
+        }
+        else if (const auto attr = gui_str_to_attr(str_key))
+        {           
+            auto jt = widget.attr.find(attr);
+            if (jt == widget.attr.end())
+            {
+                if (copy_val)
+                    ICY_ERROR(widget.attr.insert(attr, std::move(copy_val)));
+            }
+            else if (copy_val)
+            {
+                jt->value = std::move(copy_val);
+            }
+            else
+            {
+                widget.attr.erase(jt);
+            }
+        }
     }
     return error_type();
 }
@@ -146,7 +335,20 @@ void gui_window_data_usr::notify(gui_window_event_type*& event) const noexcept
     }
     event = nullptr;
 }
-gui_widget gui_window_data_usr::child(const gui_widget parent, const size_t offset) noexcept
+error_type gui_window_data_usr::update() noexcept
+{
+    return error_type();
+}
+gui_widget gui_window_data_usr::parent(const gui_widget widget) const noexcept
+{
+    auto it = m_data.find(widget.index);
+    if (it != m_data.end() && it->value->parent)
+    {
+        return { it->value->parent->index };
+    }
+    return gui_widget();
+}
+gui_widget gui_window_data_usr::child(const gui_widget parent, const size_t offset) const noexcept
 {
     auto it = m_data.find(parent.index);
     if (it != m_data.end())
@@ -157,14 +359,83 @@ gui_widget gui_window_data_usr::child(const gui_widget parent, const size_t offs
     }
     return gui_widget();
 }
-error_type gui_window_data_usr::insert(const gui_widget parent, const size_t offset, const string_view type, gui_widget& widget) noexcept
+size_t gui_window_data_usr::offset(const gui_widget widget) const noexcept
+{
+    auto it = m_data.find(widget.index);
+    if (it != m_data.end() && it->value->parent)
+    {
+        const auto& children = it->value->parent->children;
+        for (auto k = 0u; k < children.size(); ++k)
+        {
+            if (children[k]->index == widget.index)
+            {
+                return k;
+            }
+        }
+    }
+    return SIZE_MAX;
+}
+gui_variant gui_window_data_usr::query(const gui_widget widget, const string_view prop) const noexcept
+{
+    auto it = m_data.find(widget.index);
+    if (it != m_data.end())
+    {
+        if (const auto prop_attr = gui_str_to_attr(prop))
+        {
+            if (auto ptr = it->value->attr.try_find(prop_attr))
+                return *ptr;
+        }
+    }
+    return gui_variant();
+}
+gui_widget_type gui_window_data_usr::type(const gui_widget widget) const noexcept
+{
+    auto it = m_data.find(widget.index);
+    if (it != m_data.end())
+        return it->value->type;
+    return gui_widget_type::none;
+}
+gui_widget_layout gui_window_data_usr::layout(const gui_widget widget) const noexcept
+{
+    auto it = m_data.find(widget.index);
+    if (it != m_data.end())
+        return it->value->layout;
+    return gui_widget_layout::none;
+}
+gui_widget_state gui_window_data_usr::state(const gui_widget widget) const noexcept
+{
+    auto it = m_data.find(widget.index);
+    if (it != m_data.end())
+        return gui_widget_state(it->value->state);
+    return gui_widget_state::none;
+}
+error_type gui_window_data_usr::modify(const gui_widget widget, const string_view prop, const gui_variant& value) noexcept
+{
+    gui_widget_data::modify_args args;
+    args.index = widget.index;
+    ICY_ERROR(copy(prop, args.key));
+    args.val = value;
+    if (args.val.type() != value.type())
+        return make_stdlib_error(std::errc::not_enough_memory);
+    
+    gui_window_event_type* new_event = nullptr;
+    ICY_ERROR(gui_window_event_type::make(new_event, gui_window_event_type::modify));
+    ICY_SCOPE_EXIT{ gui_window_event_type::clear(new_event); };
+    ICY_ERROR(gui_widget_data::modify(m_data, args));
+    new_event->index = widget.index;
+    new_event->val = std::move(args);
+    notify(new_event);
+    return error_type();
+}
+error_type gui_window_data_usr::insert(const gui_widget parent, const size_t offset, const gui_widget_type type, gui_widget_layout layout, gui_widget& widget) noexcept
 {
     gui_widget_data::insert_args args;
     args.parent = parent.index;
     args.index = m_index;
     args.offset = uint32_t(offset);
-    ICY_ERROR(copy(type, args.type));
-
+    args.type = type;
+    args.layout = layout;
+    
     gui_window_event_type* new_event = nullptr;
     ICY_ERROR(gui_window_event_type::make(new_event, gui_window_event_type::create));
     ICY_SCOPE_EXIT{ gui_window_event_type::clear(new_event); };
@@ -174,7 +445,7 @@ error_type gui_window_data_usr::insert(const gui_widget parent, const size_t off
     notify(new_event);
     return error_type();
 }
-error_type gui_window_data_usr::erase(const gui_widget widget) noexcept
+error_type gui_window_data_usr::destroy(const gui_widget widget) noexcept
 {
     gui_window_event_type* new_event = nullptr;
     ICY_ERROR(gui_window_event_type::make(new_event, gui_window_event_type::destroy));
@@ -183,45 +454,35 @@ error_type gui_window_data_usr::erase(const gui_widget widget) noexcept
         notify(new_event);
     return error_type();
 }
-error_type gui_window_data_usr::layout(const gui_widget widget, gui_layout& value) noexcept
+error_type gui_window_data_usr::find(const icy::string_view prop, const icy::gui_variant value, icy::array<icy::gui_widget>& list) const noexcept
 {
-    auto it = m_data.find(widget.index);
-    if (it == m_data.end())
-        return error_type();
+    list.clear();
+    const auto prop_key = gui_str_to_attr(prop);
+    if (prop_key == gui_widget_attr::none)
+        return make_stdlib_error(std::errc::invalid_argument);
 
-    gui_widget_data::insert_args args;
-    ICY_ERROR(copy(value.text, args.text));
-    ICY_ERROR(copy(value.type, args.type));
-    for (auto&& pair : value.attributes)
-    {
-        string str_key;
-        string str_val;
-        ICY_ERROR(copy(pair.key, str_key));
-        ICY_ERROR(copy(pair.value, str_val));
-        ICY_ERROR(args.attr.insert(std::move(str_key), std::move(str_val)));
-    }
-    if (value.widget == 0)
-    {
-        auto& wdata = *it->value;
-        auto children = std::move(wdata.children);
-        for (auto&& child : children)
-        {
-            ICY_ERROR(erase(gui_widget{ child->index }));
-        }
-    }
-    gui_window_event_type* new_event = nullptr;
-    ICY_ERROR(gui_window_event_type::make(new_event, gui_window_event_type::modify));
-    ICY_SCOPE_EXIT{ gui_window_event_type::clear(new_event); };
-    args.index = new_event->index = value.widget = widget.index; 
-    new_event->val = std::move(args);
-    notify(new_event);
+    string val_str;
+    ICY_ERROR(to_string(value, val_str));
     
-    for (auto&& child : value.children)
+    for (auto&& pair : m_data)
     {
-        gui_widget new_widget;
-        ICY_ERROR(insert(widget, args.offset++, child.type, new_widget));
-        child.widget = new_widget.index;
-        ICY_ERROR(layout(new_widget, child));
+        const auto ptr = pair.value->attr.try_find(prop_key);
+        if (ptr)
+        {
+            string str;
+            ICY_ERROR(to_string(*ptr, str));
+
+            if (ptr->type() == gui_variant_type<string_view>())
+            {
+                auto jt = str.find(val_str);
+                if (jt != str.end())
+                    ICY_ERROR(list.push_back(gui_widget{ pair.key }));
+            }
+            else if (str == val_str)
+            {
+                ICY_ERROR(list.push_back(gui_widget{ pair.key }));                
+            }
+        }
     }
     return error_type();
 }
@@ -249,612 +510,892 @@ error_type gui_window_data_usr::resize(const window_size size) noexcept
 	}
 	return error_type();
 }
-error_type gui_window_data_sys::initialize(const shared_ptr<window> window) noexcept
+
+error_type gui_window_data_sys::initialize(const shared_ptr<icy::window> window, const json& json) noexcept
 {
     m_window = window;
+    m_window_index = window->index();
+
     m_dpi = 1.0f * window->dpi();
 	
-    ICY_ERROR(m_system->render().create_font(m_font, 
-        static_cast<HWND__*>(window->handle()), gui_system_font_type_default));
+    ICY_ERROR(m_system->render().create_font(m_font, window, gui_system_font_type_default));
+
+    ICY_ERROR(make_unique(jmp_type(), m_jmp));
 
     unique_ptr<gui_widget_data> root;
     ICY_ERROR(make_unique(gui_widget_data(), root));
-	root->bkcolor = colors::black;
+	//root->bkcolor = colors::black;
     ICY_ERROR(m_data.insert(0u, std::move(root)));
     ICY_ERROR(resize(window->size()));
+    ICY_ERROR(gui_widget_data::initialize(m_data, 0u, json));
+    m_timer_scroll = make_unique<icy::timer>();
+    if (!m_timer_scroll)
+        return make_stdlib_error(std::errc::not_enough_memory);
+
     return error_type();
 }
-error_type gui_window_data_sys::input(const input_message& msg) noexcept
+error_type gui_window_data_sys::input(const input_message& msg, array<gui_widget>& output) noexcept
 {
+    ICY_ERROR(update());
+    switch (msg.type)
+    {
+    case input_type::mouse_move:
+        ICY_ERROR(input_mouse_move(msg.point_x, msg.point_y, key_mod(msg.mods), output));
+        break;
+    case input_type::mouse_press:
+        ICY_ERROR(input_mouse_press(msg.key, msg.point_x, msg.point_y, key_mod(msg.mods), output));
+        break;
+    case input_type::mouse_release:
+        ICY_ERROR(input_mouse_release(msg.key, msg.point_x, msg.point_y, key_mod(msg.mods), output));
+        break;
+    case input_type::mouse_wheel:
+        ICY_ERROR(input_mouse_wheel(msg.point_x, msg.point_y, key_mod(msg.mods), msg.wheel, output));
+        break;
+    case input_type::mouse_double:
+        ICY_ERROR(input_mouse_double(msg.key, msg.point_x, msg.point_y, key_mod(msg.mods), output));
+        break;
+    case input_type::mouse_hold:
+        ICY_ERROR(input_mouse_hold(msg.key, msg.point_x, msg.point_y, key_mod(msg.mods), output));
+        break;
+    case input_type::key_press:
+        ICY_ERROR(input_key_press(msg.key, key_mod(msg.mods), output));
+        break;
+    case input_type::key_release:
+        ICY_ERROR(input_key_release(msg.key, key_mod(msg.mods), output));
+        break;
+    case input_type::key_hold:
+        ICY_ERROR(input_key_hold(msg.key, key_mod(msg.mods), output));
+        break;
+    case input_type::text:
+        ICY_ERROR(input_text(string_view(msg.text, strnlen(msg.text, input_message::u8_max)), output));
+        break;
+    default:
+        break;
+    }
+
     return error_type();
 }
 error_type gui_window_data_sys::resize(const window_size size) noexcept
 {
     auto& root = *m_data.front()->value.get();
     m_size = size;
-	m_state &= ~gui_window_state_has_list;
+    ICY_ERROR(reset());
     return error_type();
 }
 error_type gui_window_data_sys::update() noexcept
 {
-    if (m_state & gui_window_state_has_list)
+    if (m_state & gui_window_state_updated)
         return error_type();
     
-    m_list.clear();
-    gui_select_system css;
-    ICY_ERROR(m_system->create_css(css));
-    ICY_ERROR(update(css, *m_data.front().value));
+    const auto alloc = [](void* user, void* ptr, size_t nsize, size_t)
+    {
+        ptr = global_realloc(ptr, nsize, user);
+        if (nsize && !ptr)
+            longjmp(static_cast<jmp_type*>(user)->buf, 1);
+        return ptr;
+    };
+    if (_setjmp(m_jmp->buf))
+        return make_stdlib_error(std::errc::not_enough_memory);
 
-	struct jmp_buf_type { jmp_buf buf; } jmp;
-	if (setjmp(jmp.buf))
-		return make_stdlib_error(std::errc::not_enough_memory);
+    m_solver = solver_type();
+    m_solver.system = am_newsolver(alloc, m_jmp.get());
+    if (!m_solver.system)
+        return make_stdlib_error(std::errc::not_enough_memory);
 
-	const auto alloc = [](void* user, void* ptr, size_t nsize, size_t)
-	{
-		ptr = global_realloc(ptr, nsize, user);
-		if (nsize && !ptr)
-			longjmp(static_cast<jmp_buf_type*>(user)->buf, 1);
-		return ptr;
-	}; 
-	auto solver = am_newsolver(alloc, &jmp); 
-	ICY_SCOPE_EXIT{ am_delsolver(solver); };
-#if _DEBUG
-	am_autoupdate(solver, 1);
-#endif
+    am_autoupdate(m_solver, 1);
 
-	array<gui_widget_box> box_list;
-	ICY_ERROR(box_list.reserve(m_list.size()));
+    auto& root = *m_data.front().value.get();
+    root.min_x = am_newvariable(m_solver);
+    root.min_y = am_newvariable(m_solver);
+    root.max_x = am_newvariable(m_solver);
+    root.max_y = am_newvariable(m_solver);
 
-	const auto find = [this, &box_list](const gui_widget_data* ptr) -> gui_widget_box*
-	{
-		const auto jt = std::find(m_list.begin(), m_list.end(), ptr);
-		if (jt != m_list.end())
-		{
-			const auto dn = std::distance(m_list.begin(), jt);
-			return &box_list[dn];
-		}
-		return nullptr;
-	};
+    for (auto&& pair : m_data)
+    {
+        auto& widget = *pair.value;
+        widget.size_x = 0;
+        widget.size_y = 0;
+        for (auto&& item : widget.items)
+        {
+            ICY_ERROR(solve_item(widget, item, m_font));
+            switch (item.type)
+            {
+            case gui_widget_item_type::text:
+            {
+                widget.size_x = std::max(widget.size_x, item.x + item.w);
+                widget.size_y = std::max(widget.size_y, item.y + item.h);
+                break;
+            }
+            }
+        }
+    }
+    am_suggest(root.min_x, 0, AM_REQUIRED);
+    am_suggest(root.min_y, 0, AM_REQUIRED);
+    am_suggest(root.max_x, root.size_x = float(m_size.x), AM_REQUIRED);
+    am_suggest(root.max_y, root.size_y = float(m_size.y), AM_REQUIRED);
+    
+    ICY_ERROR(update(root));
+    m_state |= gui_window_state_updated;
 
-	for (auto it = m_list.begin(); it != m_list.end(); ++it)
-	{
-		auto& widget = **it;
-		const auto style = widget.css.style();
-		
-		gui_widget_box new_box;
-		new_box.solver = solver;
-		new_box.parent = find(widget.parent);
-		new_box.widget = &widget;
-
-		if (!widget.parent)
-		{
-			am_suggest(new_box.var(gui_widget_box_var_left), 0, AM_REQUIRED);
-			am_suggest(new_box.var(gui_widget_box_var_top), 0, AM_REQUIRED);
-			am_suggest(new_box.var(gui_widget_box_var_width), am_Num(m_size.x), AM_REQUIRED);
-			am_suggest(new_box.var(gui_widget_box_var_height), am_Num(m_size.y), AM_REQUIRED);
-		}
-
-		switch (widget.position)
-		{
-		case CSS_POSITION_RELATIVE:
-		{
-			new_box.anchor = new_box.parent;
-			break;
-		}
-		case CSS_POSITION_ABSOLUTE:
-		case CSS_POSITION_FIXED:
-		{
-			const gui_widget_data* next = &widget;
-			while (next = next->parent)
-			{
-				if (widget.position == CSS_POSITION_ABSOLUTE && next->position != CSS_POSITION_STATIC)
-					break;
-				if (next->type == "html"_s)
-					break;
-			}
-			new_box.anchor = find(next);
-			break;
-		}
-		}
-		if (widget.text.layout)
-		{
-			DWRITE_TEXT_METRICS metrics;
-			ICY_COM_ERROR(widget.text.layout->GetMetrics(&metrics));
-			am_suggest(new_box.var(gui_widget_box_var_height), metrics.height, AM_STRONG);
-			am_suggest(new_box.var(gui_widget_box_var_width), metrics.widthIncludingTrailingWhitespace, AM_STRONG);
-		}
-
-		const auto calc_prop = [&](const gui_widget_box_var var)
-		{
-			uint8_t(*func)(const css_computed_style * style, css_fixed * len, css_unit * unit) = nullptr;
-			auto rel_var = gui_widget_box_var_count;
-			auto set_val = 1;
-
-			switch (var)
-			{
-			case gui_widget_box_var_border_left:
-			case gui_widget_box_var_border_right:
-				set_val = CSS_BORDER_WIDTH_WIDTH;
-			case gui_widget_box_var_max_width:
-			case gui_widget_box_var_min_width:
-			case gui_widget_box_var_margin_left:
-			case gui_widget_box_var_margin_right:
-			case gui_widget_box_var_padding_left:
-			case gui_widget_box_var_padding_right:
-				rel_var = gui_widget_box_var_width;
-				break;
-
-			case gui_widget_box_var_border_top:
-			case gui_widget_box_var_border_bottom:
-				set_val = CSS_BORDER_WIDTH_WIDTH;
-			case gui_widget_box_var_max_height:
-			case gui_widget_box_var_min_height:
-			case gui_widget_box_var_margin_top:
-			case gui_widget_box_var_margin_bottom:
-			case gui_widget_box_var_padding_top:
-			case gui_widget_box_var_padding_bottom:
-				rel_var = gui_widget_box_var_height;
-				break;
-			default:
-				return;
-			}
-
-			switch (var)
-			{
-			case gui_widget_box_var_max_width: func = &css_computed_max_width; break;
-			case gui_widget_box_var_min_width: func = &css_computed_min_width; break;
-			case gui_widget_box_var_max_height: func = &css_computed_max_height; break;
-			case gui_widget_box_var_min_height: func = &css_computed_min_height; break;
-
-			case gui_widget_box_var_border_left: func = &css_computed_border_left_width; break;
-			case gui_widget_box_var_border_top: func = &css_computed_border_top_width; break;
-			case gui_widget_box_var_border_right: func = &css_computed_border_right_width; break;
-			case gui_widget_box_var_border_bottom: func = &css_computed_border_bottom_width; break;
-
-			case gui_widget_box_var_margin_left: func = &css_computed_margin_left; break;
-			case gui_widget_box_var_margin_top: func = &css_computed_margin_top; break;
-			case gui_widget_box_var_margin_right: func = &css_computed_margin_right; break;
-			case gui_widget_box_var_margin_bottom: func = &css_computed_margin_bottom; break;
-
-			case gui_widget_box_var_padding_left: func = &css_computed_padding_left; break;
-			case gui_widget_box_var_padding_top: func = &css_computed_padding_top; break;
-			case gui_widget_box_var_padding_right: func = &css_computed_padding_right; break;
-			case gui_widget_box_var_padding_bottom: func = &css_computed_padding_bottom; break;
-
-			default:
-				return;
-			}
-
-			css_fixed len = 0;
-			css_unit unit = CSS_UNIT_PX;
-			const auto val = func(style, &len, &unit);
-
-			if (val == 0 && new_box.parent)
-			{
-				auto& con = new_box.cons[var];
-				con = am_newconstraint(solver, AM_MEDIUM);
-				am_setrelation(con, AM_EQUAL);
-				am_addterm(con, new_box.var(var), 1.0);
-				am_addterm(con, new_box.parent->var(var), -1.0);
-				am_add(con);
-			}
-			else if (val == set_val)
-			{
-				if (unit == CSS_UNIT_PCT)
-				{
-					auto& con = new_box.cons[var];
-					con = am_newconstraint(solver, AM_MEDIUM);
-					am_setrelation(con, AM_EQUAL);
-					am_addterm(con, new_box.var(var), 1.0);
-					am_addterm(con, new_box.parent->var(rel_var), -FIXTOFLT(len) * 0.01f);
-					am_add(con);
-				}
-				else
-				{
-					auto calc = 0.0f;
-					switch (unit)
-					{
-					case CSS_UNIT_EM:
-						calc = FIXTOFLT(len) * new_box.widget->font_size;
-						break;
-					case CSS_UNIT_REM:
-					{
-						calc = FIXTOFLT(len) * m_data.front()->value->font_size;
-						break;
-					}
-					case CSS_UNIT_PT:
-						calc = FIXTOFLT(len) / 72.0f * m_dpi;
-						break;
-					default:
-						calc = FIXTOFLT(len);
-						break;
-					}
-
-					am_suggest(new_box.var(var), calc, AM_MEDIUM);
-				}
-
-				am_Constraint** con_ptr = nullptr;
-				int con_rel = 0;
-
-				switch (var)
-				{
-				case gui_widget_box_var_max_width:
-				{
-					con_ptr = &new_box.cons[gui_widget_box_con_max_width];
-					con_rel = AM_LESSEQUAL;
-					break;
-				}
-				case gui_widget_box_var_min_width:
-				{
-					con_ptr = &new_box.cons[gui_widget_box_con_min_width];
-					con_rel = AM_GREATEQUAL;
-					break;
-				}
-				case gui_widget_box_var_max_height:
-				{
-					con_ptr = &new_box.cons[gui_widget_box_con_max_height];
-					con_rel = AM_LESSEQUAL;
-					break;
-				}
-				case gui_widget_box_var_min_height:
-				{
-					con_ptr = &new_box.cons[gui_widget_box_con_min_height];
-					con_rel = AM_GREATEQUAL;
-					break;
-				}
-				}
-				if (con_ptr)
-				{
-					auto& con = *con_ptr;
-					con = am_newconstraint(solver, AM_MEDIUM);
-					am_addterm(con, new_box.var(rel_var), 1.0);
-					am_setrelation(con, con_rel);
-					am_addterm(con, new_box.var(var), 1.0);
-					am_add(con);
-				}
-			}
-		};
-
-		calc_prop(gui_widget_box_var_max_width);
-		calc_prop(gui_widget_box_var_max_height);
-		calc_prop(gui_widget_box_var_min_width);
-		calc_prop(gui_widget_box_var_min_height);
-
-		calc_prop(gui_widget_box_var_margin_left);
-		calc_prop(gui_widget_box_var_margin_top);
-		calc_prop(gui_widget_box_var_margin_right);
-		calc_prop(gui_widget_box_var_margin_bottom);
-
-		calc_prop(gui_widget_box_var_border_left);
-		calc_prop(gui_widget_box_var_border_top);
-		calc_prop(gui_widget_box_var_border_right);
-		calc_prop(gui_widget_box_var_border_bottom);
-
-		calc_prop(gui_widget_box_var_padding_left);
-		calc_prop(gui_widget_box_var_padding_top);
-		calc_prop(gui_widget_box_var_padding_right);
-		calc_prop(gui_widget_box_var_padding_bottom);
-
-
-		ICY_ERROR(box_list.push_back(std::move(new_box)));
-	}
-	for (auto&& box : box_list)
-	{
-		auto& children = box.widget->children;
-		for (auto n = 0u; n < children.size(); ++n)
-		{
-			auto ptr = find(children[n]);
-			if (!ptr)
-				continue;
-
-			if (!box.child)
-				box.child = ptr;
-			
-			for (auto k = n; k; --k)
-			{
-				if (const auto prev = find(children[k - 1]))
-				{
-					ptr->prev = prev;
-					break;
-				}
-			}
-			for (auto k = n + 1; k < children.size(); ++k)
-			{
-				if (const auto next = find(children[k]))
-				{
-					ptr->next = next;
-					break;
-				}				
-			}
-		}
-	}
-
-	auto step = 0;
-	const auto print = [&]
-	{
-		string str;
-		str.appendf("\r\n#%1: "_s, step);
-		for (auto&& ptr : box_list)
-		{
-			string type;
-			const gui_widget_data* next = ptr.widget;
-			while (next)
-			{
-				type.appendf(".[%1]%2"_s, next->display == CSS_DISPLAY_BLOCK ? "blk"_s : "inl"_s, string_view(next->type));
-				next = next->parent;
-			}
-			str.appendf("\r\nBox[%1]: %2"_s, ptr.widget->index, string_view(type));
-			str.appendf("[%1,%2,%3,%4]"_s
-				, lround(am_value(ptr.cvar(gui_widget_box_var_left)))
-				, lround(am_value(ptr.cvar(gui_widget_box_var_top)))
-				, lround(am_value(ptr.cvar(gui_widget_box_var_width)))
-				, lround(am_value(ptr.cvar(gui_widget_box_var_height))));
-		}
-		icy::win32_debug_print(str);
-	};
-	am_Num margins_array[256];
-	size_t margins_count = 0u;
-
-	const auto collapse = [&margins_array, &margins_count]() -> am_Num
-	{
-		auto max_positive = 0.0f;
-		auto min_negative = -FLT_MAX;
-		for (auto k = 0u; k < margins_count; ++k)
-		{
-			const auto val = margins_array[k];
-			if (val >= 0)
-				max_positive = std::max(max_positive, val);
-			else
-				min_negative = std::max(min_negative, val);
-		}
-		const auto val = max_positive + (min_negative == -FLT_MAX ? 0 : min_negative);
-		margins_count = 0;
-		return val;
-	};
-	const auto margin_append = [&margins_array, &margins_count](const gui_widget_box& box, const gui_widget_box_var var)
-	{
-		if (margins_count == std::size(margins_array))
-			return;
-		margins_array[margins_count++] = am_value(box.cvar(var));
-	};
-
-
-	
-	for (auto&& box : box_list)
-	{
-		box.widget->borders[0].size = lround(am_value(box.cvar(gui_widget_box_var_border_left)));
-		box.widget->borders[1].size = lround(am_value(box.cvar(gui_widget_box_var_border_top)));
-		box.widget->borders[2].size = lround(am_value(box.cvar(gui_widget_box_var_border_right)));
-		box.widget->borders[3].size = lround(am_value(box.cvar(gui_widget_box_var_border_bottom)));
-
-		box.widget->content_box[0] = lround(am_value(box.cvar(gui_widget_box_var_left)));
-		box.widget->content_box[1] = lround(am_value(box.cvar(gui_widget_box_var_top)));
-		box.widget->content_box[2] = lround(am_value(box.cvar(gui_widget_box_var_width)));
-		box.widget->content_box[3] = lround(am_value(box.cvar(gui_widget_box_var_height)));		
-	}
-
-    m_state |= gui_window_state_has_list;
-    return error_type();
-}
-error_type gui_window_data_sys::update(gui_select_system& css, gui_widget_data& widget) noexcept
-{
-	if (widget.type == "text"_s && widget.parent && widget.parent->type == "style"_s)
-	{
-		ICY_ERROR(widget.inline_style.initialize(css.ctx(), ""_s, widget.text.value.str()));
-		ICY_ERROR(css.append(widget.inline_style));
-		return error_type();
-	}
-
-	ICY_ERROR(css.calc(widget));
-	const auto style = widget.css.style();
-	const auto is_root = widget.type == "html"_s;
-	const auto visible = css_computed_visibility(style);
-
-	widget.display = css_computed_display(style, is_root);
-	widget.position = css_computed_position(style);
-
-	if (widget.parent)
-	{
-		widget.state &= ~gui_widget_state_visible;
-		widget.state &= ~gui_widget_state_collapse;
-
-		if (widget.display == CSS_DISPLAY_INHERIT)
-			widget.display = widget.parent->display;
-		if (widget.position == CSS_POSITION_INHERIT)
-			widget.position = widget.parent->position;		
-	}
-
-	switch (visible)
-	{
-	case CSS_VISIBILITY_INHERIT:
-		if (widget.parent && widget.display != CSS_DISPLAY_NONE)
-		{
-			if (widget.parent->state & gui_widget_state_visible) 
-				widget.state |= gui_widget_state_visible;
-			else if (widget.parent->state & gui_widget_state_collapse) 
-				widget.state |= gui_widget_state_collapse;
-		}
-		break;
-
-	case CSS_VISIBILITY_VISIBLE:
-		widget.state |= gui_widget_state_visible;
-		break;
-
-	case CSS_VISIBILITY_COLLAPSE:
-		widget.state |= gui_widget_state_collapse;
-		break;
-
-	case CSS_VISIBILITY_HIDDEN:
-		break;
-	}
-
-	if (widget.state & gui_widget_state_visible)
-	{
-		css_fixed len = 0;
-		css_unit unit = css_unit::CSS_UNIT_PX;
-
-		const auto calc = [&](float& ref)
-		{
-			switch (unit)
-			{
-			case CSS_UNIT_EM:
-				if (widget.parent)
-					ref = FIXTOFLT(len) * widget.parent->font_size;
-				break;
-
-			case CSS_UNIT_PX:
-				ref = FIXTOFLT(len);
-				break;
-
-			case CSS_UNIT_PT:
-				ref = FIXTOFLT(len) / 72.0f * m_dpi;
-				break;
-
-			default:
-				ref = 0;
-			}
-		};
-
-		switch (css_computed_font_size(style, &len, &unit))
-		{
-		case CSS_FONT_SIZE_INHERIT:
-			if (widget.parent)
-				widget.font_size = widget.parent->font_size;
-			break;
-		case CSS_FONT_SIZE_XX_SMALL:
-			break;
-		case CSS_FONT_SIZE_X_SMALL:
-			break;
-		case CSS_FONT_SIZE_SMALL:
-			break;
-		case CSS_FONT_SIZE_MEDIUM:
-			break;
-		case CSS_FONT_SIZE_LARGE:
-			break;
-		case CSS_FONT_SIZE_X_LARGE:
-			break;
-		case CSS_FONT_SIZE_XX_LARGE:
-			break;
-		case CSS_FONT_SIZE_LARGER:
-			break;
-		case CSS_FONT_SIZE_SMALLER:
-			break;
-		case CSS_FONT_SIZE_DIMENSION:
-			calc(widget.font_size);
-			break;
-		}
-
-
-		switch (css_computed_line_height(style, &len, &unit))
-		{
-		case CSS_LINE_HEIGHT_INHERIT:
-			if (widget.parent)
-				widget.line_size = widget.parent->line_size;
-			break;
-		case CSS_LINE_HEIGHT_NUMBER:
-			widget.line_size = widget.font_size * FIXTOFLT(len);
-			break;
-		case CSS_LINE_HEIGHT_DIMENSION:
-			calc(widget.line_size);
-			break;
-		default:
-			widget.line_size = widget.font_size * 1.2f;
-			break;
-		}
-
-		css_color color;
-		if (!widget.text.value.str().empty())
-		{
-			const auto& render = m_system->render();
-			ICY_ERROR(render.create_text(widget.text.layout, m_font, widget.text.value.str()));
-			const auto layout = static_cast<IDWriteTextLayout*>(widget.text.layout.value.get());
-			const auto range = DWRITE_TEXT_RANGE{ 0, UINT32_MAX };
-			ICY_COM_ERROR(layout->SetFontSize(widget.font_size, range));
-		}
-		else
-		{
-			widget.text.layout = gui_text();
-		}
-
-		switch (css_computed_color(style, &color))
-		{
-		case CSS_COLOR_INHERIT:
-			if (widget.parent)
-				widget.text.color = widget.parent->text.color;
-			break;
-		case CSS_COLOR_COLOR:
-			widget.text.color = color::from_bgra(color);
-			break;
-		};
-
-		switch (css_computed_background_color(style, &color))
-		{
-		case CSS_COLOR_INHERIT:
-			if (widget.parent)
-				widget.bkcolor = widget.parent->bkcolor;
-			break;
-		case CSS_COLOR_COLOR:
-			widget.bkcolor = color::from_bgra(color);
-			break;
-		}
-		ICY_ERROR(m_list.push_back(&widget));
-	}
-
-	for (auto&& ptr : widget.children)
-		ICY_ERROR(update(css, *ptr));
-
-	return error_type();
-}
-error_type gui_window_data_sys::input_key_press(const key key, const key_mod mods) noexcept
-{
-    return error_type();
-}
-error_type gui_window_data_sys::input_key_hold(const key key, const key_mod mods) noexcept
-{
+    //if (m_focus && !m_data.try_find(m_focus.widget)) m_focus = focus_type();
+    //if (m_press && !m_data.try_find(m_press.widget)) m_press = press_type();
+    //if (m_hover && !m_data.try_find(m_hover.widget)) m_hover = hover_type();
 
     return error_type();
 }
-error_type gui_window_data_sys::input_key_release(const key key, const key_mod mods) noexcept
+error_type gui_window_data_sys::update(gui_widget_data& widget) noexcept
 {
+    auto count = 0u;
+    auto wx = 0.0f;
+    auto wy = 0.0f;
+    for (auto&& ptr : widget.children)
+    {
+        if (!(ptr->state & gui_widget_state::visible))
+            continue;
+
+        ptr->min_x = am_newvariable(m_solver);
+        ptr->min_y = am_newvariable(m_solver);
+        ptr->max_x = am_newvariable(m_solver);
+        ptr->max_y = am_newvariable(m_solver);
+
+
+        ptr->weight_x = ptr->size_x;
+        ptr->weight_x += ptr->margins[0].size;
+        ptr->weight_x += ptr->borders[0].size;
+        ptr->weight_x += ptr->padding[0].size;
+        ptr->weight_x += ptr->margins[2].size;
+        ptr->weight_x += ptr->borders[2].size;
+        ptr->weight_x += ptr->padding[2].size;
+
+
+        ptr->weight_y = ptr->size_y;
+        ptr->weight_y += ptr->margins[1].size;
+        ptr->weight_y += ptr->borders[1].size;
+        ptr->weight_y += ptr->padding[1].size;
+        ptr->weight_y += ptr->margins[3].size;
+        ptr->weight_y += ptr->borders[3].size;
+        ptr->weight_y += ptr->padding[3].size;
+
+        wx += ptr->weight_x;
+        wy += ptr->weight_y;
+
+        ++count;
+    }
+    for (auto&& ptr : widget.children)
+    {
+        if (!(ptr->state & gui_widget_state::visible))
+            continue;
+    
+        ptr->weight_x /= wx;
+        ptr->weight_y /= wy;
+    }
+
+    wx = 0;
+    wy = 0;
+    for (auto&& ptr : widget.children)
+    {
+        if (!(ptr->state & gui_widget_state::visible))
+            continue;
+
+        const auto attr_wx = ptr->attr.try_find(gui_widget_attr::weight_x);
+        const auto attr_wy = ptr->attr.try_find(gui_widget_attr::weight_y);
+        const auto attr_w = ptr->attr.try_find(gui_widget_attr::weight);
+        
+        auto new_wx = ptr->weight_x;
+        auto new_wy = ptr->weight_y;
+
+        if (attr_wx)
+            to_value(*attr_wx, new_wx);
+        else if (attr_w)
+            to_value(*attr_w, new_wx);
+
+        if (attr_wy)
+            to_value(*attr_wy, new_wy);
+        else if (attr_w)
+            to_value(*attr_w, new_wy);
+
+        ptr->weight_x = new_wx;
+        ptr->weight_y = new_wy;
+        wx += new_wx;
+        wy += new_wy;
+    }
+    for (auto&& ptr : widget.children)
+    {
+        if (!(ptr->state & gui_widget_state::visible))
+            continue;
+
+        ptr->weight_x /= wx;
+        ptr->weight_y /= wy;
+    }
+
+
+
+
+    const auto size_x = am_value(widget.max_x) - am_value(widget.min_x);
+    const auto size_y = am_value(widget.max_y) - am_value(widget.min_y);
+    
+    if (widget.layout == gui_widget_layout::vbox)
+    {
+        gui_widget_data* prev = nullptr;
+
+        auto n = 0u;
+        for (auto&& ptr : widget.children)
+        {
+            if (!(ptr->state & gui_widget_state::visible))
+                continue;
+
+            ++n;
+            {
+                auto min_x = am_newconstraint(m_solver, AM_STRONG);
+                am_addterm(min_x, ptr->min_x, 1.0);
+                am_setrelation(min_x, AM_EQUAL);
+                am_addterm(min_x, widget.min_x, 1.0);
+                am_addconstant(min_x, ptr->margins[0].size);
+                am_addconstant(min_x, ptr->borders[0].size);
+                am_addconstant(min_x, ptr->padding[0].size);
+                am_add(min_x);
+            }
+            {
+                auto max_x = am_newconstraint(m_solver, AM_STRONG);
+                am_addterm(max_x, ptr->max_x, 1.0);
+                am_setrelation(max_x, AM_EQUAL);
+                am_addterm(max_x, widget.max_x, 1.0);
+                am_addconstant(max_x, -ptr->margins[2].size);
+                am_addconstant(max_x, -ptr->borders[2].size);
+                am_addconstant(max_x, -ptr->padding[2].size);
+                am_add(max_x);
+            }
+            {
+                auto min_y = am_newconstraint(m_solver, AM_STRONG);
+                am_addterm(min_y, ptr->min_y, 1.0);
+                am_setrelation(min_y, AM_EQUAL);
+                am_addterm(min_y, prev ? prev->max_y : widget.min_y, 1.0);
+                if (prev)
+                {
+                    am_addconstant(min_y, prev->margins[3].size);
+                    am_addconstant(min_y, prev->borders[3].size);
+                    am_addconstant(min_y, prev->padding[3].size);
+                }
+                am_addconstant(min_y, ptr->margins[1].size);
+                am_addconstant(min_y, ptr->borders[1].size);
+                am_addconstant(min_y, ptr->padding[1].size);
+                am_add(min_y);
+            }
+            if (n == count)
+            {
+                auto max_y = am_newconstraint(m_solver, AM_STRONG);
+                am_addterm(max_y, ptr->max_y, 1.0);
+                am_setrelation(max_y, AM_EQUAL);
+                am_addterm(max_y, widget.max_y, 1.0);
+                am_addconstant(max_y, -ptr->margins[3].size);
+                am_addconstant(max_y, -ptr->borders[3].size);
+                am_addconstant(max_y, -ptr->padding[3].size);
+                am_add(max_y);
+            }
+            else
+            {
+                auto max_y = am_newconstraint(m_solver, AM_STRONG);
+                am_addterm(max_y, ptr->max_y, 1.0);
+                am_setrelation(max_y, AM_EQUAL);
+                am_addterm(max_y, ptr->min_y, 1.0);
+                am_addconstant(max_y, size_y * ptr->weight_y);
+                am_add(max_y);
+            }
+            prev = ptr;
+        }
+    }
+    else if (widget.layout == gui_widget_layout::hbox)
+    {
+        gui_widget_data* prev = nullptr;
+        auto n = 0u;
+        for (auto&& ptr : widget.children)
+        {
+            if (!(ptr->state & gui_widget_state::visible))
+                continue;
+            ++n;
+            {
+                auto min_y = am_newconstraint(m_solver, AM_STRONG);
+                am_addterm(min_y, ptr->min_y, 1.0);
+                am_setrelation(min_y, AM_EQUAL);
+                am_addterm(min_y, widget.min_y, 1.0);
+                am_addconstant(min_y, ptr->margins[1].size);
+                am_addconstant(min_y, ptr->borders[1].size);
+                am_addconstant(min_y, ptr->padding[1].size);
+                am_add(min_y);
+            }
+            {
+                auto max_y = am_newconstraint(m_solver, AM_STRONG);
+                am_addterm(max_y, ptr->max_y, 1.0);
+                am_setrelation(max_y, AM_EQUAL);
+                am_addterm(max_y, widget.max_y, 1.0);
+                am_addconstant(max_y, -ptr->margins[3].size);
+                am_addconstant(max_y, -ptr->borders[3].size);
+                am_addconstant(max_y, -ptr->padding[3].size);
+                am_add(max_y);
+            }
+            {
+                auto min_x = am_newconstraint(m_solver, AM_STRONG);
+                am_addterm(min_x, ptr->min_x, 1.0);
+                am_setrelation(min_x, AM_EQUAL);
+                am_addterm(min_x, prev ? prev->max_x : widget.min_x, 1.0);
+                if (prev)
+                {
+                    am_addconstant(min_x, prev->margins[2].size);
+                    am_addconstant(min_x, prev->borders[2].size);
+                    am_addconstant(min_x, prev->padding[2].size);
+                }
+                am_addconstant(min_x, ptr->margins[0].size);
+                am_addconstant(min_x, ptr->borders[0].size);
+                am_addconstant(min_x, ptr->padding[0].size);
+                am_add(min_x);
+            }
+            if (n == count)
+            {
+                auto max_x = am_newconstraint(m_solver, AM_STRONG);
+                am_addterm(max_x, ptr->max_x, 1.0);
+                am_setrelation(max_x, AM_EQUAL);
+                am_addterm(max_x, widget.max_y, 1.0);
+                am_addconstant(max_x, -ptr->margins[2].size);
+                am_addconstant(max_x, -ptr->borders[2].size);
+                am_addconstant(max_x, -ptr->padding[2].size);
+                am_add(max_x);
+            }
+            else
+            {
+                auto max_x = am_newconstraint(m_solver, AM_STRONG);
+                am_addterm(max_x, ptr->max_x, 1.0);
+                am_setrelation(max_x, AM_EQUAL);
+                am_addterm(max_x, ptr->min_x, 1.0);
+                am_addconstant(max_x, size_x * ptr->weight_x);
+                am_add(max_x);
+            }
+            prev = ptr;
+        }
+    }
+
+    for (auto&& child : widget.children)
+    {
+        if (!(child->state & gui_widget_state::visible))
+            continue;
+
+        ICY_ERROR(update(*child));
+
+        auto min_x = am_value(child->min_x);
+        auto min_y = am_value(child->min_y);
+        auto max_x = am_value(child->max_x);
+        auto max_y = am_value(child->max_y);
+
+        auto hscroll = 0;
+        auto vscroll = 0;
+
+        auto& sx = child->scroll_x.view_size = max_x - min_x;
+        auto& sy = child->scroll_y.view_size = max_y - min_y;
+
+        const auto calc_hscroll = [&]
+        {
+            if (child->state & gui_widget_state::hscroll)
+            {
+                hscroll = 1;
+            }
+            else if (child->state & gui_widget_state::hscroll_auto)
+            {
+                for (auto&& item : child->items)
+                {
+                    if (item.x + item.w > sx)
+                    {
+                        hscroll = 1;
+                        break;
+                    }
+                }
+            }
+        };
+        const auto calc_vscroll = [&]
+        {
+            if (child->state & gui_widget_state::vscroll)
+            {
+                vscroll = 1;
+            }
+            else if (child->state & gui_widget_state::vscroll_auto)
+            {
+                for (auto&& item : child->items)
+                {
+                    if (item.y + item.h > sy)
+                    {
+                        vscroll = 1;
+                        break;
+                    }
+                }
+            }
+        };
+
+        calc_hscroll();
+        calc_vscroll();
+        if (hscroll) sy -= m_system->hscroll().size;
+        if (vscroll) sx -= m_system->vscroll().size;
+
+        if (!hscroll && vscroll) calc_hscroll();
+        if (!vscroll && hscroll) calc_vscroll();
+
+        if (child->state & gui_widget_state::hscroll_inv) hscroll *= -1;
+        if (child->state & gui_widget_state::vscroll_inv) vscroll *= -1;
+
+        sx = max_x - min_x;
+        sy = max_y - min_y;
+        if (hscroll) sy -= m_system->hscroll().size;
+        if (vscroll) sx -= m_system->vscroll().size;
+
+        using scroll_items_type = std::pair<uint32_t, gui_widget_item_type>[4];
+
+        scroll_items_type vscroll_items =
+        {
+            std::make_pair(0u, gui_widget_item_type::vscroll_bk),
+            std::make_pair(0u, gui_widget_item_type::vscroll_max),
+            std::make_pair(0u, gui_widget_item_type::vscroll_min),
+            std::make_pair(0u, gui_widget_item_type::vscroll_val),
+        };
+        scroll_items_type hscroll_items =
+        {
+            std::make_pair(0u, gui_widget_item_type::hscroll_bk),
+            std::make_pair(0u, gui_widget_item_type::hscroll_max),
+            std::make_pair(0u, gui_widget_item_type::hscroll_min),
+            std::make_pair(0u, gui_widget_item_type::hscroll_val),
+        };
+        
+        for (auto&& item : child->items)
+        {
+            const auto index = [&] { return 1u + uint32_t(std::distance(child->items.data(), &item)); };
+            switch (item.type)
+            {
+            case gui_widget_item_type::text:
+            {
+                item.state &= ~gui_widget_item_state::visible;
+                child->scroll_x.max = std::max(child->scroll_x.max, item.x + item.w);
+                child->scroll_y.max = std::max(child->scroll_y.max, item.y + item.h);
+                break;
+            }
+
+            case gui_widget_item_type::vscroll_bk: vscroll_items[0].first = index(); break;
+            case gui_widget_item_type::vscroll_max: vscroll_items[1].first = index(); break;
+            case gui_widget_item_type::vscroll_min: vscroll_items[2].first = index(); break;
+            case gui_widget_item_type::vscroll_val: vscroll_items[3].first = index(); break;
+            case gui_widget_item_type::hscroll_bk: hscroll_items[0].first = index(); break;
+            case gui_widget_item_type::hscroll_max: hscroll_items[1].first = index(); break;
+            case gui_widget_item_type::hscroll_min: hscroll_items[2].first = index(); break;
+            case gui_widget_item_type::hscroll_val: hscroll_items[3].first = index(); break;
+            }
+
+        }
+
+        const auto func = [&](const bool is_vscroll)
+        {
+            const auto scroll = is_vscroll ? vscroll : hscroll;
+            const auto& sys_scroll = is_vscroll ? m_system->vscroll() : m_system->hscroll();
+            auto& items = is_vscroll ? vscroll_items : hscroll_items;
+            if (scroll)
+            {
+                for (auto&& pair : items)
+                {
+                    if (!pair.first)
+                    {
+                        ICY_ERROR(child->items.push_back(pair.second));
+                        pair.first = uint32_t(child->items.size());
+                    }
+                    child->items[pair.first - 1].state |= gui_widget_item_state::visible;
+                }
+                auto& bk = child->items[items[0].first - 1];
+                auto& max = child->items[items[1].first - 1];
+                auto& min = child->items[items[2].first - 1];
+                auto& val = child->items[items[3].first - 1];
+
+                bk.image = sys_scroll.background;
+
+                if (m_press.widget == child->index && m_press.item == items[1].first)
+                    max.image = sys_scroll.max_focused;
+                else if (m_hover.widget == child->index && m_hover.item == items[1].first && !m_press)
+                    max.image = sys_scroll.max_hovered;
+                else
+                    max.image = sys_scroll.max_default;
+
+                if (m_press.widget == child->index && m_press.item == items[2].first)
+                    min.image = sys_scroll.min_focused;
+                else if (m_hover.widget == child->index && m_hover.item == items[2].first && !m_press)
+                    min.image = sys_scroll.min_hovered;
+                else
+                    min.image = sys_scroll.min_default;
+
+                if (m_press.widget == child->index && m_press.item == items[3].first)
+                    val.image = sys_scroll.val_focused;
+                else if (m_hover.widget == child->index && m_hover.item == items[3].first && !m_press)
+                    val.image = sys_scroll.val_hovered;
+                else
+                    val.image = sys_scroll.val_default;
+
+                if (is_vscroll)
+                {
+                    for (auto&& pair : items)
+                    {
+                        auto& item = child->items[pair.first - 1];
+                        item.x = sx;
+                        item.w = sys_scroll.size;
+                        item.y = 0;
+                        item.h = 0;                    
+                    }
+                    min.h = float(min.image.size().y);
+                    max.h = float(max.image.size().y);
+                    max.y = sy - max.h;
+                    const auto canvas = child->scroll_y.area_size = max.y - min.h;
+
+                    val.h = std::min(canvas, std::max(sys_scroll.size, canvas * sy / std::max(sy, child->scroll_y.max)));
+                    val.y = min.h;
+
+                    child->scroll_y.clamp();
+                    
+                    if (child->scroll_y.max > sy)
+                        val.y += (canvas - val.h) * child->scroll_y.val / (child->scroll_y.max - sy);
+                    
+                    bk.y = min.h;
+                    bk.h = canvas;
+                }
+                else
+                {
+                    for (auto&& pair : items)
+                    {
+                        auto& item = child->items[pair.first - 1];
+                        item.y = sy;
+                        item.h = sys_scroll.size;
+                        item.x = 0;
+                        item.w = 0;
+                    }
+                    min.w = float(min.image.size().x);
+                    max.w = float(max.image.size().x);
+                    max.x = sx - max.w;
+                    const auto canvas = child->scroll_x.area_size = max.x - min.w;
+
+                    val.w = std::min(canvas, std::max(sys_scroll.size, canvas * sx / std::max(sx, child->scroll_x.max)));
+                    val.x = min.w;
+                    
+                    child->scroll_x.clamp();
+
+                    if (child->scroll_x.max > sx)
+                        val.x += (canvas - val.w) * child->scroll_x.val / (child->scroll_x.max - sx);
+
+                    bk.x = min.w;
+                    bk.w = canvas;
+                }
+            }
+            else
+            {
+                for (auto&& pair : items)
+                {
+                    if (pair.first) child->items[pair.first - 1].state &= gui_widget_item_state::visible;
+                }
+            }
+            return error_type();
+        };
+        ICY_ERROR(func(1));
+        ICY_ERROR(func(0));
+
+        child->state &= ~gui_widget_state::has_hscroll;
+        child->state &= ~gui_widget_state::has_vscroll;
+        if (hscroll) child->state |= gui_widget_state::has_hscroll;
+        if (vscroll) child->state |= gui_widget_state::has_vscroll;
+
+        for (auto&& item : child->items)
+        {
+            auto item_min_x = item.x;
+            auto item_min_y = item.y;
+            if (hscroll) item_min_x -= child->scroll_x.val;
+            if (vscroll) item_min_y -= child->scroll_y.val;
+
+            const auto item_max_x = item_min_x + item.w;
+            const auto item_max_y = item_min_y + item.h;
+
+            if (item_max_y < 0.0f || item_max_x < 0.0f || item_min_x >= sx || item_min_y >= sy)
+                continue;
+
+            item.state |= gui_widget_item_state::visible;
+            /*
+            if (item.type == gui_widget_item_type::text && item.text)
+            {
+                ICY_COM_ERROR(item.text->SetMaxWidth(sx - item.x));
+                ICY_COM_ERROR(item.text->SetMaxHeight(sy - item.y));
+            }*/
+        }
+
+
+    }
 
     return error_type();
 }
-error_type gui_window_data_sys::input_mouse_move(const int32_t px, const int32_t py, const key_mod mods) noexcept
+error_type gui_window_data_sys::input_key_press(const key key, const key_mod mods, array<gui_widget>& output) noexcept
 {
-
     return error_type();
 }
-error_type gui_window_data_sys::input_mouse_wheel(const int32_t px, const int32_t py, const key_mod mods, const int32_t wheel) noexcept
-{
-
-    return error_type();
-}
-error_type gui_window_data_sys::input_mouse_release(const key key, const int32_t px, const int32_t py, const key_mod mods) noexcept
+error_type gui_window_data_sys::input_key_hold(const key key, const key_mod mods, array<gui_widget>& output) noexcept
 {
 
     return error_type();
 }
-error_type gui_window_data_sys::input_mouse_press(const key key, const int32_t px, const int32_t py, const key_mod mods) noexcept
+error_type gui_window_data_sys::input_key_release(const key key, const key_mod mods, array<gui_widget>& output) noexcept
 {
 
     return error_type();
 }
-error_type gui_window_data_sys::input_mouse_hold(const key key, const int32_t px, const int32_t py, const key_mod mods) noexcept
+error_type gui_window_data_sys::input_mouse_move(const int32_t px, const int32_t py, const key_mod mods, array<gui_widget>& output) noexcept
+{
+    const auto& root = *m_data.front().value;
+
+    hover_type new_hover;
+    ICY_ERROR(hover_widget(root, px, py, new_hover));
+    if (new_hover)
+    {
+        auto it = m_data.find(new_hover.widget);
+        if (it != m_data.end())
+            ICY_ERROR(hover_item(*it->value, px, py, new_hover));
+    }
+
+    if (m_focus)
+    {
+        
+    }
+    if (m_press)
+    {
+        auto it = m_data.find(m_press.widget);
+        if (it == m_data.end())
+        {
+            m_press = press_type();
+        }
+        else if (m_press.item)
+        {
+            auto& widget = *it->value.get();
+            auto& item = widget.items[m_press.item - 1];
+            if (item.type == gui_widget_item_type::vscroll_val)
+            {
+                auto flex_scroll = false;
+                if (const auto ptr = widget.attr.try_find(gui_widget_attr::flex_scroll))
+                    to_value(*ptr, flex_scroll);
+                
+                const auto local = py - (m_press.dy + m_system->vscroll().min_default.size().y + am_value(widget.min_y));
+                const auto num = (widget.scroll_y.max - widget.scroll_y.view_size) * local;
+                const auto den = (widget.scroll_y.area_size - item.h);
+                
+                if (den <= 0 || num <= 0)
+                {
+                    (flex_scroll ? widget.scroll_y.exp : widget.scroll_y.val) = 0;
+                }
+                else
+                {
+                    (flex_scroll ? widget.scroll_y.exp : widget.scroll_y.val) = num / den;
+                    widget.scroll_y.clamp();
+                }
+                if (flex_scroll)
+                {
+                    m_timer_point = clock_type::now();
+                    ICY_ERROR(m_timer_scroll->initialize(SIZE_MAX, std::chrono::milliseconds(10)));
+                }
+                ICY_ERROR(reset());
+            }
+            
+
+        }
+    }
+
+    if (new_hover.widget != m_hover.widget || new_hover.item != m_hover.item)
+    {
+        ICY_ERROR(reset());
+        m_hover = new_hover;
+    }
+
+    return error_type();
+}
+error_type gui_window_data_sys::input_mouse_wheel(const int32_t px, const int32_t py, const key_mod mods, const int32_t wheel, array<gui_widget>& output) noexcept
 {
 
     return error_type();
 }
-error_type gui_window_data_sys::input_mouse_double(const key key, const int32_t px, const int32_t py, const key_mod mods) noexcept
+error_type gui_window_data_sys::input_mouse_release(const key key, const int32_t px, const int32_t py, const key_mod mods, array<gui_widget>& output) noexcept
+{
+    if (key == key::mouse_left)
+    {
+        if (m_press)
+        {
+            m_timer_scroll->cancel();
+            static_cast<state_type&>(m_focus) = m_press;
+            m_press = press_type();
+            ICY_ERROR(reset());
+        }
+    }
+    return error_type();
+}
+error_type gui_window_data_sys::input_mouse_press(const key key, const int32_t, const int32_t, const key_mod mods, array<gui_widget>& output) noexcept
+{
+    if (key == key::mouse_left)
+    {
+        if (m_hover)
+        {
+            static_cast<state_type&>(m_press) = m_hover;
+            ICY_ERROR(reset());
+        }
+        if (m_focus)
+        {
+
+        }        
+    }
+    return error_type();
+}
+error_type gui_window_data_sys::input_mouse_hold(const key key, const int32_t px, const int32_t py, const key_mod mods, array<gui_widget>& output) noexcept
 {
 
     return error_type();
 }
-error_type gui_window_data_sys::input_text(const string_view text) noexcept
+error_type gui_window_data_sys::input_mouse_double(const key key, const int32_t px, const int32_t py, const key_mod mods, array<gui_widget>& output) noexcept
 {
 
     return error_type();
 }
-error_type gui_window_data_sys::process(const gui_window_event_type& event) noexcept
+error_type gui_window_data_sys::input_text(const string_view text, array<gui_widget>& output) noexcept
+{
+
+    return error_type();
+}
+error_type gui_window_data_sys::solve_item(gui_widget_data& widget, gui_widget_item& item, const gui_font& font) noexcept
+{
+    if (item.type == gui_widget_item_type::text)
+    {
+        if (item.text)
+            return error_type();
+
+        const auto& render = m_system->render();
+        string str;
+        if (const auto error = to_string(item.value, str))
+        {
+            if (error == make_stdlib_error(std::errc::invalid_argument))
+                return error_type();
+            return error;
+        }
+        ICY_ERROR(render.create_text(item.text, font, str));
+        DWRITE_TEXT_METRICS metrics;
+        ICY_COM_ERROR(item.text->GetMetrics(&metrics));
+        item.w = metrics.widthIncludingTrailingWhitespace;
+        item.h = metrics.height;
+
+        if (widget.scroll_y.step == 0)
+            widget.scroll_y.step = metrics.height / metrics.lineCount;
+    }
+    else
+    {
+        item.w = 0;
+        item.h = 0;
+    }
+    return error_type();
+}
+error_type gui_window_data_sys::make_view(const gui_data_model& proxy, const gui_node_data& node, const gui_data_bind& func, gui_widget_data& widget) noexcept
+{
+    array<const gui_node_data*> nodes;
+    for (auto&& child : node.children)
+    {
+        if (child->value.col != 0)
+            continue;
+
+        if (!(child->key->state & gui_node_state::visible))
+            continue;
+
+        if (!func.filter(proxy, gui_node{ child->key->index }))
+            continue;
+
+        ICY_ERROR(nodes.push_back(child.key));
+    }
+    const auto pred = [&proxy, &func](const gui_node_data*& lhs, const gui_node_data*& rhs)
+    {
+        return func.compare(proxy, gui_node{ lhs->index }, gui_node{ rhs->index }) < 0;
+    };
+    std::sort(nodes.begin(), nodes.end(), pred);
+
+    auto offset = 10.0f;    
+
+    /*if (const auto attr_offset = widget.attr.try_find("offset"_s))
+    {
+
+    }*/
+
+    for (auto&& child : nodes)
+    {
+        gui_widget_item new_item;
+        new_item.type = gui_widget_item_type::text;
+        new_item.value = child->data;
+        ICY_ERROR(solve_item(widget, new_item, m_font));
+        if (new_item.text)
+        {
+            new_item.x = widget.size_x;
+            new_item.y = widget.size_y;
+            
+            ICY_ERROR(widget.items.push_back(std::move(new_item)));
+            widget.size_y += new_item.h;
+            if (widget.type == gui_widget_type::view_tree)
+            {
+                widget.size_x += offset;
+                ICY_ERROR(make_view(proxy, *child, func, widget));
+                widget.size_x -= offset;
+            }
+        }
+    }
+    return error_type();
+}
+error_type gui_window_data_sys::hover_widget(const gui_widget_data& widget, const int32_t px, const int32_t py, hover_type& new_hover) const noexcept
+{
+    for (auto&& child : widget.children)
+    {
+        if (!(child->state & (gui_widget_state::visible | gui_widget_state::enabled)))
+            continue;
+
+        const auto min_x = lround(am_value(child->min_x));
+        const auto min_y = lround(am_value(child->min_y));
+        const auto max_x = lround(am_value(child->max_x));
+        const auto max_y = lround(am_value(child->max_y));
+        if (px < min_x || py < min_y || px >= max_x || py >= max_y)
+            continue;
+
+        new_hover.widget = child->index;
+        ICY_ERROR(hover_widget(*child, px, py, new_hover));
+        if (new_hover)
+            break;
+    }
+    return error_type();
+}
+error_type gui_window_data_sys::hover_item(const gui_widget_data& widget, const int32_t px, const int32_t py, hover_type& new_hover) const noexcept
+{
+    new_hover.item = 0;
+    for (auto&& item : widget.items)
+    {
+        if (!(item.state & (gui_widget_item_state::enabled | gui_widget_item_state::visible)))
+            continue;
+
+        auto item_x = item.x;
+        auto item_y = item.y;
+        switch (item.type)
+        {
+        case gui_widget_item_type::text:
+        {
+            if (widget.state & gui_widget_state::has_hscroll) item_x -= widget.scroll_x.val;
+            if (widget.state & gui_widget_state::has_vscroll) item_y -= widget.scroll_y.val;
+            break;
+        }
+        }
+        const auto min_x = am_value(widget.min_x) + item_x;
+        const auto min_y = am_value(widget.min_y) + item_y;
+        const auto max_x = min_x + item.w;
+        const auto max_y = min_y + item.h;
+
+        if (px < min_x || px >= max_x || py < min_y || py >= max_y)
+            continue;
+
+        new_hover.item = uint32_t(std::distance(widget.items.data(), &item) + 1);
+        new_hover.dx = uint32_t(px - min_x);
+        new_hover.dy = uint32_t(py - min_y);
+    }
+    return error_type();
+}
+error_type gui_window_data_sys::process(const gui_window_event_type& event, array<gui_widget>& output) noexcept
 {
     switch (event.type)
     {
@@ -867,673 +1408,232 @@ error_type gui_window_data_sys::process(const gui_window_event_type& event) noex
     }
     case gui_window_event_type::modify:
     {
-        const auto args = event.val.get<gui_widget_data::insert_args>();
+        const auto args = event.val.get<gui_widget_data::modify_args>();
         ICY_ASSERT(args, "");
         ICY_ERROR(gui_widget_data::modify(m_data, *args));
         break;
     }
     case gui_window_event_type::destroy:
     {
+        auto it = m_data.find(event.index);
         gui_widget_data::erase(m_data, event.index);
         break;
     }
     default:
         return error_type();
     }
-    m_state &= ~gui_window_state_has_list;
+    ICY_ERROR(reset());
     return error_type();
 }
 window_size gui_window_data_sys::size(const uint32_t widget) const noexcept
 {
-	window_size wsize;
-	if (const auto ptr = m_data.try_find(widget))
-	{
-		wsize.x = ptr->get()->content_box[2];
-		wsize.y = ptr->get()->content_box[3];
-	}
-	return wsize;
+	if (widget == 0)
+		return m_size;
+	
+	return window_size();
+}    
+error_type gui_window_data_sys::send_data(gui_model_data_sys& model, const gui_widget widget, const gui_node node, const gui_data_bind& func, bool& erase) const noexcept 
+{
+    auto it = m_data.find(widget.index);
+    if (it == m_data.end())
+    {
+        erase = true;
+        return error_type();
+    }
+    ICY_ERROR(model.recv_data(*it->value, node, func, erase));
+    return error_type();
+}
+error_type gui_window_data_sys::recv_data(const gui_data_model& proxy, const gui_node_data& node, const gui_widget index, const gui_data_bind& func, bool& erase) noexcept
+{
+    auto it = m_data.find(index.index);
+    if (it == m_data.end())
+    {
+        erase = true;
+        return error_type();
+    }
+    auto& widget = *it->value;
+    switch (widget.type)
+    {
+    case gui_widget_type::edit_line:
+    case gui_widget_type::edit_text:
+    {
+        for (auto&& item : widget.items)
+        {
+            if (item.type == gui_widget_item_type::text)
+            {
+                item.text = gui_text();
+                if ((node.state & gui_node_state::visible) && func.filter(proxy, gui_node{ node.index }))
+                {
+                    item.value = node.data;
+                }
+                else
+                {
+                    item.value = gui_variant();
+                }
+                break;
+            }
+        }
+        break;
+    }
+    case gui_widget_type::view_list:
+    case gui_widget_type::view_table:
+    case gui_widget_type::view_tree:
+    {
+        if (m_hover.widget == it->key) m_hover.item = 0;
+        if (m_press.widget == it->key) m_press.item = 0;
+        if (m_focus.widget == it->key) m_focus.item = 0;
+
+        widget.items.clear();
+        widget.size_x = 0;
+        widget.size_y = 0;
+        if ((node.state & gui_node_state::visible) && func.filter(proxy, gui_node{ node.index }))
+        {
+            ICY_ERROR(make_view(proxy, node, func, widget));
+        }
+        break;
+    }
+    default:
+        return error_type();
+    }
+    ICY_ERROR(reset());
+
+
+    return error_type();
+}
+error_type gui_window_data_sys::timer(timer::pair& pair) noexcept
+{
+    if (pair.timer == m_timer_scroll.get())
+    {
+        if (!m_press)
+        {
+            pair.timer->cancel();
+            return error_type();
+        }
+        else
+        {
+            auto it = m_data.find(m_press.widget);
+            if (it == m_data.end())
+            {
+                m_press = press_type();
+                pair.timer->cancel();
+                return error_type();
+            }
+            auto& widget = *it->value.get();
+            auto done = 0;
+            const auto delta_y = widget.scroll_y.exp - widget.scroll_y.val;
+            const auto delta_t = 1e-6 * (std::chrono::duration_cast<std::chrono::microseconds>(clock_type::now() - m_timer_point)).count();
+            if (fabsf(delta_y) <= widget.scroll_y.step)
+            {
+                widget.scroll_y.val = widget.scroll_y.exp;
+                widget.scroll_y.clamp();
+                ++done;
+            }
+            else
+            {                
+                widget.scroll_y.val += delta_y * delta_t * 0.5f;
+                widget.scroll_y.clamp();
+            }
+
+            if (done == 1)
+            {
+                pair.timer->cancel();
+            }
+            ICY_ERROR(reset());
+        }
+    }
+    return error_type();
+}
+error_type gui_window_data_sys::reset() noexcept
+{
+    ICY_ERROR(m_system->post_update(*this));
+    m_state &= ~gui_window_state_updated;
+    return error_type();
 }
 error_type gui_window_data_sys::render(gui_texture& texture) noexcept
 {
-	texture.draw_begin(m_data.front().value->bkcolor);
-    for (auto k = 1u; k < m_list.size(); ++k)
-    {
-		auto widget = m_list[k];
-		if (!(widget->state & gui_widget_state_visible))
-			continue;
-
-		const auto x = float(widget->content_box[0]);
-		const auto y = float(widget->content_box[1]);
-		const auto w = widget->content_box[2];
-		const auto h = widget->content_box[3];
-
-		if (widget->bkcolor.a)
-			texture.fill_rect({ x, y, x + w, y + h }, widget->bkcolor);
-
-		if (widget->text.layout.value)
-        {
-            ICY_ERROR(texture.draw_text(x, y, widget->text.color, widget->text.layout.value));
-        }
-    }
-
+    const auto& root = *m_data.front().value;
+    color bkcolor;
+    gui_attr_default(gui_widget_attr::bkcolor).get(bkcolor);
+    if (const auto ptr = root.attr.try_find(gui_widget_attr::bkcolor))
+        to_value(*ptr, bkcolor);
+    
+    texture.draw_begin(bkcolor);
+    ICY_ERROR(render(texture, root));
     ICY_ERROR(texture.draw_end());
     return error_type();
 }
-
-/*
-error_type gui_select_output::preproc(const gui_window_data_sys& window, gui_widget_data& widget) const noexcept
+error_type gui_window_data_sys::render(gui_texture& texture, const gui_widget_data& widget) noexcept
 {
-	auto style = m_value->styles[CSS_PSEUDO_ELEMENT_NONE];
-	auto len = 0;
-	auto unit = css_unit::CSS_UNIT_PX;
+    for (auto&& child : widget.children)
+    {
+        if (!(child->state & gui_widget_state::visible))
+            continue;
 
+        const auto x0 = am_value(child->min_x);
+        const auto y0 = am_value(child->min_y);
+        const auto x1 = am_value(child->max_x);
+        const auto y1 = am_value(child->max_y);
 
-	
+        color bkcolor;
+        if (const auto ptr = child->attr.try_find(gui_widget_attr::bkcolor))
+            to_value(*ptr, bkcolor);
 
+        texture.fill_rect({ x0, y0, x1, y1 }, bkcolor);
+        
+        auto clip = child->state & (gui_widget_state::has_hscroll | gui_widget_state::has_vscroll);
+        if (clip)
+        {
+            auto clip_rect = gui_texture::rect_type{ x0, y0, x1, y1 };
+            //if (child->state & gui_widget_state::has_vscroll) clip_rect.max_x -= m_system->vscroll().size;
+            //if (child->state & gui_widget_state::has_hscroll) clip_rect.max_y -= m_system->hscroll().size;
+            texture.push_clip(clip_rect);
+        }
+        for (auto&& item : child->items)
+        {
+            if (!(item.state & gui_widget_item_state::visible))
+                continue;
 
-	const auto func = [&](const size_t index)
-	{
-		uint8_t(*func_calc_border)(const css_computed_style * style, css_fixed * len, css_unit * unit);
-		uint8_t(*func_calc_margin)(const css_computed_style * style, css_fixed * len, css_unit * unit);
-		uint8_t(*func_calc_padding)(const css_computed_style * style, css_fixed * len, css_unit * unit);
+            switch (item.type)
+            {
+            case gui_widget_item_type::text:
+            {
+                auto item_x = item.x;
+                auto item_y = item.y;
+                if (child->state & gui_widget_state::has_hscroll) item_x -= child->scroll_x.val;
+                if (child->state & gui_widget_state::has_vscroll) item_y -= child->scroll_y.val;
+                ICY_ERROR(texture.draw_text(x0 + item_x, y0 + item_y, item.color, item.text.value));
+                break;
+            }
+            case gui_widget_item_type::vscroll_bk:
+            case gui_widget_item_type::vscroll_min:
+            case gui_widget_item_type::vscroll_max:
+            case gui_widget_item_type::vscroll_val:
+            case gui_widget_item_type::hscroll_bk:
+            case gui_widget_item_type::hscroll_min:
+            case gui_widget_item_type::hscroll_max:
+            case gui_widget_item_type::hscroll_val:
+            {
+                gui_texture::rect_type rect;
+                rect.max_x = rect.min_x = x0 + item.x;
+                rect.max_y = rect.min_y = y0 + item.y;
+                rect.max_x += item.w;
+                rect.max_y += item.h;
+                texture.draw_image(rect, item.image.value);
+                break;
+            }
 
-		switch (index)
-		{
-		case 0:
-			func_calc_border = &css_computed_border_left_width;
-			func_calc_margin = &css_computed_margin_left;
-			func_calc_padding = &css_computed_padding_left;
-			break;
-		case 1:
-			func_calc_border = &css_computed_border_top_width;
-			func_calc_margin = &css_computed_margin_top;
-			func_calc_padding = &css_computed_padding_top;
-			break;
-		case 2:
-			func_calc_border = &css_computed_border_right_width;
-			func_calc_margin = &css_computed_margin_right;
-			func_calc_padding = &css_computed_padding_right;
-			break;
-		case 3:
-			func_calc_border = &css_computed_border_bottom_width;
-			func_calc_margin = &css_computed_margin_bottom;
-			func_calc_padding = &css_computed_padding_bottom;
-			break;
-		default:
-			return;
-		}
-
-	
-
-		widget.size[index].margin = 0;
-		switch (func_calc_margin(style, &len, &unit))
-		{
-		case CSS_MARGIN_SET:
-			widget.size[index].margin = gui_size_calc(window, widget, unit, len);
-			break;
-		case CSS_MARGIN_INHERIT:
-			if (widget.parent)
-				widget.size[index].margin = widget.parent->size[index].margin;
-			break;
-		}
-
-		widget.size[index].padding = 0;
-		switch (func_calc_padding(style, &len, &unit))
-		{
-		case CSS_PADDING_SET:
-			widget.size[index].padding = gui_size_calc(window, widget, unit, len);
-			break;
-		case CSS_PADDING_INHERIT:
-			if (widget.parent)
-				widget.size[index].padding = widget.parent->size[index].padding;
-			break;
-		}
-	};
-
-	func(0);
-	func(1);
-	func(2);
-	func(3);
-
-	switch (widget.position)
-	{
-	case CSS_POSITION_STATIC:
-	case CSS_POSITION_RELATIVE:
-	{
-		//	relative: or offset by [left/top/right/bot]
-		break;
-	}
-	case CSS_POSITION_ABSOLUTE:
-
-	default:
-		break;
-	}
-	if (widget.text.value)
-	{
-		const auto box = window.box(widget.index, gui_widget_box_type::inner);
-		const auto& render = window.system().render();
-		ICY_ERROR(render.create_text(widget.text.layout, window.font(), widget.text.value.str()));
-		const auto layout = static_cast<IDWriteTextLayout*>(widget.text.layout.value.get());
-		const auto range = DWRITE_TEXT_RANGE{ 0, UINT32_MAX };
-		ICY_COM_ERROR(layout->SetFontSize(widget.font_size, range));
-
-		css_color color = 0;
-		switch (css_computed_color(style, &color))
-		{
-		case CSS_COLOR_INHERIT:
-			if (widget.parent)
-				widget.text.color = widget.parent->text.color;
-			break;
-		case CSS_COLOR_COLOR:
-			widget.text.color = color::from_rgba(color);
-			break;
-		};
-	}
-	else
-	{
-		widget.text.layout = gui_text();
-		widget.text.color = colors::black;
-	}
-
-	return error_type();
-}
-error_type gui_select_output::postproc(const gui_window_data_sys& window, gui_widget_data& widget) const noexcept
-{
-	auto style = m_value->styles[CSS_PSEUDO_ELEMENT_NONE];
-	auto len = 0;
-	auto unit = css_unit::CSS_UNIT_PX;
-
-	/*const auto func_wh = [&](const uint32_t index)
-	{
-		uint8_t(*func_calc)(const css_computed_style * style, css_fixed * len, css_unit * unit) = nullptr;
-		am_Var* var = nullptr;
-		am_Var* var_parent = nullptr;
-		am_Constraint* con = nullptr;
-		switch (index)
-		{
-		case 0:
-			func_calc = css_computed_width;
-			var = widget.dx.var_val;
-			con = widget.dx.con_val;
-			var_parent = widget.parent ? widget.parent->dx.var_val : nullptr;
-			break;
-		case 1:
-			func_calc = css_computed_min_width;
-			var = widget.dx.var_min;
-			con = widget.dx.con_min;
-			var_parent = widget.parent ? widget.parent->dx.var_min : nullptr;
-			break;
-		case 2:
-			func_calc = css_computed_max_width;
-			var = widget.dx.var_max;
-			con = widget.dx.con_max;
-			var_parent = widget.parent ? widget.parent->dx.var_max : nullptr;
-			break;
-		case 3:
-			func_calc = css_computed_height;
-			var = widget.dy.var_val;
-			con = widget.dy.con_val;
-			var_parent = widget.parent ? widget.parent->dy.var_val : nullptr;
-			break;
-		case 4:
-			func_calc = css_computed_min_height;
-			var = widget.dy.var_min;
-			con = widget.dy.con_min;
-			var_parent = widget.parent ? widget.parent->dy.var_min : nullptr;
-			break;
-		case 5:
-			func_calc = css_computed_max_height;
-			var = widget.dy.var_max;
-			con = widget.dy.con_max;
-			var_parent = widget.parent ? widget.parent->dy.var_max : nullptr;
-			break;
-		default:
-			return;
-		}
-
-		switch (func_calc_offset(style, &len, &unit))
-		{
-		case CSS_LEFT_SET:
-			am_suggest(widget.size[index].var, calc());
-			break;
-		case CSS_LEFT_INHERIT:
-		{
-			auto con = widget.size[index].con;
-			am_resetconstraint(con);
-			am_addterm(con, widget.size[index].var, 1);
-			am_setrelation(con, AM_EQUAL);
-			am_addterm(con, widget.parent->size[index].var, 1);
-			break;
-		}
-		case CSS_LEFT_AUTO:
-			break;
-		}
-		switch (func_calc(style, &len, &unit))
-		{
-		case CSS_WIDTH_SET:
-			static_assert(CSS_MIN_WIDTH_SET == CSS_WIDTH_SET, "");
-			static_assert(CSS_MAX_WIDTH_SET == CSS_WIDTH_SET, "");
-			static_assert(CSS_MIN_HEIGHT_SET == CSS_WIDTH_SET, "");
-			static_assert(CSS_MAX_HEIGHT_SET == CSS_WIDTH_SET, "");
-			static_assert(CSS_HEIGHT_SET == CSS_WIDTH_SET, "");
-			am_suggest(var, calc());
-			break;
-		case CSS_WIDTH_INHERIT:
-			static_assert(CSS_MIN_WIDTH_INHERIT == CSS_WIDTH_INHERIT, "");
-			static_assert(CSS_MAX_WIDTH_INHERIT == CSS_WIDTH_INHERIT, "");
-			static_assert(CSS_MIN_HEIGHT_INHERIT == CSS_WIDTH_INHERIT, "");
-			static_assert(CSS_MAX_HEIGHT_INHERIT == CSS_WIDTH_INHERIT, "");
-			static_assert(CSS_HEIGHT_INHERIT == CSS_WIDTH_INHERIT, "");
-			if (widget.parent)
-			{
-				am_resetconstraint(con);
-				am_addterm(con, var, 1);
-				am_setrelation(con, AM_EQUAL);
-				am_addterm(con, var_parent, 1);
-			}
-			break;
-		}
-	};
-
-
-	func_wh(0);
-	func_wh(1);
-	func_wh(2);
-	func_wh(3);
-	func_wh(4);
-	func_wh(5);
-	
-
-
-	switch (widget.display)
-	{
-	case CSS_DISPLAY_BLOCK:
-	{
-		return error_type();
-		break;
-	}
-	case CSS_DISPLAY_INLINE:
-	{
-		if (const auto parent = widget.parent)
-		{
-			const auto it = std::find(parent->children.begin(), parent->children.end(), &widget);
-			const auto index = std::distance(parent->children.begin(), it);
-			const auto prev = index ? parent->children[index - 1] : parent;
-
-			const auto lhs = am_value(prev->size[2].var);
-			const auto top = am_value(parent->size[1].var);
-			auto rhs = lhs;
-			auto bot = top;
-
-			if (widget.text.layout)
-			{
-				DWRITE_TEXT_METRICS metrics = {};
-				ICY_COM_ERROR(widget.text.layout->GetMetrics(&metrics));
-				rhs += metrics.width;
-				bot += metrics.height;
-			}
-			am_suggest(widget.size[0].var, lhs);
-			am_suggest(widget.size[1].var, top);
-			am_suggest(widget.size[2].var, rhs);
-			am_suggest(widget.size[3].var, bot);
-		}
-		break;
-	}
-	case CSS_DISPLAY_NONE:
-	{
-		break;
-	}
-
-	default:
-		return error_type();
-	}
-
+            default:
+                break;
+            }
+        }
+        if (clip)
+        {
+            texture.pop_clip();
+        }
+        ICY_ERROR(render(texture, *child));
+    }
 	return error_type();
 }
 
-
-*/
-
-
-
-/*
-for (auto pass = 0u; pass < 2u; ++pass)
-	{
-		step = 0;
-		const auto postproc = pass > 0;
-		if (postproc)
-		{
-			for (auto&& box : box_list)
-			{
-				if (box.widget->text.layout)
-				{
-					const auto max_width = am_value(box.var(gui_widget_box_var_width));
-					ICY_COM_ERROR(box.widget->text.layout->SetMaxWidth(max_width));
-
-					DWRITE_TEXT_METRICS metrics;
-					ICY_COM_ERROR(box.widget->text.layout->GetMetrics(&metrics));
-					am_suggest(box.var(gui_widget_box_var_width), metrics.widthIncludingTrailingWhitespace, AM_WEAK);
-				}
-			}
-		}
-		for (auto&& box : box_list)
-		{
-			++step;
-
-			auto child = box.child;
-			if (!child)
-				continue;
-
-			auto is_block = false;
-			while (child)
-			{
-				switch (child->widget->display)
-				{
-				case CSS_DISPLAY_BLOCK:
-					is_block = true;
-					break;
-				default:
-					break;
-				}
-				child = child->next;
-			}
-			child = box.child;
-
-			if (is_block == false)
-			{
-				auto& conw = box.cons[gui_widget_box_con_inline_width];
-				if (!conw)
-					conw = am_newconstraint(solver, AM_WEAK);
-				else
-					am_resetconstraint(conw);
-
-				am_addterm(conw, box.var(gui_widget_box_var_width), 1.0);
-				am_setrelation(conw, AM_GREATEQUAL);
-
-				while (child)
-				{
-					if (child->prev && postproc)
-					{
-						margin_append(*child, gui_widget_box_var_margin_left);
-						margin_append(*child->prev, gui_widget_box_var_margin_right);
-						am_addconstant(conw, collapse() * 0.5f);
-					}
-					else if (child->prev)
-					{
-						am_addterm(conw, child->cvar(gui_widget_box_var_margin_left), 0.5);
-					}
-					else // first
-					{
-						am_addterm(conw, child->cvar(gui_widget_box_var_margin_left), 1.0);
-					}
-					am_addterm(conw, child->cvar(gui_widget_box_var_border_left), 1.0);
-					am_addterm(conw, child->cvar(gui_widget_box_var_padding_left), 1.0);
-					am_addterm(conw, child->var(gui_widget_box_var_width), 1.0);
-					am_addterm(conw, child->cvar(gui_widget_box_var_padding_right), 1.0);
-					am_addterm(conw, child->cvar(gui_widget_box_var_border_right), 1.0);
-
-					if (child->next && postproc)
-					{
-						margin_append(*child, gui_widget_box_var_margin_right);
-						margin_append(*child->next, gui_widget_box_var_margin_left);
-						am_addconstant(conw, collapse() * 0.5f);
-					}
-					else if (child->next)
-					{
-						am_addterm(conw, child->cvar(gui_widget_box_var_margin_right), 0.5);
-					}
-					else // last
-					{
-						am_addterm(conw, child->cvar(gui_widget_box_var_margin_right), 1.0);
-					}
-
-					if (true) // set child top
-					{
-						auto& con = child->cons[gui_widget_box_con_top];
-						if (!con)
-							con = am_newconstraint(solver, AM_STRONG);
-						else
-							am_resetconstraint(con);
-						am_addterm(con, child->var(gui_widget_box_var_top), 1.0);
-						am_setrelation(con, AM_LESSEQUAL);
-						am_addterm(con, child->cvar(gui_widget_box_var_margin_top), 1.0);
-						am_addterm(con, child->cvar(gui_widget_box_var_border_top), 1.0);
-						am_addterm(con, child->cvar(gui_widget_box_var_padding_top), 1.0);
-						am_addterm(con, box.var(gui_widget_box_var_top), 1.0);
-						am_add(con);
-					}
-					if (true) // set child left
-					{
-						auto& con = child->cons[gui_widget_box_con_left];
-						if (!con)
-							con = am_newconstraint(solver, AM_STRONG);
-						else
-							am_resetconstraint(con);
-						am_addterm(con, child->var(gui_widget_box_var_left), 1.0);
-						am_setrelation(con, AM_GREATEQUAL);
-						if (const auto prev = child->prev)
-						{
-							am_addterm(con, prev->var(gui_widget_box_var_left), 1.0);
-							am_addterm(con, prev->var(gui_widget_box_var_width), 1.0);
-							am_addterm(con, prev->cvar(gui_widget_box_var_padding_right), 1.0);
-							am_addterm(con, prev->cvar(gui_widget_box_var_border_right), 1.0);
-
-							if (postproc)
-							{
-								margin_append(*prev, gui_widget_box_var_margin_right);
-								margin_append(*child, gui_widget_box_var_margin_left);
-								am_addconstant(con, collapse());
-							}
-							else
-							{
-								am_addterm(con, prev->cvar(gui_widget_box_var_margin_right), 0.5);
-								am_addterm(con, box.cvar(gui_widget_box_var_margin_left), 0.5);
-							}
-						}
-						else
-						{
-							am_addterm(con, box.var(gui_widget_box_var_left), 1.0);
-							am_addterm(con, child->cvar(gui_widget_box_var_margin_left), 1.0);
-						}
-						am_addterm(con, child->cvar(gui_widget_box_var_border_left), 1.0);
-						am_addterm(con, child->cvar(gui_widget_box_var_padding_left), 1.0);
-						am_add(con);
-					}
-					if (true) // set child height
-					{
-						auto& con = child->cons[gui_widget_box_con_inline_height];
-						if (!con)
-							con = am_newconstraint(solver, AM_STRONG);
-						else
-							am_resetconstraint(con);
-						am_addterm(con, child->cvar(gui_widget_box_var_margin_top), 1.0);
-						am_addterm(con, child->cvar(gui_widget_box_var_border_top), 1.0);
-						am_addterm(con, child->cvar(gui_widget_box_var_padding_top), 1.0);
-						am_addterm(con, child->var(gui_widget_box_var_height), 1.0);
-						am_addterm(con, child->cvar(gui_widget_box_var_margin_bottom), 1.0);
-						am_addterm(con, child->cvar(gui_widget_box_var_border_bottom), 1.0);
-						am_addterm(con, child->cvar(gui_widget_box_var_padding_bottom), 1.0);
-						am_setrelation(con, AM_LESSEQUAL);
-						am_addterm(con, box.var(gui_widget_box_var_height), 1.0);
-						am_add(con);
-					}
-					child = child->next;
-				}
-				am_add(conw);
-			}
-			else
-			{
-				auto& conh = box.cons[gui_widget_box_con_block_height];
-				//if (!conh)
-				//	conh = am_newconstraint(solver, AM_WEAK);
-				//else
-				//	am_resetconstraint(conh);
-
-				am_addterm(conh, box.var(gui_widget_box_var_height), 1.0);
-				am_setrelation(conh, AM_LESSEQUAL);
-
-				while (child)
-				{
-					if (child->prev && postproc)	// try collapse
-					{
-						margin_append(*child, gui_widget_box_var_margin_top);
-						margin_append(*child->prev, gui_widget_box_var_margin_bottom);
-						am_addconstant(conh, collapse() * 0.5f);
-					}
-					else if (child->prev)
-					{
-						am_addterm(conh, child->cvar(gui_widget_box_var_margin_top), 0.5);
-					}
-					else // first
-					{
-						am_addterm(conh, child->cvar(gui_widget_box_var_margin_top), 1.0);
-					}
-					am_addterm(conh, child->cvar(gui_widget_box_var_border_top), 1.0);
-					am_addterm(conh, child->cvar(gui_widget_box_var_padding_top), 1.0);
-					am_addterm(conh, child->var(gui_widget_box_var_height), 1.0);
-					am_addterm(conh, child->cvar(gui_widget_box_var_padding_bottom), 1.0);
-					am_addterm(conh, child->cvar(gui_widget_box_var_border_bottom), 1.0);
-
-					if (child->next && postproc)	// try collapse
-					{
-						margin_append(*child, gui_widget_box_var_margin_bottom);
-						margin_append(*child->next, gui_widget_box_var_margin_top);
-						am_addconstant(conh, collapse() * 0.5f);
-					}
-					else if (child->next)
-					{
-						am_addterm(conh, child->cvar(gui_widget_box_var_margin_bottom), 0.5);
-					}
-					else // last
-					{
-						am_addterm(conh, child->cvar(gui_widget_box_var_margin_bottom), 1.0);
-					}
-
-					//	child left
-					if (true)
-					{
-						auto& con = child->cons[gui_widget_box_con_left];
-						if (!con)
-							con = am_newconstraint(solver, AM_STRONG);
-						else
-							am_resetconstraint(con);
-						am_addterm(con, child->var(gui_widget_box_var_left), 1.0);
-						am_setrelation(con, AM_EQUAL);
-						am_addterm(con, child->cvar(gui_widget_box_var_margin_left), 1.0);
-						am_addterm(con, child->cvar(gui_widget_box_var_border_left), 1.0);
-						am_addterm(con, child->cvar(gui_widget_box_var_padding_left), 1.0);
-						am_addterm(con, box.var(gui_widget_box_var_left), 1.0);
-						am_add(con);
-					}
-					//	child top
-					if (true)
-					{
-						auto& con = child->cons[gui_widget_box_con_top];
-						if (!con)
-							con = am_newconstraint(solver, AM_STRONG);
-						else
-							am_resetconstraint(con);
-						am_addterm(con, child->var(gui_widget_box_var_top), 1.0);
-						am_setrelation(con, AM_EQUAL);
-						if (const auto prev = child->prev)
-						{
-							am_addterm(con, prev->var(gui_widget_box_var_top), 1.0);
-							am_addterm(con, prev->var(gui_widget_box_var_height), 1.0);
-							am_addterm(con, prev->cvar(gui_widget_box_var_padding_bottom), 1.0);
-							am_addterm(con, prev->cvar(gui_widget_box_var_border_bottom), 1.0);
-
-							//	margin collapse
-							if (postproc)
-							{
-								margin_append(*prev, gui_widget_box_var_margin_bottom);
-								margin_append(*child, gui_widget_box_var_margin_top);
-								am_addconstant(con, collapse());
-							}
-							else
-							{
-								am_addterm(con, prev->cvar(gui_widget_box_var_margin_bottom), 1.0);
-								am_addterm(con, box.cvar(gui_widget_box_var_margin_top), 1.0);
-							}
-						}
-						else // is first
-						{
-							am_addterm(con, box.var(gui_widget_box_var_top), 1.0);
-							am_addterm(con, child->cvar(gui_widget_box_var_margin_top), 1.0);
-						}
-						am_addterm(con, child->cvar(gui_widget_box_var_border_top), 1.0);
-						am_addterm(con, child->cvar(gui_widget_box_var_padding_top), 1.0);
-						am_add(con);
-					}
-					//	child width
-					if (true)
-					{
-						auto& con = child->cons[gui_widget_box_con_block_width];
-						if (!con)
-							con = am_newconstraint(solver, AM_MEDIUM);
-						else
-							am_resetconstraint(con);
-						am_addterm(con, child->var(gui_widget_box_var_width), 1.0);
-						am_addterm(con, child->cvar(gui_widget_box_var_margin_left), 1.0);
-						am_addterm(con, child->cvar(gui_widget_box_var_border_left), 1.0);
-						am_addterm(con, child->cvar(gui_widget_box_var_padding_left), 1.0);
-						am_addterm(con, child->cvar(gui_widget_box_var_margin_right), 1.0);
-						am_addterm(con, child->cvar(gui_widget_box_var_border_right), 1.0);
-						am_addterm(con, child->cvar(gui_widget_box_var_padding_right), 1.0);
-						am_setrelation(con, AM_LESSEQUAL);
-						am_addterm(con, box.var(gui_widget_box_var_width), 1.0);
-						am_add(con);
-					}
-					child = child->next;
-				}
-				am_add(conh);
-			}
-			print();
-		}
-		am_updatevars(solver);
-	}
-*/
 #define AM_IMPLEMENTATION
 #include "amoeba.h"
-
-
-/*if (auto ptr = box.child)
-{
-	auto con_h = box.new_con(AM_EQUAL, AM_MEDIUM, gui_widget_box_var_height, -1.0);
-	am_addconstant(con_h, box.widget->line_size * 2);
-	while (ptr)
-	{
-		am_addterm(con_h, ptr->cvar(gui_widget_box_var_margin_top), 1.0);
-		am_addterm(con_h, ptr->cvar(gui_widget_box_var_border_top), 1.0);
-		am_addterm(con_h, ptr->cvar(gui_widget_box_var_padding_top), 1.0);
-		am_addterm(con_h, ptr->var(gui_widget_box_var_height), 1.0);
-		am_addterm(con_h, ptr->cvar(gui_widget_box_var_padding_bottom), 1.0);
-		am_addterm(con_h, ptr->cvar(gui_widget_box_var_border_bottom), 1.0);
-		am_addterm(con_h, ptr->cvar(gui_widget_box_var_margin_bottom), 1.0);
-		ptr = ptr->next;
-	}
-	am_add(con_h);
-}
-if (!box.next)
-{
-	auto con_h = box.new_con(AM_EQUAL, AM_MEDIUM, gui_widget_box_var_height, -1.0);
-	am_addterm(con_h, box.var(gui_widget_box_var_top), 1.0);
-	am_addterm(con_h, box.var(gui_widget_box_var_height), 1.0);
-	am_addterm(con_h, box.cvar(gui_widget_box_var_padding_bottom), 1.0);
-	am_addterm(con_h, box.cvar(gui_widget_box_var_border_bottom), 1.0);
-	am_addterm(con_h, box.cvar(gui_widget_box_var_margin_bottom), 1.0);
-	if (pbox)
-		am_addconstant(con_h, pbox->widget->line_size);
-	am_add(con_h);
-}
-if (pbox)
-{
-	auto con_max_h = pbox->new_con(AM_LESSEQUAL, AM_MEDIUM, gui_widget_box_var_height, -1.0);
-	am_addterm(con_max_h, box.cvar(gui_widget_box_var_margin_top), 1);
-	am_addterm(con_max_h, box.cvar(gui_widget_box_var_border_top), 1);
-	am_addterm(con_max_h, box.cvar(gui_widget_box_var_padding_top), 1);
-	am_addterm(con_max_h, box.cvar(gui_widget_box_var_height), 1);
-	am_addterm(con_max_h, box.cvar(gui_widget_box_var_padding_bottom), 1);
-	am_addterm(con_max_h, box.cvar(gui_widget_box_var_margin_bottom), 1);
-	am_addterm(con_max_h, box.cvar(gui_widget_box_var_border_bottom), 1);
-	am_add(con_max_h);
-}*/

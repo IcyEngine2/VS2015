@@ -32,6 +32,8 @@ namespace icy
 	using json_type_array = array<json>;
 	using json_type_object = map<json_type_string, json>;
 		
+    error_type to_value(const string_view str, json& root) noexcept;
+
 	class json
 	{
         friend error_type to_value(const string_view str, json& root) noexcept;

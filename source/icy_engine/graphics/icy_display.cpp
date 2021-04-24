@@ -42,7 +42,7 @@ public:
 class display_system_data : public display_system
 {
 public:
-    display_system_data(const adapter adapter, void* hwnd) : m_adapter(adapter), m_hwnd(hwnd)
+    display_system_data(const adapter adapter, shared_ptr<window> hwnd) : m_adapter(adapter), m_hwnd(hwnd)
     {
 
     }
@@ -91,7 +91,7 @@ private:
     };
 private:
     const adapter m_adapter;
-    void* const m_hwnd;
+    weak_ptr<window> m_hwnd;
     library m_lib = "d3d11"_lib;
     com_ptr<ID3D11Device> m_device;
     com_ptr<IDXGISwapChain> m_chain;
@@ -119,8 +119,12 @@ display_system_data::~display_system_data() noexcept
 }
 error_type display_system_data::initialize() noexcept
 {
+    auto window = shared_ptr<icy::window>(m_hwnd);
+    if (!window)
+        return make_stdlib_error(std::errc::invalid_argument);
+
     ICY_ERROR(m_lib.initialize());
-    
+
     //com_ptr<ID3D11Device> device;
     com_ptr<ID3D11DeviceContext> context;
     if (const auto func = ICY_FIND_FUNC(m_lib, D3D11CreateDevice))
@@ -142,8 +146,13 @@ error_type display_system_data::initialize() noexcept
     com_ptr<IDXGIFactory> factory;
     ICY_COM_ERROR(static_cast<IDXGIAdapter*>(m_adapter.handle())->GetParent(IID_PPV_ARGS(&factory)));
 
-    ICY_COM_ERROR(factory->MakeWindowAssociation(static_cast<HWND__*>(m_hwnd),
-        DXGI_MWA_NO_ALT_ENTER | DXGI_MWA_NO_WINDOW_CHANGES | DXGI_MWA_NO_PRINT_SCREEN));
+    void* hwnd = nullptr;
+    ICY_ERROR(window->win_handle(hwnd));
+    if (hwnd)
+    {
+        ICY_COM_ERROR(factory->MakeWindowAssociation(static_cast<HWND__*>(hwnd),
+            DXGI_MWA_NO_ALT_ENTER | DXGI_MWA_NO_WINDOW_CHANGES | DXGI_MWA_NO_PRINT_SCREEN));
+    }
 
     context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
@@ -158,7 +167,7 @@ error_type display_system_data::initialize() noexcept
 
     //DXGI_SWAP_CHAIN_DESC desc;
     //ICY_COM_ERROR(m_chain->GetDesc(&desc));
-    ICY_ERROR(do_resize(window_size()));
+    ICY_ERROR(do_resize(window->size()));
 
     m_cpu_timer = CreateWaitableTimerW(nullptr, FALSE, nullptr);
     if (!m_cpu_timer)
@@ -174,7 +183,7 @@ error_type display_system_data::initialize() noexcept
     filter(event_type::system_internal);
     return error_type();
 }
-error_type display_system_data::do_resize(const window_size) noexcept
+error_type display_system_data::do_resize(const window_size size) noexcept
 {
     m_rtv = nullptr;
     m_chain = nullptr;
@@ -182,13 +191,26 @@ error_type display_system_data::do_resize(const window_size) noexcept
     com_ptr<IDXGIFactory> factory;
     ICY_COM_ERROR(static_cast<IDXGIAdapter*>(m_adapter.handle())->GetParent(IID_PPV_ARGS(&factory)));
 
+#if X11_GUI
+    com_ptr<ID3D11Texture2D> buffer;
+    const auto desc = CD3D11_TEXTURE2D_DESC(
+        DXGI_FORMAT_R8G8B8A8_UNORM, size.x, size.y, 1, 1, D3D11_BIND_RENDER_TARGET);
+    ICY_COM_ERROR(m_device->CreateTexture2D(&desc, nullptr, &buffer));
+    ICY_COM_ERROR(m_device->CreateRenderTargetView(buffer, &CD3D11_RENDER_TARGET_VIEW_DESC(
+        D3D11_RTV_DIMENSION_TEXTURE2D, DXGI_FORMAT_R8G8B8A8_UNORM), &m_rtv));
+
+#elif _WIN32
+    void* handle = nullptr;
+    if (auto window = shared_ptr<icy::window>(m_hwnd))
+        ICY_ERROR(window->win_handle(handle));
+    
     DXGI_SWAP_CHAIN_DESC desc0 = {};
     DXGI_SWAP_CHAIN_DESC1 desc1 = {};
     desc0.BufferDesc.Format = desc1.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     desc0.SampleDesc = desc1.SampleDesc = { 1, 0 };
     desc0.BufferUsage = desc1.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     desc0.BufferCount = desc1.BufferCount = 2;// buffer_count(flags);
-    desc0.OutputWindow = static_cast<HWND__*>(m_hwnd);
+    desc0.OutputWindow = static_cast<HWND>(handle);
     desc0.Windowed = TRUE;
     desc0.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
     desc1.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
@@ -201,7 +223,7 @@ error_type display_system_data::do_resize(const window_size) noexcept
     {
         com_ptr<IDXGISwapChain1> chain1;
         com_ptr<IDXGISwapChain2> chain2;
-        factory2->CreateSwapChainForHwnd(m_device, static_cast<HWND__*>(m_hwnd), &desc1, nullptr, nullptr, &chain1);
+        factory2->CreateSwapChainForHwnd(m_device, desc0.OutputWindow, &desc1, nullptr, nullptr, &chain1);
         if (chain1)
         {
             chain1->QueryInterface(&chain2);
@@ -218,7 +240,11 @@ error_type display_system_data::do_resize(const window_size) noexcept
         const auto hr = factory->CreateSwapChain(m_device, &desc0, &m_chain);
         ICY_COM_ERROR(hr);
     }
-
+    com_ptr<ID3D11Texture2D> buffer;
+    ICY_COM_ERROR(m_chain->GetBuffer(0, IID_PPV_ARGS(&buffer)));
+    ICY_COM_ERROR(m_device->CreateRenderTargetView(buffer, &CD3D11_RENDER_TARGET_VIEW_DESC(
+        D3D11_RTV_DIMENSION_TEXTURE2D, DXGI_FORMAT_R8G8B8A8_UNORM), &m_rtv));
+#endif
 
     /* com_ptr<ID3D11Device> device;
     com_ptr<ID3D11DeviceContext> context;
@@ -232,30 +258,28 @@ error_type display_system_data::do_resize(const window_size) noexcept
     ICY_COM_ERROR(m_chain->ResizeBuffers(0, size.x, size.y, DXGI_FORMAT_UNKNOWN, chain_desc.Flags));
     
         */
-    com_ptr<ID3D11Texture2D> buffer;
-    ICY_COM_ERROR(m_chain->GetBuffer(0, IID_PPV_ARGS(&buffer)));
-    ICY_COM_ERROR(m_device->CreateRenderTargetView(buffer, &CD3D11_RENDER_TARGET_VIEW_DESC(
-        D3D11_RTV_DIMENSION_TEXTURE2D, DXGI_FORMAT_R8G8B8A8_UNORM), &m_rtv));
     
     return error_type();
 }
 error_type display_system_data::do_repaint(const bool vsync, const display_texture& texture) noexcept
 {
-    com_ptr<ID3D11Device> device;
     com_ptr<ID3D11DeviceContext> context;
-    ICY_COM_ERROR(m_chain->GetDevice(IID_PPV_ARGS(&device)));
-    device->GetImmediateContext(&context);
+    m_device->GetImmediateContext(&context);
 
-    DXGI_SWAP_CHAIN_DESC desc;
-    ICY_COM_ERROR(m_chain->GetDesc(&desc));
-    
+    D3D11_TEXTURE2D_DESC desc;
+    com_ptr<ID3D11Resource> resource;
+    com_ptr<ID3D11Texture2D> buffer;
+    m_rtv->GetResource(&resource);
+    ICY_COM_ERROR(resource->QueryInterface(&buffer));
+    buffer->GetDesc(&desc);
+
     auto viewport = D3D11_VIEWPORT
     { 
         float(texture.offset.x), float(texture.offset.y), 
         float(texture.size.x), float(texture.size.y), 0, 1 
     };
-    if (!viewport.Width) viewport.Width = float(desc.BufferDesc.Width);
-    if (!viewport.Height) viewport.Height = float(desc.BufferDesc.Height);
+    if (!viewport.Width) viewport.Width = float(desc.Width);
+    if (!viewport.Height) viewport.Height = float(desc.Height);
 
 
     ID3D11ShaderResourceView* srv[] = { texture.srv };
@@ -264,6 +288,35 @@ error_type display_system_data::do_repaint(const bool vsync, const display_textu
     context->OMSetRenderTargets(1, &m_rtv, nullptr);
     context->Draw(3, 0);
 
+#if X11_GUI
+    context->Flush();
+    if (auto window = shared_ptr<icy::window>(m_hwnd))
+    {
+        com_ptr<ID3D11Texture2D> cpu_texture;
+        ICY_COM_ERROR(m_device->CreateTexture2D(&CD3D11_TEXTURE2D_DESC(DXGI_FORMAT_R8G8B8A8_UNORM,
+            desc.Width, desc.Height, 1, 1, 0, D3D11_USAGE_STAGING, D3D11_CPU_ACCESS_READ), nullptr, &cpu_texture));
+
+        D3D11_BOX box = { 0, 0, 0, desc.Width, desc.Height, 1 };
+        context->CopySubresourceRegion(cpu_texture, 0, 0, 0, 0, static_cast<ID3D11Texture2D*>(buffer.get()), 0, &box);
+
+        D3D11_MAPPED_SUBRESOURCE map;
+        ICY_COM_ERROR(context->Map(cpu_texture, 0, D3D11_MAP_READ, 0, &map));
+        ICY_SCOPE_EXIT{ context->Unmap(cpu_texture, 0); };
+        
+        matrix<color> colors(desc.Height, desc.Width);
+        if (colors.empty())
+            return make_stdlib_error(std::errc::not_enough_memory);
+
+        auto dst = colors.data();
+        for (auto row = 0u; row < desc.Height; ++row)
+        {
+            auto ptr = reinterpret_cast<const uint32_t*>(static_cast<char*>(map.pData) + row * map.RowPitch);
+            for (auto col = 0u; col < desc.Width; ++col, ++dst)
+                *dst = color::from_rgba(ptr[col]);
+        }
+        ICY_ERROR(window->repaint(std::move(colors)));
+    }
+#elif _WIN32
     const auto hr = m_chain->Present(vsync, 0);
 
     //srv[0] = nullptr;
@@ -276,6 +329,7 @@ error_type display_system_data::do_repaint(const bool vsync, const display_textu
         else
             return make_system_error(hr);
     }
+#endif
     return error_type();
 }
 error_type display_system_data::exec() noexcept
@@ -318,8 +372,8 @@ error_type display_system_data::exec() noexcept
                 const auto is_fullscreen = uint32_t(event_data.state) & uint32_t(window_state::popup | window_state::maximized);
                 if (!is_fullscreen)
                 {
-                    auto window = shared_ptr<icy::window>(event_data.window);
-                    if (window && window->handle() == m_hwnd)
+                    auto window = shared_ptr<icy::window>(m_hwnd);
+                    if (window && event_data.window == window->index())
                         size = event_data.size;
                 }
             }
@@ -347,8 +401,10 @@ error_type display_system_data::exec() noexcept
             display_texture texture;
             if (m_frame.queue.pop(texture))
             {
+                while (m_frame.queue.pop(texture))
+                    ;
                 m_cpu_ready = false;
-                m_gpu_ready = false;
+                m_gpu_ready = m_chain ? false : true;
                 
                 display_message msg;
                 const auto now = clock_type::now();
@@ -403,12 +459,9 @@ error_type display_system_data::repaint(const texture& texture, const window_siz
     if (!handle)
         return make_stdlib_error(std::errc::invalid_argument);
 
-    com_ptr<ID3D11Device> device;
-    ICY_COM_ERROR(m_chain->GetDevice(IID_PPV_ARGS(&device)));
-
     display_texture new_texture;
-    ICY_COM_ERROR(device->OpenSharedResource(handle, IID_PPV_ARGS(&new_texture.buffer)));
-    ICY_COM_ERROR(device->CreateShaderResourceView(new_texture.buffer, 
+    ICY_COM_ERROR(m_device->OpenSharedResource(handle, IID_PPV_ARGS(&new_texture.buffer)));
+    ICY_COM_ERROR(m_device->CreateShaderResourceView(new_texture.buffer,
         &CD3D11_SHADER_RESOURCE_VIEW_DESC(new_texture.buffer, D3D11_SRV_DIMENSION_TEXTURE2D, DXGI_FORMAT_R8G8B8A8_UNORM, 0, 1), &new_texture.srv));
     new_texture.offset = offset;
     new_texture.size = size;
@@ -420,10 +473,10 @@ error_type display_system_data::repaint(const texture& texture, const window_siz
     return error_type();
 }
 
-error_type icy::create_display_system(shared_ptr<display_system>& system, void* const handle, const adapter adapter) noexcept
+error_type icy::create_display_system(shared_ptr<display_system>& system, shared_ptr<window> window, const adapter adapter) noexcept
 {
     shared_ptr<display_system_data> ptr;
-    ICY_ERROR(make_shared(ptr, adapter, handle));
+    ICY_ERROR(make_shared(ptr, adapter, window));
     ICY_ERROR(ptr->initialize());
     system = std::move(ptr);
     return error_type();

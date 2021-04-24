@@ -12,19 +12,17 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\include\icy_gui\icy_gui.hpp" />
-    <ClInclude Include="..\..\source\icy_gui\icy_gui_bind.hpp" />
+    <ClInclude Include="..\..\source\icy_gui\icy_gui_attr.hpp" />
     <ClInclude Include="..\..\source\icy_gui\icy_gui_model.hpp" />
     <ClInclude Include="..\..\source\icy_gui\icy_gui_render.hpp" />
-    <ClInclude Include="..\..\source\icy_gui\icy_gui_style.hpp" />
     <ClInclude Include="..\..\source\icy_gui\icy_gui_system.hpp" />
     <ClInclude Include="..\..\source\icy_gui\icy_gui_window.hpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\source\icy_gui\icy_gui_layout.cpp" />
+    <ClCompile Include="..\..\source\icy_gui\icy_gui_attr.cpp" />
     <ClCompile Include="..\..\source\icy_gui\icy_gui_system.cpp" />
     <ClCompile Include="..\..\source\icy_gui\icy_gui_model.cpp" />
     <ClCompile Include="..\..\source\icy_gui\icy_gui_render.cpp" />
-    <ClCompile Include="..\..\source\icy_gui\icy_gui_style.cpp" />
     <ClCompile Include="..\..\source\icy_gui\icy_gui_window.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

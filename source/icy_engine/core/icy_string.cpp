@@ -244,7 +244,7 @@ error_type icy::to_string(const_array_view<wchar_t> src, string& str) noexcept
 	}
 
 	array<wchar_t> dst;
-	constexpr auto type = NormalizationD;
+	constexpr auto type = NormalizationC;
 	if (!IsNormalizedString(type, src.data(), static_cast<int>(src.size())))
 	{
 		auto try_normalize = [&](int& size, bool& try_again)

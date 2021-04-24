@@ -1,0 +1,23 @@
+{
+	"type": "window_main",
+	"layout": "vbox",
+	"widgets": [
+	   {
+			"type": "edit_line"
+			, "bkcolor": "00FF00"
+			, "text": "hello\nAAA35"
+			, "class": "edit_model"
+			, "weight": 1
+	   },
+	   {
+			"type": "view_tree"
+			, "bkcolor": "FF00FF"
+			, "text": "world123"
+			, "class": "tree_model"
+			, "weight": 5
+			, "hscroll": true
+			, "flex_scroll": false
+	   }
+	]
+
+}

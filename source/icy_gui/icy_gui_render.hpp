@@ -7,6 +7,7 @@
 #include <icy_engine/utility/icy_com.hpp>
 #include <icy_gui/icy_gui.hpp>
 
+struct ID2D1Bitmap;
 struct ID2D1Device;
 struct ID3D11Device;
 struct IDWriteTextLayout;
@@ -33,6 +34,17 @@ struct gui_text
     IDWriteTextLayout* operator->() const noexcept;
     icy::com_ptr<IUnknown> value;
 };
+struct gui_image
+{
+    explicit operator bool() const noexcept
+    {
+        return !!value;
+    }
+    ID2D1Bitmap* operator->() const noexcept;
+    icy::window_size size() const noexcept;
+    icy::com_ptr<IUnknown> value;
+};
+
 class gui_render_system;
 class gui_texture : public icy::texture
 {
@@ -61,6 +73,9 @@ public:
     icy::error_type draw_end() noexcept;
     icy::error_type draw_text(const float x, const float y, const icy::color color, icy::com_ptr<IUnknown> text) noexcept;
     icy::error_type fill_rect(const rect_type& rect, const icy::color color) noexcept;
+    void draw_image(const rect_type& rect, icy::com_ptr<IUnknown> image) noexcept;
+    void push_clip(const rect_type& rect) noexcept;
+    void pop_clip() noexcept;
 private:
     icy::shared_ptr<gui_render_system> m_system;
     const icy::window_size m_size;
@@ -80,8 +95,9 @@ public:
     }
     icy::error_type initialize() noexcept;
     icy::error_type enum_font_names(icy::array<icy::string>& fonts) const noexcept;
-    icy::error_type create_font(gui_font& font, HWND__* hwnd, const gui_system_font_type type) const noexcept;
+    icy::error_type create_font(gui_font& font, icy::shared_ptr<icy::window> hwnd, const gui_system_font_type type) const noexcept;
     icy::error_type create_text(gui_text& text, const gui_font& font, const icy::string_view str) const noexcept;
+    icy::error_type create_image(gui_image& image, const icy::const_array_view<uint8_t> bytes) const noexcept;
     icy::error_type create_texture(icy::shared_ptr<gui_texture>& texture, const icy::window_size size, const icy::render_flags flags) const noexcept;
 private:
     icy::adapter m_adapter;

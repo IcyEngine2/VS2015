@@ -255,6 +255,7 @@ void mutex::unlock() noexcept
 {
 	LeaveCriticalSection(reinterpret_cast<CRITICAL_SECTION*>(this));
 }
+/*
 void cvar::wake() noexcept
 {
     WakeConditionVariable(reinterpret_cast<CONDITION_VARIABLE*>(this));
@@ -281,6 +282,47 @@ error_type cvar::wait(mutex& mutex, const duration_type timeout) noexcept
         }
     }
     return error_type();
+}
+*/
+
+sync_handle::~sync_handle() noexcept
+{
+    if (m_ptr)
+        CloseHandle(m_ptr);
+}
+error_type sync_handle::initialize() noexcept
+{
+    if (m_ptr)
+        CloseHandle(m_ptr);
+    m_ptr = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!m_ptr)
+        return last_system_error();
+    return error_type();
+}
+error_type sync_handle::wake() noexcept
+{
+    if (m_ptr)
+    {
+        if (!SetEvent(m_ptr))
+            return last_system_error();
+    }
+    return error_type();
+}
+error_type sync_handle::wait(const duration_type timeout) noexcept
+{
+    auto wait = WaitForSingleObjectEx(m_ptr, ms_timeout(timeout), TRUE);
+    if (wait == WAIT_OBJECT_0 || wait == WAIT_IO_COMPLETION)
+    {
+        return error_type();
+    }
+    else if (wait == WAIT_TIMEOUT)
+    {
+        return make_stdlib_error(std::errc::timed_out);
+    }
+    else //if (wait == WAIT_FAILED)
+    {
+        return last_system_error();
+    }
 }
 
 EXTERN_C IMAGE_DOS_HEADER __ImageBase;

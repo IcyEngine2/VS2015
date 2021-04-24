@@ -286,6 +286,34 @@ error_type json::get(json_type_boolean& value) const noexcept
     case json_type::floating:
         value = !!m_floating;
         break;
+    case json_type::string:
+    {
+        switch (hash(get()))
+        {
+        case "0"_hash:
+        case "false"_hash:
+        case "False"_hash:
+        case "FALSE"_hash:
+        case "no"_hash:
+        case "No"_hash:
+        case "NO"_hash:
+            value = false;
+            break;
+        case "1"_hash:
+        case "true"_hash:
+        case "True"_hash:
+        case "TRUE"_hash:
+        case "yes"_hash:
+        case "Yes"_hash:
+        case "YES"_hash:
+            value = true;
+            break;
+        default:
+            value = false;
+            return make_stdlib_error(std::errc::invalid_argument);
+        }
+        break;
+    }
     default:
         value = false;
         return make_stdlib_error(std::errc::invalid_argument);
