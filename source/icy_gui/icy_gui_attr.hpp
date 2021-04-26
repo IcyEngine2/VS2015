@@ -22,6 +22,7 @@ struct gui_widget_attr_enum
         weight_x,
         weight_y,
         flex_scroll,
+        splitter_size,
     };
 };
 using gui_widget_attr = decltype(gui_widget_attr_enum::none);

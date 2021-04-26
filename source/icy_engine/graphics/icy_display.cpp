@@ -28,14 +28,17 @@ class display_system_thread : public thread
 {
 public:
     display_system* system = nullptr;
-    void cancel() noexcept
+    void cancel() noexcept override
     {
-        system->post(nullptr, event_type::global_quit);
+        post_quit_event();
     }
-    error_type run() noexcept
+    error_type run() noexcept override
     {
         if (auto error = system->exec())
-            return event::post(system, event_type::system_error, std::move(error));
+        {
+            cancel();
+            return error;
+        }
         return error_type();
     }
 };
@@ -52,7 +55,7 @@ public:
     error_type do_repaint(const bool vsync, const display_texture& texture) noexcept;
 private:
     error_type exec() noexcept override;
-    error_type signal(const event_data& event) noexcept override;
+    error_type signal(const event_data* event) noexcept override;
     const icy::thread& thread() const noexcept override
     {
         return *m_thread;
@@ -100,7 +103,7 @@ private:
     com_ptr<ID3D11SamplerState> m_sampler;
     void* m_gpu_event = nullptr;
     void* m_cpu_timer = nullptr;
-    void* m_update = nullptr;
+    icy::sync_handle m_update;
     bool m_gpu_ready = true;
     bool m_cpu_ready = true;
     shared_ptr<display_system_thread> m_thread;
@@ -114,7 +117,6 @@ display_system_data::~display_system_data() noexcept
     if (m_thread) m_thread->wait();
     if (m_gpu_event) CloseHandle(m_gpu_event);
     if (m_cpu_timer) CloseHandle(m_cpu_timer);
-    if (m_update) CloseHandle(m_update);
     filter(0);
 }
 error_type display_system_data::initialize() noexcept
@@ -173,10 +175,8 @@ error_type display_system_data::initialize() noexcept
     if (!m_cpu_timer)
         return last_system_error();
 
-    m_update = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    if (!m_update)
-        return last_system_error();
-  
+    ICY_ERROR(m_update.initialize());
+
     ICY_ERROR(make_shared(m_thread));
     m_thread->system = this;
 
@@ -357,16 +357,12 @@ error_type display_system_data::exec() noexcept
             SetWaitableTimer(m_cpu_timer, &offset, 0, nullptr, nullptr, FALSE);
         }
     };
-    while (true)
+    while (*this)
     {
         window_size size;
         while (auto event = pop())
         {
-            if (event->type == event_type::global_quit)
-            {
-                return error_type();
-            }
-            else if (event->type == event_type::window_resize)
+            if (event->type == event_type::window_resize)
             {
                 const auto& event_data = event->data<window_message>();
                 const auto is_fullscreen = uint32_t(event_data.state) & uint32_t(window_state::popup | window_state::maximized);
@@ -423,7 +419,7 @@ error_type display_system_data::exec() noexcept
 
         HANDLE handles[3] = {};
         auto count = 0u;
-        handles[count++] = m_update;
+        handles[count++] = m_update.handle();
         if (m_cpu_timer) handles[count++] = m_cpu_timer;
         if (m_gpu_event) handles[count++] = m_gpu_event;
 
@@ -432,7 +428,7 @@ error_type display_system_data::exec() noexcept
         if (index >= WAIT_OBJECT_0 && index < WAIT_OBJECT_0 + count)
             handle = handles[index - WAIT_OBJECT_0];
 
-        if (handle == m_update)
+        if (handle == m_update.handle())
         {
             continue;
         }
@@ -447,11 +443,9 @@ error_type display_system_data::exec() noexcept
     }
     return error_type();
 }
-error_type display_system_data::signal(const event_data& event) noexcept
+error_type display_system_data::signal(const event_data* event) noexcept
 {
-    if (!SetEvent(m_update))
-        return last_system_error();
-    return error_type();
+    return m_update.wake();
 }
 error_type display_system_data::repaint(const texture& texture, const window_size offset, const window_size size) noexcept
 {
@@ -466,10 +460,7 @@ error_type display_system_data::repaint(const texture& texture, const window_siz
     new_texture.offset = offset;
     new_texture.size = size;
     ICY_ERROR(m_frame.queue.push(std::move(new_texture)));
-
-    if (!SetEvent(m_update))
-        return last_system_error();
-
+    ICY_ERROR(m_update.wake());
     return error_type();
 }
 

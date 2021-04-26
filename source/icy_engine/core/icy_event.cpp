@@ -3,6 +3,9 @@
 
 using namespace icy;
 
+ICY_DECLARE_GLOBAL(event_system::g_lock);
+ICY_DECLARE_GLOBAL(event_system::g_list);
+ICY_DECLARE_GLOBAL(event_system::g_error);
 
 error_type event::post(event_system* const source, const event_type type) noexcept
 {
@@ -52,11 +55,8 @@ error_type event_data::create(const event_type type, event_system* const source,
 
 error_type event_system::initialize() noexcept
 {
-    return g_lock.initialize();
-}
-event_system::event_system() noexcept
-{
-    m_quit.value = &event_data::event_quit();
+    ICY_ERROR(g_lock.initialize());
+    return error_type();
 }
 void event_system::filter(const uint64_t mask) noexcept
 {
@@ -68,7 +68,7 @@ void event_system::filter(const uint64_t mask) noexcept
     {
         m_prev = g_list;
         g_list = this;
-        m_mask = mask | event_type::global_quit;
+        m_mask = mask;
     }
     else
     {
@@ -103,27 +103,17 @@ event event_system::pop() noexcept
     if (ptr)
     {
         value.m_ptr = ptr->value;
-
-        if (ptr->value != &event_data::event_quit())
-            icy::realloc(ptr, 0);
+        icy::realloc(ptr, 0);
     }
     return value;
 }
 error_type event_system::post(event_system* const source, const event_type type) noexcept
 {
-    if (type == event_type::global_quit && source == nullptr)
-    {
-        m_queue.push(&m_quit);
-        return signal(event_data::event_quit());
-    }
-    else
-    {
-        event_data* new_event = nullptr;
-        ICY_ERROR(event_data::create(type, source, 0, new_event));
-        const auto error = post(*new_event);
-        new_event->release();
-        return error;
-    }
+    event_data* new_event = nullptr;
+    ICY_ERROR(event_data::create(type, source, 0, new_event));
+    const auto error = post(*new_event);
+    new_event->release();
+    return error;
 }
 error_type event_system::post(event_data& event) noexcept
 {
@@ -134,12 +124,9 @@ error_type event_system::post(event_data& event) noexcept
     new_ptr->value = &event;
     event.m_ref.fetch_add(1, std::memory_order_release);
     m_queue.push(new_ptr);
-    ICY_ERROR(signal(event));
+    ICY_ERROR(signal(&event));
     return error_type();
 }
-mutex event_system::g_lock;
-event_system* event_system::g_list;
-
 error_type icy::create_event_system(shared_ptr<event_queue>& queue, const uint64_t mask) noexcept
 {
     shared_ptr<event_queue> new_queue;
@@ -152,12 +139,12 @@ error_type icy::create_event_system(shared_ptr<event_queue>& queue, const uint64
 }
 error_type event_queue::pop(event& event, const duration_type timeout) noexcept
 {
-    while (true)
+    while (*this)
     {
         event = event_system::pop();
         if (event)
             break;
-        if (timeout == duration_type())
+        if (timeout == duration_type() || !(*this))
             break;
         ICY_ERROR(m_cvar.wait(timeout));
     }
@@ -186,4 +173,28 @@ event_type icy::next_event_user() noexcept
 {
     static auto offset = 0ui64;
     return offset < event_type_enum::bitcnt_user ? event_user(offset++) : event_type::none;
+}
+error_type icy::post_quit_event() noexcept
+{
+    ICY_LOCK_GUARD(event_system::g_lock);
+    auto next = event_system::g_list;
+    error_type error;
+    while (next)
+    {
+        next->m_quit.store(true, std::memory_order_release);
+        auto next_error = next->signal(nullptr);
+
+        if (!error && next_error)
+            error = next_error;
+        next = next->m_prev;
+    }
+    return error;
+}
+error_type icy::post_error_event(const error_type error) noexcept
+{
+    {
+        ICY_LOCK_GUARD(event_system::g_lock);
+        event_system::g_error = error;
+    }
+    return post_quit_event();
 }

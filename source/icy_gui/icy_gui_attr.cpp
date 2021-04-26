@@ -93,6 +93,14 @@ gui_widget_attr gui_str_to_attr(const string_view str) noexcept
 	case "FlexScroll"_hash:
 		return gui_widget_attr::flex_scroll;
 
+	case "splitter_size"_hash:
+	case "splitterSize"_hash:
+	case "SplitterSize"_hash:
+	case "size_splitter"_hash:
+	case "sizeSplitter"_hash:
+	case "SizeSplitter"_hash:
+		return gui_widget_attr::splitter_size;
+
 	//case "items"_hash:
 	//case "Items"_hash:
 	//	return gui_widget_attr::max_items;
@@ -183,6 +191,10 @@ gui_widget_type gui_str_to_type(const string_view str) noexcept
 	case "textEdit"_hash:
 	case "TextEdit"_hash:
 		return gui_widget_type::edit_text;
+
+	case "splitter"_hash:
+	case "Splitter"_hash:
+		return gui_widget_type::splitter;
 	}
 
 	return gui_widget_type::none;
@@ -222,8 +234,8 @@ gui_variant gui_attr_default(const gui_widget_attr attr) noexcept
 		return color(colors::black);
 	case gui_widget_attr::flex_scroll:
 		return false;
-	//case gui_widget_attr::max_items:
-	//	return 10u;
+	case gui_widget_attr::splitter_size:
+		return 5.0f;
 	default:
 		return gui_variant();
 	}

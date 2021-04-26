@@ -333,7 +333,7 @@ namespace icy
 		}
         const_reverse_iterator rbegin() const noexcept
 		{
-			return std::make_reverse_iterator(end());
+			return std::make_reverse_iterator(cend());
 		}
         const_reverse_iterator crbegin() const noexcept
 		{
@@ -341,7 +341,7 @@ namespace icy
 		}
         reverse_iterator rend() const noexcept
 		{
-			return std::make_reverse_iterator(begin());
+			return std::make_reverse_iterator(cbegin());
 		}
         reverse_iterator crend() const noexcept
 		{

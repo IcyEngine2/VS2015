@@ -47,11 +47,11 @@ error_type gui_system_data::initialize(const adapter adapter) noexcept
     ICY_ERROR(make_shared(m_thread));
     m_thread->system = this;
 
-    for (auto k = 0u; k < uint32_t(window_cursor::type::_count); ++k)
+    for (auto k = 1u; k < uint32_t(window_cursor::type::_count); ++k)
     {
         shared_ptr<window_cursor> new_cursor;
         ICY_ERROR(create_window_cursor(new_cursor, window_cursor::type(k)));
-        ICY_ERROR(m_cursors.push_back(std::move(new_cursor)));
+        ICY_ERROR(m_cursors.insert(k, std::move(new_cursor)));
     }
 
     m_vscroll.size = 21;
@@ -80,10 +80,10 @@ error_type gui_system_data::initialize(const adapter adapter) noexcept
     ICY_ERROR(m_render_system->create_image(m_hscroll.val_focused, icon_hscroll_val_focused));
 
     const uint64_t event_types = 0
-        | event_type::global_quit
         | event_type::system_internal 
         | event_type::window_input
-        | event_type::window_resize
+        //| event_type::window_resize
+        | event_type::window_action
         | event_type::global_timer;
 
     filter(event_types);
@@ -91,7 +91,7 @@ error_type gui_system_data::initialize(const adapter adapter) noexcept
 }
 error_type gui_system_data::exec() noexcept
 {
-    while (true)
+    while (*this)
     {
         map<uint32_t, map<gui_window_data_usr*, array<gui_event>>> render_events;
 
@@ -120,8 +120,7 @@ error_type gui_system_data::exec() noexcept
                 while (auto event = usr->next())
                 {
                     ICY_SCOPE_EXIT{ gui_window_event_type::clear(event); };
-                    array<gui_widget> widgets;
-                    ICY_ERROR(pair.system.process(*event, widgets));
+                    ICY_ERROR(pair.system.process(*event));
 
                     if (event->type == gui_window_event_type::render)
                     {
@@ -155,7 +154,7 @@ error_type gui_system_data::exec() noexcept
                     }
                     else
                     {
-                        ICY_ERROR(process_binds(pair.user, widgets));
+                        ICY_ERROR(process_binds(pair));
                     }
                 }
             }
@@ -187,9 +186,6 @@ error_type gui_system_data::exec() noexcept
 
         while (auto event = pop())
         {
-            if (event->type == event_type::global_quit)
-                return error_type();
-
             if (event->type == event_type::window_resize)
             {
                 const auto& event_data = event->data<window_message>();
@@ -226,9 +222,31 @@ error_type gui_system_data::exec() noexcept
                         }
                         else
                         {
-                            array<gui_widget> widgets;
-                            ICY_ERROR(it->value.system.input(event_data.input, widgets));
-                            ICY_ERROR(process_binds(it->value.user, widgets));
+                            ICY_ERROR(it->value.system.input(event_data.input));
+                            ICY_ERROR(process_binds(it->value));
+                            ++it;
+                        }
+                    }
+                }
+            }
+            else if (event->type == event_type::window_action)
+            {
+                const auto& event_data = event->data<window_action>();
+                for (auto it = m_windows.begin(); it != m_windows.end();)
+                {
+                    if (it->value.system.window() == event_data.window)
+                    {
+                        auto erase = false;
+                        ICY_ERROR(update_window(it->value, erase));
+                        if (erase)
+                        {
+                            it = m_windows.erase(it);
+                        }
+                        else
+                        {
+                            ICY_ERROR(it->value.system.action(event_data));
+                            ICY_ERROR(process_binds(it->value));
+                            
                             ++it;
                         }
                     }
@@ -342,7 +360,7 @@ error_type gui_system_data::exec() noexcept
     }
     return error_type();
 }
-error_type gui_system_data::create_bind(unique_ptr<gui_data_bind>&& bind, gui_data_model& model, gui_window& window, const gui_node node, const gui_widget widget) noexcept
+error_type gui_system_data::create_bind(unique_ptr<gui_data_bind>&& bind, gui_data_write_model& model, gui_window& window, const gui_node node, const gui_widget widget) noexcept
 {
     if (!bind)
         return make_stdlib_error(std::errc::invalid_argument);
@@ -357,7 +375,7 @@ error_type gui_system_data::create_bind(unique_ptr<gui_data_bind>&& bind, gui_da
     ICY_ERROR(event_system::post(nullptr, event_type::system_internal, std::move(new_event)));
     return error_type();
 }
-error_type gui_system_data::create_model(shared_ptr<gui_data_model>& model) noexcept
+error_type gui_system_data::create_model(shared_ptr<gui_data_write_model>& model) noexcept
 {
     gui_system_event_type new_event;
     new_event.type = gui_system_event_type::create_model;
@@ -434,25 +452,27 @@ error_type gui_system_data::process_binds(weak_ptr<gui_model_data_usr> model, co
     }
     return error_type();
 }
-error_type gui_system_data::process_binds(weak_ptr<gui_window_data_usr> window, const_array_view<gui_widget> widgets) noexcept
+error_type gui_system_data::process_binds(const window_pair& window) noexcept
 {
-    for (auto&& widget : widgets)
+    const auto list = m_change.find(&window.system);
+    if (list == m_change.end())
+        return error_type();
+
+    for (auto it = m_binds.begin(); it != m_binds.end();)
     {
-        for (auto it = m_binds.begin(); it != m_binds.end();)
+        if (it->window == window.user && list->value.try_find(it->widget.index))
         {
-            if (it->window == window && it->widget.index == widget.index)
+            auto erase = false;
+            ICY_ERROR(process_bind(*it, gui_bind_type::window_to_model, erase));
+            if (erase)
             {
-                auto erase = false;
-                ICY_ERROR(process_bind(*it, gui_bind_type::window_to_model, erase));
-                if (erase)
-                {
-                    it = m_binds.erase(it);
-                    continue;
-                }
+                it = m_binds.erase(it);
+                continue;
             }
-            ++it;
         }
+        ++it;
     }
+    m_change.erase(list);
     return error_type();
 
 }

@@ -25,7 +25,7 @@ error_type icy::create_event_system(shared_ptr<console_system>& system) noexcept
     ICY_SCOPE_EXIT{ if (new_console) FreeConsole(); };
     const auto func = [](DWORD)
     {
-        event::post(nullptr, event_type::global_quit);
+        icy::post_quit_event();
         Sleep(INFINITE);
         return 0;
     };
@@ -48,13 +48,10 @@ console_system::~console_system() noexcept
 
 error_type console_system::exec() noexcept
 {
-    while (true)
+    while (*this)
     {
         while (auto event = event_system::pop())
         {
-            if (event->type == event_type::global_quit)
-                return error_type();
-
             const auto& event_data = event->data<console_event>();
             if (!event_data.internal)
                 continue;
@@ -147,9 +144,9 @@ error_type console_system::exec() noexcept
     }
     return error_type();
 }
-error_type console_system::signal(const event_data& event) noexcept
+error_type console_system::signal(const event_data* event) noexcept
 {
-    if (event.type == event_type::global_quit)
+    if (!event)
     {
         INPUT_RECORD buffer[1] = {};
         buffer[0].EventType = KEY_EVENT;

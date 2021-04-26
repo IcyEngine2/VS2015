@@ -55,15 +55,20 @@ error_type gui_node_data::modify(const gui_node_prop prop, const gui_variant& va
         break;
 
     case gui_node_prop::checked:
-    {
         state_flag = gui_node_state::checked;
         break;
-    }
+    
     case gui_node_prop::user:
-    {
         user = value;
         break;
-    }
+    
+    case gui_node_prop::row_header:
+        row_header = value;
+        break;
+
+    case gui_node_prop::col_header:
+        col_header = value;
+        break;
 
     default:
         break;
@@ -90,14 +95,14 @@ error_type gui_node_data::modify(const gui_node_prop prop, const gui_variant& va
 
 gui_model_data_usr::~gui_model_data_usr() noexcept
 {
-    while (auto event = static_cast<gui_model_event_type*>(m_events_usr.pop()))
-        gui_model_event_type::clear(event);
+    //while (auto event = static_cast<gui_model_event_type*>(m_events_usr.pop()))
+    //    gui_model_event_type::clear(event);
     while (auto event = static_cast<gui_model_event_type*>(m_events_sys.pop()))
         gui_model_event_type::clear(event);
     if (auto system = shared_ptr<gui_system>(m_system))
         static_cast<gui_system_data*>(system.get())->wake();
 }
-error_type gui_model_data_usr::update() noexcept
+/*error_type gui_model_data_usr::update() noexcept
 {
     while (auto event = static_cast<gui_model_event_type*>(m_events_usr.pop()))
     {
@@ -156,22 +161,22 @@ gui_variant gui_model_data_usr::query(const gui_node node, const gui_node_prop p
         return process(new_query);
     }
     return gui_variant();
-}
+}*/
 error_type gui_model_data_usr::modify(const gui_node node, const gui_node_prop prop, const gui_variant& value) noexcept
 {
     if (prop == gui_node_prop::none)
         return error_type();
 
-    ICY_ERROR(update());
-    auto it = m_data.find(node.index);
+    //ICY_ERROR(update());
+    /*auto it = m_data.find(node.index);
     if (it == m_data.end())
-        return error_type();
+        return error_type();*/
 
     gui_model_event_type* new_event = nullptr;
     ICY_ERROR(gui_model_event_type::make(new_event, gui_model_event_type::modify));
     ICY_SCOPE_EXIT{ gui_model_event_type::clear(new_event); };
 
-    ICY_ERROR(it->value->modify(prop, value));
+    //ICY_ERROR(it->value->modify(prop, value));
 
     new_event->index = node.index;
     new_event->prop = prop;
@@ -182,9 +187,9 @@ error_type gui_model_data_usr::modify(const gui_node node, const gui_node_prop p
 }
 error_type gui_model_data_usr::insert(const gui_node parent, const uint32_t row, const uint32_t col, gui_node& node) noexcept
 {
-    ICY_ERROR(update());
+    //ICY_ERROR(update());
 
-    auto it = m_data.find(parent.index);
+    /*auto it = m_data.find(parent.index);
     if (it == m_data.end())
         return error_type();
 
@@ -196,7 +201,7 @@ error_type gui_model_data_usr::insert(const gui_node parent, const uint32_t row,
             node.index = child.key->index;
             return error_type();
         }
-    }
+    }*/
 
     gui_node_data::child_type args;
     args.col = col;
@@ -207,7 +212,7 @@ error_type gui_model_data_usr::insert(const gui_node parent, const uint32_t row,
     ICY_ERROR(gui_model_event_type::make(new_event, gui_model_event_type::create));
     ICY_SCOPE_EXIT{ gui_model_event_type::clear(new_event); };
 
-    ICY_ERROR(gui_node_data::insert(m_data, parent.index, m_index, args));
+    //ICY_ERROR(gui_node_data::insert(m_data, parent.index, m_index, args));
 
     new_event->index = parent.index;
     new_event->val = std::make_pair(m_index, args);
@@ -217,12 +222,12 @@ error_type gui_model_data_usr::insert(const gui_node parent, const uint32_t row,
 }
 error_type gui_model_data_usr::destroy(const gui_node node) noexcept
 {
-    ICY_ERROR(update());
+    //ICY_ERROR(update());
 
     gui_model_event_type* new_event = nullptr;
     ICY_ERROR(gui_model_event_type::make(new_event, gui_model_event_type::destroy));
     new_event->index = node.index;
-    gui_node_data::erase(m_data, node.index);
+    //gui_node_data::erase(m_data, node.index);
     notify(new_event);
     return error_type();
 }
@@ -362,8 +367,7 @@ error_type gui_model_data_sys::send_data(gui_window_data_sys& window, const gui_
         erase = true;
         return error_type();
     }
-    gui_model_proxy proxy(*this);
-    ICY_ERROR(window.recv_data(proxy, *it->value, widget, func, erase));
+    ICY_ERROR(window.recv_data(gui_model_proxy_read(*this), *it->value, widget, func, erase));
     return error_type();
 }
 error_type gui_model_data_sys::recv_data(const gui_widget_data& widget, const gui_node index, const gui_data_bind& func, bool& erase) noexcept
@@ -374,6 +378,9 @@ error_type gui_model_data_sys::recv_data(const gui_widget_data& widget, const gu
         erase = true;
         return error_type();
     }
+    gui_model_proxy_read proxy_read(*this);
+    //gui_model_proxy_write proxy_write(*this);
+
     auto& node = *it->value;
     switch (widget.type)
     {
@@ -383,9 +390,12 @@ error_type gui_model_data_sys::recv_data(const gui_widget_data& widget, const gu
         node.data = gui_variant();
         for (auto&& item : widget.items)
         {
-            if (item.type == gui_widget_item_type::text)
+            if (item.type == gui_widget_item_type::root_text)
             {
-                node.data = item.value;
+                auto decline = false;
+                ICY_ERROR(func.notify(proxy_read, { node.index }, gui_node_prop::data, item.value, decline));
+                if (!decline)
+                    node.data = item.value;
                 break;
             }
         }

@@ -13,12 +13,15 @@ public:
     icy::gui_system* system = nullptr;
     void cancel() noexcept override
     {
-        system->post(nullptr, icy::event_type::global_quit);
+        icy::post_quit_event();
     }
     icy::error_type run() noexcept override
     {
         if (auto error = system->exec())
-            return icy::event::post(system, icy::event_type::system_error, std::move(error));
+        {
+            cancel();
+            return error;
+        }
         return icy::error_type();
     }
 };
@@ -51,10 +54,11 @@ public:
     };
 public:
     ~gui_system_data();
+    icy::error_type exec() noexcept override;
     icy::error_type initialize(const icy::adapter adapter) noexcept;
-    icy::error_type signal(const icy::event_data& event) noexcept override
+    icy::error_type signal(const icy::event_data* event) noexcept override
     {
-        return wake();
+        return m_sync.wake();
     }
     icy::error_type wake() noexcept
     {
@@ -80,6 +84,30 @@ public:
     {
         return m_update.try_insert(&window);
     }
+    icy::error_type post_change(gui_window_data_sys& window, const icy::gui_widget widget) noexcept
+    {
+        auto it = m_change.find(&window);
+        if (it == m_change.end())
+        {
+            ICY_ERROR(m_change.insert(&window, icy::set<uint32_t>(), &it));
+        }
+        return it->value.try_insert(widget.index);
+    }
+    icy::duration_type caret_blink_time() const noexcept
+    {
+        return std::chrono::milliseconds(400);
+    }
+    icy::duration_type scroll_update_freq() const noexcept
+    {
+        return std::chrono::milliseconds(30);
+    }
+    icy::shared_ptr<icy::window_cursor> cursor(const icy::window_cursor::type type) const noexcept
+    {
+        if (auto ptr = m_cursors.try_find(uint32_t(type)))
+            return *ptr;
+        return nullptr;
+    }
+    //icy::gui_keybind key_bind(const icy::input_message& msg) const noexcept;
 private:
     struct window_pair
     {
@@ -97,24 +125,23 @@ private:
         model_to_window,
     };
 private:
-    icy::error_type exec() noexcept override;
     const icy::thread& thread() const noexcept override
     {
         return *m_thread;
     }
-    icy::error_type create_bind(icy::unique_ptr<icy::gui_data_bind>&& bind, icy::gui_data_model& model, icy::gui_window& window, const icy::gui_node node, const icy::gui_widget widget) noexcept override;
-    icy::error_type create_model(icy::shared_ptr<icy::gui_data_model>& model) noexcept override;
+    icy::error_type create_bind(icy::unique_ptr<icy::gui_data_bind>&& bind, icy::gui_data_write_model& model, icy::gui_window& window, const icy::gui_node node, const icy::gui_widget widget) noexcept override;
+    icy::error_type create_model(icy::shared_ptr<icy::gui_data_write_model>& model) noexcept override;
     icy::error_type create_window(icy::shared_ptr<icy::gui_window>& window, icy::shared_ptr<icy::window> handle, const icy::string_view json) noexcept override;
     icy::error_type enum_font_names(icy::array<icy::string>& fonts) const noexcept override;
     icy::error_type render(gui_window_data_sys& window, icy::gui_event& new_event) noexcept; 
     icy::error_type process_binds(icy::weak_ptr<gui_model_data_usr> model, icy::const_array_view<uint32_t> nodes) noexcept;
-    icy::error_type process_binds(icy::weak_ptr<gui_window_data_usr> window, icy::const_array_view<icy::gui_widget> widgets) noexcept;
+    icy::error_type process_binds(const window_pair& window) noexcept;
     icy::error_type process_bind(const bind_tuple& bind, const gui_bind_type type, bool& erase) noexcept;
 private:
     icy::sync_handle m_sync;
     icy::shared_ptr<gui_render_system> m_render_system;
     icy::shared_ptr<gui_thread_data> m_thread;
-    icy::array<icy::shared_ptr<icy::window_cursor>> m_cursors;
+    icy::map<uint32_t, icy::shared_ptr<icy::window_cursor>> m_cursors;
     icy::map<gui_model_data_usr*, model_pair> m_models;
     icy::map<gui_window_data_usr*, window_pair> m_windows;
     icy::set<bind_tuple> m_binds;
@@ -122,6 +149,7 @@ private:
     scroll_type m_vscroll;
     scroll_type m_hscroll;
     icy::set<gui_window_data_sys*> m_update;
+    icy::map<gui_window_data_sys*, icy::set<uint32_t>> m_change;
 };
 namespace icy
 {

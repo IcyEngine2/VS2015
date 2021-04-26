@@ -294,7 +294,7 @@ error_type sync_handle::initialize() noexcept
 {
     if (m_ptr)
         CloseHandle(m_ptr);
-    m_ptr = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    m_ptr = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!m_ptr)
         return last_system_error();
     return error_type();

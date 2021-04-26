@@ -2,22 +2,36 @@
 	"type": "window_main",
 	"layout": "vbox",
 	"widgets": [
-	   {
+		{
 			"type": "edit_line"
-			, "bkcolor": "00FF00"
+			, "bkcolor": "000000"
 			, "text": "hello\nAAA35"
 			, "class": "edit_model"
 			, "weight": 1
-	   },
-	   {
-			"type": "view_tree"
-			, "bkcolor": "FF00FF"
-			, "text": "world123"
-			, "class": "tree_model"
+		},
+		{
+			"type": "splitter"
+			, "layout": "hbox"
 			, "weight": 5
-			, "hscroll": true
-			, "flex_scroll": false
-	   }
+			, "widgets":
+			[
+				{
+					"type": "view_tree"
+					, "bkcolor": "C000C0"
+					, "text": "world123"
+					, "class": "tree_model"
+					, "hscroll": true
+					, "flex_scroll": false
+				},
+				{
+					"type": "edit_text"
+					, "bkcolor": "8040C0"
+					, "text": "right side",
+					, "width": 400
+				}			
+			]
+		},
+
 	]
 
 }

@@ -96,6 +96,7 @@ namespace icy
 			auto tmp = *this;
 			return tmp -= size;
 		}
+		size_t to_utf16(wchar_t(&wchr)[2]) const noexcept;
         error_type to_char(char32_t& chr) const noexcept;
 		explicit operator pointer() const noexcept
 		{

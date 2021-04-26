@@ -27,7 +27,7 @@ namespace icy
         console_system(tag) noexcept { }
         ~console_system() noexcept;
         error_type exec() noexcept override;
-        error_type signal(const event_data& event) noexcept override;
+        error_type signal(const event_data* event) noexcept override;
         error_type write(const string_view str, const color foreground = color(colors::white, 0x00)) noexcept
         {
             console_event event;

@@ -42,6 +42,8 @@ public:
     uint32_t state = gui_node_state::_default;
     icy::gui_variant data;
     icy::gui_variant user;
+    icy::gui_variant row_header;
+    icy::gui_variant col_header;
 };
 struct gui_model_event_type
 {
@@ -75,7 +77,7 @@ struct gui_model_query_type
     const gui_node_data* node = nullptr;
     icy::gui_node_prop prop = icy::gui_node_prop::none;
 };
-class gui_model_data_usr : public icy::gui_data_model
+class gui_model_data_usr : public icy::gui_data_write_model
 {
 public:
     gui_model_data_usr(const icy::weak_ptr<icy::gui_system> system) noexcept : m_system(system)
@@ -85,9 +87,9 @@ public:
     ~gui_model_data_usr() noexcept;
     icy::error_type initialize() noexcept
     {
-        icy::unique_ptr<gui_node_data> root;
-        ICY_ERROR(icy::make_unique(gui_node_data(nullptr, 0), root));
-        ICY_ERROR(m_data.insert(0u, std::move(root)));
+        //icy::unique_ptr<gui_node_data> root;
+        //ICY_ERROR(icy::make_unique(gui_node_data(nullptr, 0), root));
+        //ICY_ERROR(m_data.insert(0u, std::move(root)));
         return icy::error_type();
     }
     gui_model_event_type* next() noexcept
@@ -95,11 +97,11 @@ public:
         return static_cast<gui_model_event_type*>(m_events_sys.pop());
     }
 private:
-    icy::error_type update() noexcept override;
-    icy::gui_node parent(const icy::gui_node node) const noexcept override;
-    uint32_t row(const icy::gui_node node) const noexcept override;
-    uint32_t col(const icy::gui_node node) const noexcept override;
-    icy::gui_variant query(const icy::gui_node node, const icy::gui_node_prop prop) const noexcept override;
+    //icy::error_type update() noexcept override;
+    //icy::gui_node parent(const icy::gui_node node) const noexcept override;
+    //uint32_t row(const icy::gui_node node) const noexcept override;
+    //uint32_t col(const icy::gui_node node) const noexcept override;
+    //icy::gui_variant query(const icy::gui_node node, const icy::gui_node_prop prop) const noexcept override;
     icy::error_type modify(const icy::gui_node node, const icy::gui_node_prop prop, const icy::gui_variant& value) noexcept override;
     icy::error_type insert(const icy::gui_node parent, const uint32_t row, const uint32_t col, icy::gui_node& node) noexcept override;
     icy::error_type destroy(const icy::gui_node node) noexcept override;
@@ -107,9 +109,9 @@ private:
     icy::gui_variant process(const gui_model_query_type& query) const noexcept;
 private:
     const icy::weak_ptr<icy::gui_system> m_system;
-    icy::detail::intrusive_mpsc_queue m_events_usr;
+    //icy::detail::intrusive_mpsc_queue m_events_usr;
     icy::detail::intrusive_mpsc_queue m_events_sys;
-    icy::map<uint32_t, icy::unique_ptr<gui_node_data>> m_data;
+    //icy::map<uint32_t, icy::unique_ptr<gui_node_data>> m_data;
     uint32_t m_index = 1;
 };
 
@@ -132,26 +134,28 @@ public:
     uint32_t row(const icy::gui_node node) const noexcept;
     uint32_t col(const icy::gui_node node) const noexcept;
     icy::gui_variant query(const icy::gui_node node, const icy::gui_node_prop prop) const noexcept;
+    const gui_node_data* data(const icy::gui_node node) const noexcept
+    {
+        auto it = m_data.find(node.index);
+        if (it != m_data.end())
+            return it->value.get();
+        return nullptr;
+    }
 private:
     icy::map<uint32_t, icy::unique_ptr<gui_node_data>> m_data;
 };
 
 
-class gui_model_proxy : public icy::gui_data_model
+class gui_model_proxy_read : public icy::gui_data_read_model
 {
 public:
-    gui_model_proxy(const gui_model_data_sys& system) noexcept : m_system(system)
+    gui_model_proxy_read(const gui_model_data_sys& system) noexcept : m_system(system)
     {
 
     }
-private:
-    icy::error_type update() noexcept override
+    const gui_node_data* data(const icy::gui_node node) const noexcept
     {
-        return icy::make_stdlib_error(std::errc::function_not_supported);
-    }
-    icy::gui_node parent(const icy::gui_node node) const noexcept override
-    {
-        return m_system.parent(node);
+        return m_system.data(node);
     }
     uint32_t row(const icy::gui_node node) const noexcept override
     {
@@ -161,22 +165,37 @@ private:
     {
         return m_system.col(node);
     }
+private:
     icy::gui_variant query(const icy::gui_node node, const icy::gui_node_prop prop) const noexcept override
     {
         return m_system.query(node, prop);
     }
-    icy::error_type modify(const icy::gui_node node, const icy::gui_node_prop prop, const icy::gui_variant& value) noexcept override
+    icy::gui_node parent(const icy::gui_node node) const noexcept override
     {
-        return icy::make_stdlib_error(std::errc::function_not_supported);
-    }
-    icy::error_type insert(const icy::gui_node parent, const uint32_t row, const uint32_t col, icy::gui_node& node) noexcept override
-    {
-        return icy::make_stdlib_error(std::errc::function_not_supported);
-    }
-    icy::error_type destroy(const icy::gui_node node) noexcept override
-    {
-        return icy::make_stdlib_error(std::errc::function_not_supported);
+        return m_system.parent(node);
     }
 private:
     const gui_model_data_sys& m_system;
+};
+class gui_model_proxy_write : public icy::gui_data_write_model 
+{
+public:
+    gui_model_proxy_write(gui_model_data_sys& system) noexcept : m_system(system)
+    {
+
+    }
+    /*icy::error_type modify(const icy::gui_node node, const icy::gui_node_prop prop, const icy::gui_variant& value) noexcept override
+    {
+        return m_system.modify(node, prop, value);
+    }
+    icy::error_type insert(const icy::gui_node parent, const uint32_t row, const uint32_t col, icy::gui_node& node) noexcept override
+    {
+        return m_system.insert(parent, row, col, node);
+    }
+    icy::error_type destroy(const icy::gui_node node) noexcept override
+    {
+        return m_system.destroy(node);
+    }*/
+private:
+    gui_model_data_sys& m_system;
 };

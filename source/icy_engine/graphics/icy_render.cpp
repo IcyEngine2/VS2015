@@ -129,12 +129,15 @@ public:
     render_system* system = nullptr;
     void cancel() noexcept
     {
-        system->post(nullptr, event_type::global_quit);
+        post_quit_event();
     }
     error_type run() noexcept
     {
         if (auto error = system->exec())
-            return event::post(system, event_type::system_error, std::move(error));
+        {
+            cancel();
+            return error;
+        }
         return error_type();
     }
 };
@@ -159,7 +162,7 @@ public:
     }
 private:
     error_type exec() noexcept override;
-    error_type signal(const event_data& event) noexcept override
+    error_type signal(const event_data* event) noexcept override
     {
         return m_sync.wake();
     }
@@ -366,12 +369,10 @@ error_type render_system_data::save(const uint32_t oper, weak_ptr<render_texture
 }
 error_type render_system_data::exec() noexcept
 {
-    while (true)
+    while (*this)
     {
         while (auto event = pop())
         {
-            if (event->type == event_type::global_quit)
-                return error_type();
             if (event->type == event_type::system_internal)
             {
                 const auto& event_data = event->data<internal_event>();

@@ -296,7 +296,7 @@ tagMSG icy::detail::to_winapi(const input_message& input) noexcept
     case input_type::mouse_wheel:
     case input_type::mouse_release:
     case input_type::mouse_press:
-    case input_type::mouse_hold:
+    //case input_type::mouse_hold:
     case input_type::mouse_double:
     {
         msg.lParam = MAKELONG(input.point_x, input.point_y);
@@ -326,7 +326,7 @@ tagMSG icy::detail::to_winapi(const input_message& input) noexcept
             break;
         }
         case input_type::mouse_press:
-        case input_type::mouse_hold:
+        //case input_type::mouse_hold:
         {
             if (input.key == key::mouse_left)
                 msg.message = WM_LBUTTONDOWN;
@@ -408,7 +408,10 @@ error_type icy::to_string(const icy::key_mod mod, string& str) noexcept
 }
 error_type icy::to_string(const input_message& input, string& str) noexcept
 {
-	if (input.type == input_type::active || input.type == input_type::text || input.key == key::none)
+	if (false
+        //|| input.type == input_type::active 
+        || input.type == input_type::text 
+        || input.key == key::none)
 		return error_type();
 
     ICY_ERROR(to_string(key_mod(input.mods), str));
@@ -437,14 +440,14 @@ string_view icy::to_string(const input_type type) noexcept
         return "Mouse Release"_s;
     case input_type::mouse_press:
         return "Mouse Press"_s;
-    case input_type::mouse_hold:
-        return "Mouse Hold"_s;
+    //case input_type::mouse_hold:
+    //    return "Mouse Hold"_s;
     case input_type::mouse_double:
         return "Mouse Double"_s;
     case input_type::text:
         return "Text"_s;
-    case input_type::active:
-        return "Activate"_s;
+    //case input_type::active:
+    //    return "Activate"_s;
     }
     return ""_s;
 }

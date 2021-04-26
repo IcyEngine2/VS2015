@@ -136,17 +136,21 @@ static decltype(&::BeginPaint) win32_begin_paint;
 static decltype(&::EndPaint) win32_end_paint;
 static decltype(&::InvalidateRect) win32_invalidate_rect;
 static decltype(&::PostThreadMessageW) win32_post_thread_message;
-static decltype(&::CreateWindowExW) win32_create_window = nullptr;
-static decltype(&::SetLayeredWindowAttributes) win32_set_layered_window_attributes = nullptr;
-static decltype(&::SetWindowPos) win32_set_window_pos = nullptr;
-static decltype(&::DestroyCursor) win32_destroy_cursor = nullptr;
-static decltype(&::LoadCursorW) win32_load_cursor = nullptr;
-static decltype(&::SetCursor) win32_set_cursor = nullptr;
-static decltype(&::GetDpiForWindow) win32_get_dpi_for_window = nullptr;
-static decltype(&::SetCapture) win32_set_capture = nullptr;
-static decltype(&::ReleaseCapture) win32_release_capture = nullptr;
+static decltype(&::CreateWindowExW) win32_create_window;
+static decltype(&::SetLayeredWindowAttributes) win32_set_layered_window_attributes;
+static decltype(&::SetWindowPos) win32_set_window_pos;
+static decltype(&::DestroyCursor) win32_destroy_cursor;
+static decltype(&::LoadCursorW) win32_load_cursor;
+static decltype(&::SetCursor) win32_set_cursor;
+static decltype(&::GetDpiForWindow) win32_get_dpi_for_window;
+static decltype(&::SetCapture) win32_set_capture;
+static decltype(&::ReleaseCapture) win32_release_capture;
+//static decltype(&::AddClipboardFormatListener) win32_add_clipboard_format_listener;
+//static decltype(&::RemoveClipboardFormatListener) win32_remove_clipboard_format_listener;
+static decltype(&::OpenClipboard) win32_open_clipboard;
+static decltype(&::CloseClipboard) win32_close_clipboard;
+static decltype(&::GetClipboardData) win32_get_clipboard_data;
 #endif
-
 class window_system_data;
 class window_data_usr : public window
 {
@@ -296,7 +300,10 @@ public:
     error_type run() noexcept override
     {
         if (auto error = system->exec())
-            return event::post(system, event_type::system_error, std::move(error));
+        {
+            icy::post_quit_event();
+            return error;
+        }
         return error_type();
     }
 public:
@@ -335,7 +342,6 @@ public:
     error_type exec() noexcept override;
     void exit(const error_type error) noexcept;
     error_type post(internal_message&& msg) noexcept;
-    error_type post(window_message&& msg, const event_type type) noexcept;
 #if X11_GUI
     Display& display() const noexcept
     {
@@ -352,7 +358,7 @@ private:
         return *m_thread;
     }
     error_type create(shared_ptr<window>& window, const window_flags flags) noexcept override;
-    error_type signal(const event_data& event) noexcept override
+    error_type signal(const event_data* event) noexcept override
     {
 #if X11_GUI
         //char buf[64] = {};
@@ -437,6 +443,7 @@ window_data_usr::~window_data_usr() noexcept
 
 window_data_sys::~window_data_sys() noexcept
 {
+    
 #if X11_GUI
     if (m_gc)
         XFreeGC(&m_system.display(), m_gc);
@@ -447,6 +454,7 @@ window_data_sys::~window_data_sys() noexcept
 #elif _WIN32
     if (m_hwnd)
     {
+        //win32_remove_clipboard_format_listener(m_hwnd);
         win32_set_window_longptr(m_hwnd, GWLP_WNDPROC, LONG_PTR(win32_def_window_proc));
         win32_destroy_window(m_hwnd);
     }
@@ -528,7 +536,8 @@ error_type window_data_sys::initialize(const wchar_t* cname, const window_flags 
 
     const auto style = m_flags & window_flags::layered ? win32_popup_style : win32_normal_style;
     const auto ex_style = m_flags & window_flags::layered ? (WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT) : WS_EX_APPWINDOW;
-    m_hwnd = win32_create_window(ex_style, cname, nullptr, style, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+    m_hwnd = win32_create_window(ex_style, cname, nullptr, style, 
+        CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
         nullptr, nullptr, win32_instance(), nullptr);
     if (!m_hwnd)
         return last_system_error();
@@ -554,6 +563,10 @@ error_type window_data_sys::initialize(const wchar_t* cname, const window_flags 
 
     win32_set_window_longptr(m_hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
     win32_set_window_longptr(m_hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(WNDPROC(proc)));
+
+    //if (!win32_add_clipboard_format_listener(m_hwnd))
+    //    return last_system_error();
+
 #endif
 
     return error_type();
@@ -785,7 +798,81 @@ LRESULT window_data_sys::proc(uint32_t msg, WPARAM wparam, LPARAM lparam) noexce
         message.size.x = rect.right - rect.left;
         message.size.y = rect.bottom - rect.top;
 
-        if (const auto error = m_system.post(std::move(message), type))
+
+        if (type == event_type::window_input 
+            && (message.input.type == input_type::key_press 
+            || message.input.type == input_type::key_hold))
+        {
+            window_action action_message;
+            action_message.window = m_index;
+
+            const auto mods = key_mod(message.input.mods);
+            switch (message.input.key)
+            {
+            case key::z:
+            {
+                if (key_mod_and(key_mod::lctrl | key_mod::rctrl, mods))
+                    action_message.type = window_action_type::undo;
+                break;
+            }
+            case key::y:
+            {
+                if (key_mod_and(key_mod::lctrl | key_mod::rctrl, mods))
+                    action_message.type = window_action_type::redo;
+                break;
+            }
+            case key::c:
+            {
+                if (key_mod_and(key_mod::lctrl | key_mod::rctrl, mods))
+                    action_message.type = window_action_type::copy;
+                break;
+            }
+            case key::v:
+            {
+                if (key_mod_and(key_mod::lctrl | key_mod::rctrl, mods))
+                {
+                    action_message.type = window_action_type::paste;
+
+                    if (!win32_open_clipboard(m_hwnd))
+                        break;
+
+                    ICY_SCOPE_EXIT{ win32_close_clipboard(); };
+                    auto handle = win32_get_clipboard_data(CF_UNICODETEXT);
+                    if (!handle)
+                        break;
+
+                    const auto ptr = static_cast<const wchar_t*>(GlobalLock(handle));
+                    if (!ptr)
+                        break;
+                    ICY_SCOPE_EXIT{ GlobalUnlock(handle); };
+                    to_string(const_array_view<wchar_t>(ptr, wcslen(ptr)), action_message.clipboard_text);
+                }
+                break;
+            }
+            case key::x:
+            {
+                if (key_mod_and(key_mod::lctrl | key_mod::rctrl, mods))
+                    action_message.type = window_action_type::cut;
+                break;
+            }
+            case key::a:
+            {
+                if (key_mod_and(key_mod::lctrl | key_mod::rctrl, mods))
+                    action_message.type = window_action_type::select_all;
+                break;
+            }
+            }
+            if (action_message.type != window_action_type::none)
+            {
+                if (const auto error = event::post(&m_system, event_type::window_action, std::move(action_message)))
+                {
+                    m_system.exit(error);
+                    return false;
+                }
+            }
+        }
+
+        if (const auto error = event::post(&m_system, type, std::move(message)))
         {
             m_system.exit(error);
             return false;
@@ -858,6 +945,9 @@ LRESULT window_data_sys::proc(uint32_t msg, WPARAM wparam, LPARAM lparam) noexce
 
     switch (msg)
     {
+    //case WM_CLIPBOARDUPDATE:
+    //  break;
+
     case WM_PAINT:
         //if (const auto error = on_repaint())
         //    m_system->exit(error);
@@ -886,18 +976,26 @@ LRESULT window_data_sys::proc(uint32_t msg, WPARAM wparam, LPARAM lparam) noexce
         message.state = message.state | window_state::closing;
         post_message(message, event_type::window_state);
         if (m_flags & window_flags::quit_on_close)
-            event::post(nullptr, event_type::global_quit);
+            post_quit_event();
         return 0;
     }
 
     case WM_COPYDATA:
     {
-        window_message message;
+        window_copydata message;
         const auto cdata = reinterpret_cast<COPYDATASTRUCT*>(lparam);
         const auto ptr = static_cast<const uint8_t*>(cdata->lpData);
-        message.data.user = cdata->dwData;
-        message.data.bytes.append(const_array_view<uint8_t>(ptr, cdata->cbData));
-        post_message(message, event_type::window_data);
+        message.user = cdata->dwData;
+        message.window = m_index;
+        if (const auto error = message.bytes.append(const_array_view<uint8_t>(ptr, cdata->cbData)))
+        {
+            m_system.exit(error);
+        }
+        else
+        {
+            if (const auto error = event::post(&m_system, event_type::window_data, std::move(message)))
+                m_system.exit(error);
+        }
         break;
     }
 
@@ -957,7 +1055,6 @@ LRESULT window_data_sys::proc(uint32_t msg, WPARAM wparam, LPARAM lparam) noexce
     }
 
     case WM_CHAR:
-    {
         // 0xD800–0xDBFF;
         if (wparam < HIGH_SURROGATE_START)
         {
@@ -982,9 +1079,7 @@ LRESULT window_data_sys::proc(uint32_t msg, WPARAM wparam, LPARAM lparam) noexce
             post_message(message, event_type::window_input);
             m_chr = 0;
         }
-
         break;
-    }
 
     case WM_KEYDOWN:
     case WM_KEYUP:
@@ -1231,7 +1326,13 @@ error_type window_system_data::initialize() noexcept
     ICY_USER32_FUNC(win32_get_dpi_for_window, GetDpiForWindow);
     ICY_USER32_FUNC(win32_set_capture, SetCapture);
     ICY_USER32_FUNC(win32_release_capture, ReleaseCapture);
-    
+    ICY_USER32_FUNC(win32_open_clipboard, OpenClipboard);
+    ICY_USER32_FUNC(win32_close_clipboard, CloseClipboard);
+    ICY_USER32_FUNC(win32_get_clipboard_data, GetClipboardData);
+
+    //ICY_USER32_FUNC(win32_add_clipboard_format_listener, AddClipboardFormatListener);
+    //ICY_USER32_FUNC(win32_remove_clipboard_format_listener, RemoveClipboardFormatListener);
+
     m_cursor = static_cast<HCURSOR>(win32_load_cursor(nullptr, IDC_ARROW));
     if (!m_cursor)
         return last_system_error();
@@ -1293,13 +1394,10 @@ error_type window_system_data::exec() noexcept
     _putenv("_XKB_CHARSET=utf8");
 #endif
 
-    while (true)
+    while (*this)
     {
         while (auto event = pop())
         {
-            if (event->type == event_type::global_quit)
-                return error_type();
-
 #if X11_GUI
             if (event->type == event_type::global_timer)
             {
@@ -1505,10 +1603,6 @@ error_type window_system_data::exec() noexcept
 error_type window_system_data::post(internal_message&& msg) noexcept
 {
     return event_system::post(nullptr, event_type::system_internal, std::move(msg));
-}
-error_type window_system_data::post(window_message&& msg, const event_type type) noexcept
-{
-    return event::post(this, type, std::move(msg));
 }
 error_type window_system_data::create(shared_ptr<window>& new_window, const window_flags flags) noexcept
 {

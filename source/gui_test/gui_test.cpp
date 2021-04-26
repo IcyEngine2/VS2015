@@ -21,17 +21,23 @@ using namespace icy;
 class gui_default_bind : public gui_data_bind
 {
 public:
-    virtual int compare(const gui_data_model& model, const gui_node lhs, const gui_node rhs) const noexcept override
+    virtual int compare(const gui_data_read_model& model, const gui_node lhs, const gui_node rhs) const noexcept override
     {
-        string name_lhs;
-        string name_rhs;
-        to_string(model.query(lhs, gui_node_prop::data), name_lhs);
-        to_string(model.query(rhs, gui_node_prop::data), name_rhs);
-        return icy::compare(name_lhs, name_rhs);
+        //string name_lhs;
+        //string name_rhs;
+        //to_string(model.query(lhs, gui_node_prop::data), name_lhs);
+        //to_string(model.query(rhs, gui_node_prop::data), name_rhs);
+        //return icy::compare(name_lhs, name_rhs);
+        return gui_data_bind::compare(model, lhs, rhs);
+    }
+    virtual error_type notify(const gui_data_read_model& read, const gui_node node, const gui_node_prop prop, const gui_variant& value, bool& decline) const noexcept override
+    {
+        return error_type();
     }
 };
 
-error_type append_nodes(gui_data_model& model, gui_node parent, const string_view prefix, const size_t level)
+error_type append_nodes(gui_data_write_model& model, gui_node parent,
+    const string_view prefix, const size_t level, size_t& index)
 {
     if (level >= 3)
         return error_type();
@@ -41,9 +47,28 @@ error_type append_nodes(gui_data_model& model, gui_node parent, const string_vie
         ICY_ERROR(model.insert(parent, k, 0, node));
         string str;
         ICY_ERROR(copy(prefix, str));
-        ICY_ERROR(str.appendf("%1"_s, k));
+        ICY_ERROR(str.appendf(" %1. (%2, %3) "_s, prefix, k, 0));
         ICY_ERROR(model.modify(node, gui_node_prop::data, str));
-        ICY_ERROR(append_nodes(model, node, str, level + 1));
+        ICY_ERROR(model.modify(node, gui_node_prop::row_header, index++));
+        if (level == 0)
+        {
+            ICY_ERROR(model.modify(node, gui_node_prop::col_header, "0"_s));
+        }
+        for (auto n = 0u; n < 3; ++n)
+        {
+            
+            gui_node col_node;
+            ICY_ERROR(model.insert(parent, k, 1 + n, col_node));
+            string col_name;
+            ICY_ERROR(col_name.appendf(" %1.(%2, %3) "_s, prefix, k, 1 + n));
+            ICY_ERROR(model.modify(col_node, gui_node_prop::data, col_name));
+            if (level == 0)
+            {
+                ICY_ERROR(model.modify(col_node, gui_node_prop::col_header, n + 1));
+            }
+        }
+
+        ICY_ERROR(append_nodes(model, node, str, level + 1, index));
     }
     return error_type();
 }
@@ -92,13 +117,17 @@ error_type main_func()
     shared_ptr<gui_window> gui_window;
     ICY_ERROR(gui_system->create_window(gui_window, window, string_view(bytes.data(), bytes.size())));
     
-    shared_ptr<gui_data_model> model;
+    shared_ptr<gui_data_write_model> model;
     ICY_ERROR(gui_system->create_model(model));
 
     gui_node root0, root1;
     ICY_ERROR(model->insert(gui_node(), 0, 0, root0));
     ICY_ERROR(model->insert(gui_node(), 1, 0, root1));
+
+    size_t index = 0;
+    ICY_ERROR(append_nodes(*model, root1, ""_s, 0, index));
     
+
     array<gui_widget> list;
     gui_window->find("class"_s, "edit_model"_s, list);
     for (auto&& x : list)
@@ -108,15 +137,13 @@ error_type main_func()
     for (auto&& x : list)
         gui_system->create_bind(make_unique<gui_default_bind>(), *model, *gui_window, root1, x);
 
-    append_nodes(*model, root1, ""_s, 0);
     
     shared_ptr<event_queue> loop;
-    ICY_ERROR(create_event_system(loop, event_type::global_quit
+    ICY_ERROR(create_event_system(loop, 0
         | event_type::gui_render
         | event_type::gui_update
         | event_type::display_update 
         | event_type::window_resize 
-        | event_type::system_error 
         | event_type::global_timer));
 
     auto query = 0u;
@@ -130,13 +157,13 @@ error_type main_func()
 
     shared_ptr<texture> overlay;
 
-    while (true)
+    while (*loop)
     {
         event event;
         ICY_ERROR(loop->pop(event));
-        if (event->type == event_type::global_quit)
-            break;
-        
+        if (!event)
+            continue;
+
         //ICY_ERROR(gui->process(event));
         if (event->type == event_type::gui_render)
         {
@@ -162,11 +189,7 @@ error_type main_func()
             string new_name;
             ICY_ERROR(to_string("%1ms [%2]"_s, new_name, ms.count(), event_data.index));
             ICY_ERROR(window->rename(new_name));
-            ICY_ERROR(model->modify(root0, gui_node_prop::data, new_name));
-        }
-        else if (event->type == event_type::system_error)
-        {
-            return event->data<error_type>();
+            //ICY_ERROR(model->modify(root0, gui_node_prop::data, new_name));
         }
         else if (event->type == event_type::global_timer)
         {

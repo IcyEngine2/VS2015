@@ -488,7 +488,8 @@ namespace icy
         user,
         checked,
         checkable,
-
+        row_header,
+        col_header,
         _count,
     };
     enum class gui_widget_type : uint32_t
@@ -505,6 +506,7 @@ namespace icy
         view_table,
         edit_line,
         edit_text,
+        splitter,
 
         _count,
     };
@@ -530,11 +532,13 @@ namespace icy
             has_vscroll     =   0x0800,
             has_hscroll     =   0x1000,
 
+            has_row_header  =   0x2000,
+            has_col_header  =   0x4000,
+
             _default        =   enabled | visible | vscroll_auto | hscroll_auto,
         };
     };
     using gui_widget_state = decltype(gui_widget_state_enum::none);
-
     enum class gui_widget_layout : uint32_t
     {
         none,
@@ -543,7 +547,6 @@ namespace icy
         grid,
         flex,
     };
-
 
     class thread;
     class adapter;
@@ -557,20 +560,26 @@ namespace icy
     {
         uint32_t index = 0;
     };
-    struct gui_data_model
+    struct gui_data_write_model
     {
-        virtual ~gui_data_model() noexcept = 0
+        virtual ~gui_data_write_model() noexcept = 0
         {
 
         }
-        virtual error_type update() noexcept = 0;
+        virtual error_type modify(const gui_node node, const gui_node_prop prop, const gui_variant& value) noexcept = 0;
+        virtual error_type insert(const gui_node parent, const uint32_t row, const uint32_t col, gui_node& node) noexcept = 0;
+        virtual error_type destroy(const gui_node node) noexcept = 0;
+    };
+    struct gui_data_read_model
+    {
+        virtual ~gui_data_read_model() noexcept = 0
+        {
+
+        }
         virtual gui_node parent(const gui_node node) const noexcept = 0;
         virtual uint32_t row(const gui_node node) const noexcept = 0;
         virtual uint32_t col(const gui_node node) const noexcept = 0;
         virtual gui_variant query(const gui_node node, const gui_node_prop prop) const noexcept = 0;
-        virtual error_type modify(const gui_node node, const gui_node_prop prop, const gui_variant& value) noexcept = 0;
-        virtual error_type insert(const gui_node parent, const uint32_t row, const uint32_t col, gui_node& node) noexcept = 0;
-        virtual error_type destroy(const gui_node node) noexcept = 0;
     };
     struct texture;
     struct gui_window
@@ -601,13 +610,17 @@ namespace icy
         {
 
         }
-        virtual int compare(const gui_data_model& model, const gui_node lhs, const gui_node rhs) const noexcept
+        virtual int compare(const gui_data_read_model& model, const gui_node lhs, const gui_node rhs) const noexcept
         {
-            return icy::compare(lhs.index, rhs.index);
+            return icy::compare(model.row(lhs), model.row(rhs));
         }
-        virtual bool filter(const gui_data_model& model, const gui_node node) const noexcept
+        virtual bool filter(const gui_data_read_model& model, const gui_node node) const noexcept
         {
             return true;
+        }
+        virtual error_type notify(const gui_data_read_model& read, const gui_node node, const gui_node_prop prop, const gui_variant& value, bool& decline) const noexcept
+        {
+            return error_type();
         }
     };
     struct gui_system : public event_system
@@ -617,8 +630,8 @@ namespace icy
         {
             return const_cast<icy::thread&>(static_cast<const gui_system*>(this)->thread());
         }
-        virtual error_type create_bind(unique_ptr<gui_data_bind>&& bind, gui_data_model& model, gui_window& window, const gui_node node, const gui_widget widget) noexcept = 0;
-        virtual error_type create_model(shared_ptr<gui_data_model>& model) noexcept = 0;
+        virtual error_type create_bind(unique_ptr<gui_data_bind>&& bind, gui_data_write_model& model, gui_window& window, const gui_node node, const gui_widget widget) noexcept = 0;
+        virtual error_type create_model(shared_ptr<gui_data_write_model>& model) noexcept = 0;
         virtual error_type create_window(shared_ptr<gui_window>& window, shared_ptr<icy::window> handle, icy::string_view json) noexcept = 0;
         virtual error_type enum_font_names(array<string>& fonts) const noexcept = 0;
     };

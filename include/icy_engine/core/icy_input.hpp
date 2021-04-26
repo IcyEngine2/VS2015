@@ -23,10 +23,16 @@ namespace icy
         mouse_wheel,
         mouse_release,
         mouse_press,
-        mouse_hold,
         mouse_double,
         text,
-        active,
+        //active,
+
+        action_undo,
+        action_redo,
+        action_cut,
+        action_copy,
+        action_paste,
+
         _total,
     };
     enum class key_mod : uint32_t
@@ -76,10 +82,10 @@ namespace icy
 		{
 
 		}
-        explicit input_message(const bool active) noexcept : type(input_type::active), active(active)
+        /*explicit input_message(const bool active) noexcept : type(input_type::active), active(active)
         {
 
-        }
+        }*/
         input_message(const void*) = delete;
         explicit input_message(const string_view str) noexcept : type(input_type::text), text{}
 		{

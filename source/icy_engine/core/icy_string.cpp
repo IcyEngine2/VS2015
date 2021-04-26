@@ -42,6 +42,93 @@ string_iterator& string_iterator::operator--() noexcept
     }
     return *this;
 }
+size_t string_iterator::to_utf16(wchar_t(&wchr)[2]) const noexcept
+{
+    wchr[0] = wchr[1] = 0;
+
+    const auto capacity = detail::distance(m_ptr, m_end);
+    if (capacity == 0)
+        return 0;
+
+    if (*m_ptr <= 0x80)
+    {
+        wchr[0] = *m_ptr;
+        return 1;
+    }
+    else if (*m_ptr <= 0xC0)
+    {
+        // reserved for utf8?
+    }
+    else if (*m_ptr <= 0xE0)
+    {
+        if (capacity != 2)
+            return 0;
+
+        auto hsur = char16_t(m_ptr[0] & 0x1F);
+        auto lsur = char16_t(m_ptr[1] & 0x3F);
+        const auto unicode = (hsur << 8) | lsur;
+        if ((0 <= unicode && unicode <= 0xD7FF) || (0xE000 <= unicode && unicode <= 0xFFFF))
+        {
+            wchr[0] = unicode;
+            return 1;
+        }
+    }
+    else if (*m_ptr <= 0xF0)
+    {
+        if (capacity != 3)
+            return 0;
+
+        const auto chr4 = char16_t(m_ptr[0] & 0xF);
+        const auto chr3 = char16_t((m_ptr[1] & 0x3C) >> 2);
+        const auto chr2_1 = char16_t((m_ptr[1] & 0x3));
+        const auto chr2_0 = char16_t((m_ptr[2] & 0x30) >> 4);
+        const auto chr1 = char16_t((m_ptr[2] & 0xF));
+
+        const char32_t unicode = 0
+            | (chr4 << 12) 
+            | (chr3 << 8)
+            | (chr2_1 << 6) 
+            | (chr2_0 << 4)
+            | (chr1);
+
+        if ((0 <= unicode && unicode <= 0xD7FF) || (0xE000 <= unicode && unicode <= 0xFFFF))
+        {
+            wchr[0] = wchar_t(unicode);
+            return 1;
+        }
+    }
+    else if (*m_ptr < 0xF8)
+    {
+        if (capacity != 3)
+            return 0;
+
+        const auto chr_6 = char16_t((m_ptr[0] & 0x4) >> 2);
+        const auto chr_5_1 = char16_t(m_ptr[0] & 0x3);
+        const auto chr_5_0 = char16_t((m_ptr[1] & 0x30) >> 4);
+        const auto chr_4 = char16_t(m_ptr[1] & 0xF);
+        const auto chr_3 = char16_t((m_ptr[2] & 0x3C) >> 2);
+        const auto chr_2_1 = char16_t(m_ptr[2] & 0x3);
+        const auto chr_2_0 = char16_t((m_ptr[3] & 0x30) >> 4);
+        const auto chr_1 = char16_t(m_ptr[3] & 0xF);
+        
+        const char32_t unicode = 0
+            | (chr_6 << 4) 
+            | (chr_5_1 << 2) 
+            | (chr_5_0)
+            | (chr_4 << 12)
+            | (chr_3 << 8) 
+            | (chr_2_1 << 6) 
+            | (chr_2_0 << 4) 
+            | chr_1;
+
+        const auto hsur = (unicode - 0x10000) / 0x400 + 0xD800;
+        const auto lsur = (unicode - 0x10000) % 0x400 + 0xDC00;
+        wchr[0] = wchar_t(hsur);
+        wchr[1] = wchar_t(lsur);
+        return 2;
+    }
+    return 0;
+}
 error_type string_iterator::to_char(char32_t& chr) const noexcept
 {
     const auto capacity = detail::distance(m_ptr, m_end);

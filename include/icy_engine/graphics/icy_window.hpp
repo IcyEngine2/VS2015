@@ -5,6 +5,7 @@
 #include <icy_engine/core/icy_array.hpp>
 #include <icy_engine/core/icy_matrix.hpp>
 #include <icy_engine/core/icy_color.hpp>
+#include <icy_engine/core/icy_string.hpp>
 
 namespace icy
 {
@@ -24,6 +25,18 @@ namespace icy
         none            =   0x00,
         quit_on_close   =   0x01,
         layered         =   0x02,
+    };
+    enum class window_action_type : uint32_t
+    {
+        none,
+        undo,       //  ctrl + Z
+        redo,       //  ctrl + Y
+        cut,        //  ctrl + X
+        copy,       //  ctrl + C
+        paste,      //  ctrl + V
+        save,       //  ctrl + S
+        reload,     //  ctrl + R
+        select_all, //  ctrl + A
     };
 
     static constexpr auto default_window_flags = window_flags::quit_on_close;
@@ -83,14 +96,20 @@ namespace icy
         uint32_t window = 0;
         window_state state = window_state::none;
         window_size size;
-        struct
-        {
-            uint64_t user;
-            array<uint8_t> bytes;
-        } data = {};
         input_message input;
     };
-
+    struct window_copydata
+    {
+        uint32_t window = 0;
+        uint64_t user = 0;
+        array<uint8_t> bytes;
+    };
+    struct window_action
+    {
+        uint32_t window = 0;
+        window_action_type type = window_action_type::none;
+        string clipboard_text;
+    };
     struct window_cursor
     {
         enum class type : uint32_t
@@ -116,7 +135,6 @@ namespace icy
 
         }
     };
-
     struct window_system : public event_system
     {
         virtual const icy::thread& thread() const noexcept = 0;
@@ -126,6 +144,7 @@ namespace icy
         }
         virtual error_type create(shared_ptr<window>& window, const window_flags flags = default_window_flags) noexcept = 0;                
     };
+
     error_type create_window_cursor(shared_ptr<window_cursor>& cursor, const window_cursor::type type) noexcept;
     error_type create_window_cursor(shared_ptr<window_cursor>& cursor, const const_array_view<uint8_t> bytes) noexcept;
     error_type create_window_system(shared_ptr<window_system>& system) noexcept;

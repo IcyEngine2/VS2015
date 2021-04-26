@@ -15,14 +15,23 @@ namespace icy
 }
 class gui_texture;
 class gui_system_data;
+class gui_model_proxy_read;
+class gui_model_proxy_write;
+
 struct IUnknown;
 struct am_Var;
 struct am_Solver;
 enum class gui_widget_item_type : uint32_t
 {
     none,
-    text,
-    vscroll_bk,
+    root_text,
+    cell_text,
+    row_header,
+    col_header,
+    vsplitter,
+    hsplitter,
+    _scroll_beg,
+    vscroll_bk = _scroll_beg,
     vscroll_min,
     vscroll_max,
     vscroll_val,
@@ -30,6 +39,7 @@ enum class gui_widget_item_type : uint32_t
     hscroll_min,
     hscroll_max,
     hscroll_val,
+    _scroll_end
 };
 struct gui_widget_item_state_enum
 {
@@ -57,6 +67,49 @@ struct gui_widget_item
     float y = 0;
     float w = 0;
     float h = 0;
+    uint32_t node = 0;
+};
+enum class gui_reset_reason : uint32_t
+{
+    update_render_list,
+    update_text_caret,
+    update_text_select,
+    update_splitter,
+};
+enum class gui_text_keybind : uint32_t
+{
+    text,
+    paste,
+    cut,
+    copy,
+    select_all,
+    left,
+    right,
+    up,
+    down,
+    del,
+    back,
+    ctrl_left,
+    ctrl_right,
+    ctrl_up,
+    ctrl_down,
+    shift_left,
+    shift_right,
+    shift_up,
+    shift_down,
+    ctrl_shift_left,
+    ctrl_shift_right,
+    ctrl_del,
+    ctrl_back,
+    undo,
+    redo,
+};
+struct gui_text_action
+{
+    uint32_t item = 0;
+    uint32_t offset = 0;
+    uint32_t length = 0;
+    icy::string value;
 };
 struct gui_widget_data
 {
@@ -136,10 +189,10 @@ public:
     float weight_y = 0;
     scroll_type scroll_x;
     scroll_type scroll_y;
-/*    float scroll_x_val = 0;
-    float scroll_x_max = 0;
-    float scroll_y_val = 0;
-    float scroll_y_max = 0;*/
+    float row_header = 0;
+    float col_header = 0;
+    icy::array<gui_text_action> actions;
+    uint32_t action = 0;
 };
 struct gui_window_event_type
 {
@@ -224,9 +277,10 @@ public:
     gui_window_data_sys(gui_window_data_sys&& rhs) noexcept = default;
     ICY_DEFAULT_MOVE_ASSIGN(gui_window_data_sys);
     icy::error_type initialize(const icy::shared_ptr<icy::window> window, const icy::json& json) noexcept;
-    icy::error_type input(const icy::input_message& msg, icy::array<icy::gui_widget>& output) noexcept;
+    icy::error_type input(const icy::input_message& msg) noexcept;
+    icy::error_type action(const icy::window_action& msg) noexcept;
     icy::error_type resize(const icy::window_size size) noexcept;
-    icy::error_type process(const gui_window_event_type& event, icy::array<icy::gui_widget>& output) noexcept;
+    icy::error_type process(const gui_window_event_type& event) noexcept;
     uint32_t window() const noexcept
     {
         return m_window_index;
@@ -247,9 +301,9 @@ public:
     }
     icy::window_size size(const uint32_t widget) const noexcept;
     icy::error_type send_data(gui_model_data_sys& model, const icy::gui_widget widget, const icy::gui_node node, const icy::gui_data_bind& func, bool& erase) const noexcept;
-    icy::error_type recv_data(const icy::gui_data_model& proxy, const gui_node_data& node, const icy::gui_widget widget, const icy::gui_data_bind& func, bool& erase) noexcept;
+    icy::error_type recv_data(const gui_model_proxy_read& proxy, const gui_node_data& node, const icy::gui_widget widget, const icy::gui_data_bind& func, bool& erase) noexcept;
     icy::error_type timer(icy::timer::pair& pair) noexcept;
-    icy::error_type reset() noexcept;
+    icy::error_type reset(const gui_reset_reason reason) noexcept;
 private:
     struct jmp_type { jmp_buf buf; };
     struct solver_type
@@ -271,7 +325,7 @@ private:
         }
         am_Solver* system = nullptr;
     };
-    struct state_type
+    struct hover_type 
     {
         explicit operator bool() const noexcept
         {
@@ -282,27 +336,81 @@ private:
         uint32_t dx = 0;
         uint32_t dy = 0;
     };
-    struct hover_type : state_type { };
-    struct press_type : state_type { };
-    struct focus_type : state_type { };
+    using press_type = hover_type;
+    struct focus_type 
+    {
+        explicit operator bool() const noexcept
+        {
+            return widget != 0;
+        }
+        uint32_t widget = 0;
+        uint32_t item = 0;  
+        uint32_t text_select_beg = 0;
+        uint32_t text_select_end = 0;
+        bool text_trail_beg = false;
+        bool text_trail_end = false;
+    };
+    struct timer_type
+    {
+        icy::error_type reset(const icy::duration_type timeout) noexcept
+        {
+            using namespace icy;
+            if (!timer)
+            {
+                timer = make_unique<icy::timer>();
+                if (!timer)
+                    return make_stdlib_error(std::errc::not_enough_memory);
+            }
+            point = clock_type::now();
+            return timer->initialize(SIZE_MAX, timeout);
+        }
+        void cancel() noexcept
+        {
+            if (timer)
+                timer->cancel();
+        }
+        bool check(icy::timer::pair& pair, float& dt) noexcept
+        {
+            if (pair.timer != timer.get())
+                return false;
+
+            const auto now = icy::clock_type::now();
+            dt = float(std::chrono::duration_cast<std::chrono::nanoseconds>(now - point).count() / 1e9);
+            point = now;
+            return true;
+        }
+        icy::unique_ptr<icy::timer> timer;
+        icy::clock_type::time_point point;
+    };
+    struct render_item
+    {
+        gui_widget_item* item;
+        float x = 0;
+        float y = 0;
+    };
+    struct render_widget
+    {
+        gui_widget_data* widget = nullptr;
+        icy::array<render_item> items;
+        size_t level = 0;
+    };
 private:
-    icy::error_type update(gui_widget_data& widget) noexcept;
-    //icy::error_type recalc(const gui_widget_box& parent, gui_widget_box& box) noexcept;
-    icy::error_type render(gui_texture& texture, const gui_widget_data& widget) noexcept;
-    icy::error_type input_key_press(const icy::key key, const icy::key_mod mods, icy::array<icy::gui_widget>& output) noexcept;
-    icy::error_type input_key_hold(const icy::key key, const icy::key_mod mods, icy::array<icy::gui_widget>& output) noexcept;
-    icy::error_type input_key_release(const icy::key key, const icy::key_mod mods, icy::array<icy::gui_widget>& output) noexcept;
-    icy::error_type input_mouse_move(const int32_t px, const int32_t py, const icy::key_mod mods, icy::array<icy::gui_widget>& output) noexcept;
-    icy::error_type input_mouse_wheel(const int32_t px, const int32_t py, const icy::key_mod mods, const int32_t wheel, icy::array<icy::gui_widget>& output) noexcept;
-    icy::error_type input_mouse_release(const icy::key key, const int32_t px, const int32_t py, const icy::key_mod mods, icy::array<icy::gui_widget>& output) noexcept;
-    icy::error_type input_mouse_press(const icy::key key, const int32_t px, const int32_t py, const icy::key_mod mods, icy::array<icy::gui_widget>& output) noexcept;
-    icy::error_type input_mouse_hold(const icy::key key, const int32_t px, const int32_t py, const icy::key_mod mods, icy::array<icy::gui_widget>& output) noexcept;
-    icy::error_type input_mouse_double(const icy::key key, const int32_t px, const int32_t py, const icy::key_mod mods, icy::array<icy::gui_widget>& output) noexcept;
-    icy::error_type input_text(const icy::string_view text, icy::array<icy::gui_widget>& output) noexcept;
+    icy::error_type update(gui_widget_data& widget, size_t& level) noexcept;
+    icy::error_type input_key_press(const icy::key key, const icy::key_mod mods) noexcept;
+    icy::error_type input_key_hold(const icy::key key, const icy::key_mod mods) noexcept;
+    icy::error_type input_key_release(const icy::key key, const icy::key_mod mods) noexcept;
+    icy::error_type input_mouse_move(const int32_t px, const int32_t py, const icy::key_mod mods) noexcept;
+    icy::error_type input_mouse_wheel(const int32_t px, const int32_t py, const icy::key_mod mods, const int32_t wheel) noexcept;
+    icy::error_type input_mouse_release(const icy::key key, const int32_t px, const int32_t py, const icy::key_mod mods) noexcept;
+    icy::error_type input_mouse_press(const icy::key key, const int32_t px, const int32_t py, const icy::key_mod mods) noexcept;
+    icy::error_type input_mouse_double(const icy::key key, const int32_t px, const int32_t py, const icy::key_mod mods) noexcept;
+    icy::error_type input_text(const icy::string_view text) noexcept;
     icy::error_type solve_item(gui_widget_data& widget, gui_widget_item& item, const gui_font& font) noexcept;
-    icy::error_type make_view(const icy::gui_data_model& proxy, const gui_node_data& node, const icy::gui_data_bind& func, gui_widget_data& widget) noexcept;
-    icy::error_type hover_widget(const gui_widget_data& widget, const int32_t px, const int32_t py, hover_type& new_hover) const noexcept;
-    icy::error_type hover_item(const gui_widget_data& widget, const int32_t px, const int32_t py, hover_type& new_hover) const noexcept;
+    icy::error_type make_view(const gui_model_proxy_read& proxy, const gui_node_data& node, const icy::gui_data_bind& func, gui_widget_data& widget, size_t level = 0) noexcept;
+    icy::error_type click_widget_lmb(gui_widget_data& widget, gui_widget_item* item) noexcept;
+    icy::error_type push_action(gui_widget_data& widget, gui_text_action& action) noexcept;
+    icy::error_type exec_action(gui_widget_data& widget, gui_text_action& action) noexcept;
+    icy::error_type text_action(gui_widget_data& widget, const uint32_t item, const gui_text_keybind type, const icy::string_view insert = icy::string_view()) noexcept;
 private:
     gui_system_data* m_system = nullptr;
     icy::weak_ptr<icy::window> m_window;
@@ -317,6 +425,16 @@ private:
     hover_type m_hover;
     press_type m_press;
     focus_type m_focus;
-    icy::unique_ptr<icy::timer> m_timer_scroll;
-    icy::clock_type::time_point m_timer_point;
+    timer_type m_vscroll_val;
+    timer_type m_hscroll_val;
+    timer_type m_vscroll_min;
+    timer_type m_vscroll_max;
+    timer_type m_hscroll_min;
+    timer_type m_hscroll_max;
+    timer_type m_caret_timer;
+    bool m_caret_visible = false;
+    icy::array<render_widget> m_render_list;
+    float m_splitter = 0;
+    int32_t m_last_x = 0;
+    int32_t m_last_y = 0;
 };

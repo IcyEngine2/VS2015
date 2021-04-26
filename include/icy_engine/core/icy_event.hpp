@@ -12,12 +12,12 @@ namespace icy
     {
         enum : uint64_t
         {            
-            bitcnt_global   =   0x04,
+            bitcnt_global   =   0x02,
             bitcnt_system   =   0x02,
             bitcnt_fileio   =   0x02,
             bitcnt_network  =   0x04,
             bitcnt_console  =   0x03,
-            bitcnt_window   =   0x04,
+            bitcnt_window   =   0x05,
             bitcnt_gui      =   0x02,
             bitcnt_display  =   0x01,
             bitcnt_render   =   0x02,
@@ -55,14 +55,14 @@ namespace icy
         {
             none                    =   0,
 
-            global_quit             =   1ui64   <<  (offset_global + 0x00),
-            global_timer            =   1ui64   <<  (offset_global + 0x01),
-            global_task             =   1ui64   <<  (offset_global + 0x02),
-            global_timeout          =   1ui64   <<  (offset_global + 0x03),
+            //global_quit             =   1ui64   <<  (offset_global + 0x00),
+            global_timer            =   1ui64   <<  (offset_global + 0x00),
+            global_task             =   1ui64   <<  (offset_global + 0x01),
+            //global_timeout          =   1ui64   <<  (offset_global + 0x03),
             global_any              =   mask_global,
 
             system_internal         =   1ui64   <<  (offset_system + 0x00),
-            system_error            =   1ui64   <<  (offset_system + 0x01),
+            //system_error            =   1ui64   <<  (offset_system + 0x01),
             system_any              =   mask_system,
 
             file_read               =   1ui64   <<  (offset_fileio + 0x00),
@@ -84,6 +84,7 @@ namespace icy
             window_resize           =   1ui64   <<  (offset_window + 0x01),
             window_input            =   1ui64   <<  (offset_window + 0x02),
             window_data             =   1ui64   <<  (offset_window + 0x03),
+            window_action           =   1ui64   <<  (offset_window + 0x04),
             window_any              =   mask_window,
 
             gui_update              =   1ui64   <<  (offset_gui + 0x00),
@@ -109,6 +110,9 @@ namespace icy
     class event;
     class event_data;
 
+    error_type post_quit_event() noexcept;
+    error_type post_error_event(const error_type error) noexcept;
+
     class event_system
     {
         friend event_system;
@@ -119,11 +123,16 @@ namespace icy
             event_data* value;
         };
     public:
+        friend error_type post_quit_event() noexcept;
+        friend error_type post_error_event(const error_type error) noexcept;
         static error_type initialize() noexcept;
-        event_system() noexcept;
         virtual ~event_system() noexcept = 0
         {
 
+        }
+        explicit operator bool() const noexcept
+        {
+            return m_quit.load(std::memory_order_acquire) == false;
         }
         virtual error_type exec() noexcept = 0;
         error_type post(event_system* const source, const event_type type) noexcept;
@@ -132,15 +141,17 @@ namespace icy
         void filter(const uint64_t mask) noexcept;
         event pop() noexcept;
     private:
-        virtual error_type signal(const event_data& event) noexcept = 0;
+        virtual error_type signal(const event_data* event) noexcept = 0;
         error_type post(event_data& new_event) noexcept;
     private:
         detail::intrusive_mpsc_queue m_queue;
         event_system* m_prev = nullptr;
         uint64_t m_mask = 0;
+        std::atomic<bool> m_quit = false;
         static mutex g_lock;
         static event_system* g_list;
-        event_system::event_ptr m_quit;
+    protected:
+        static error_type g_error;
     };
 
     class event_queue final : public event_system
@@ -159,12 +170,11 @@ namespace icy
         {
             return make_stdlib_error(std::errc::function_not_supported);
         }
-        error_type signal(const event_data& event) noexcept override
+        error_type signal(const event_data* event) noexcept override
         {
             return m_cvar.wake();
         }
     private:
-        //mutex m_mutex;
         sync_handle m_cvar;
     };
     //error_type create_event_system(shared_ptr<event_queue>& queue, const uint64_t mask) noexcept;
@@ -193,11 +203,11 @@ namespace icy
         const clock_type::time_point time;
         const event_type type;
         const weak_ptr<event_system> source;
-        static event_data& event_quit() noexcept
+        /*static event_data& event_quit() noexcept
         {
             static thread_local event_data global;
             return global;
-        }
+        }*/
     private:
 #if ICY_EVENT_CHECK_TYPE
         static uint32_t next_type() noexcept
@@ -212,10 +222,6 @@ namespace icy
             return index;
         }
 #endif
-        event_data() : time(clock_type::now()), type(event_type::global_quit), m_ref(INT32_MAX)
-        {
-            
-        }
         event_data(const event_type type, weak_ptr<event_system>&& source) noexcept : time(clock_type::now()), type(type), source(std::move(source))
         {
             

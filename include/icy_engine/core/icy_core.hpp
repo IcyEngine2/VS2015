@@ -694,6 +694,10 @@ namespace icy
         error_type initialize() noexcept;
         error_type wake() noexcept;
         error_type wait(const duration_type timeout = max_timeout) noexcept;
+        void* handle() const noexcept
+        {
+            return m_ptr;
+        }
     private:
         void* m_ptr = nullptr;
     };
