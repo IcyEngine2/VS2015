@@ -488,6 +488,7 @@ namespace icy
         user,
         checked,
         checkable,
+        selected,
         row_header,
         col_header,
         _count,
@@ -507,38 +508,49 @@ namespace icy
         edit_line,
         edit_text,
         splitter,
+        view_tabs,
 
         _count,
     };
-    struct gui_widget_state_enum
+    enum class gui_widget_state : uint32_t
     {
-        enum : uint32_t
-        {
-            none            =   0x0000,
-            enabled         =   0x0001,
-            visible         =   0x0002,
+        none            =   0x0000,
+        enabled         =   0x0001,
+        visible         =   0x0002,
 
-            is_hovered      =   0x0004,
-            is_focused      =   0x0008,
-            is_pressed      =   0x0010,
+        is_hovered      =   0x0004,
+        is_focused      =   0x0008,
+        is_pressed      =   0x0010,
 
-            vscroll         =   0x0020,
-            vscroll_auto    =   0x0040,
-            vscroll_inv     =   0x0080,
-            hscroll         =   0x0100,
-            hscroll_auto    =   0x0200,
-            hscroll_inv     =   0x0400,
+        vscroll         =   0x0020,
+        vscroll_auto    =   0x0040,
+        vscroll_inv     =   0x0080,
+        hscroll         =   0x0100,
+        hscroll_auto    =   0x0200,
+        hscroll_inv     =   0x0400,
 
-            has_vscroll     =   0x0800,
-            has_hscroll     =   0x1000,
+        has_vscroll     =   0x0800,
+        has_hscroll     =   0x1000,
 
-            has_row_header  =   0x2000,
-            has_col_header  =   0x4000,
+        has_row_header  =   0x2000,
+        has_col_header  =   0x4000,
 
-            _default        =   enabled | visible | vscroll_auto | hscroll_auto,
-        };
+        _default        =   enabled | visible | vscroll_auto | hscroll_auto,
     };
-    using gui_widget_state = decltype(gui_widget_state_enum::none);
+    inline void gui_widget_state_set(gui_widget_state& lhs, const gui_widget_state rhs) noexcept
+    {
+        lhs = gui_widget_state(uint32_t(lhs) | uint32_t(rhs));
+    }
+    inline bool gui_widget_state_isset(const gui_widget_state lhs, const gui_widget_state rhs) noexcept
+    {
+        return !!(uint32_t(lhs) & uint32_t(rhs));
+    }
+    inline void gui_widget_state_unset(gui_widget_state& lhs, const gui_widget_state rhs) noexcept
+    {
+        lhs = gui_widget_state(uint32_t(lhs) & (~uint32_t(rhs)));
+    }
+
+
     enum class gui_widget_layout : uint32_t
     {
         none,
@@ -606,7 +618,7 @@ namespace icy
     struct gui_system;
     struct gui_data_bind
     {
-        virtual ~gui_data_bind() noexcept = 0
+        virtual ~gui_data_bind() noexcept
         {
 
         }

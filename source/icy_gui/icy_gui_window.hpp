@@ -24,8 +24,7 @@ struct am_Solver;
 enum class gui_widget_item_type : uint32_t
 {
     none,
-    root_text,
-    cell_text,
+    text,
     row_header,
     col_header,
     vsplitter,
@@ -41,16 +40,7 @@ enum class gui_widget_item_type : uint32_t
     hscroll_val,
     _scroll_end
 };
-struct gui_widget_item_state_enum
-{
-    enum : uint32_t
-    {
-        none        =   0x00,
-        visible     =   0x01,
-        enabled     =   0x02,
-    };
-};
-using gui_widget_item_state = decltype(gui_widget_item_state_enum::none);
+enum class gui_node_state : uint32_t;
 struct gui_widget_item
 {
     gui_widget_item(const gui_widget_item_type type = gui_widget_item_type::none) noexcept : type(type)
@@ -58,7 +48,7 @@ struct gui_widget_item
 
     }
     gui_widget_item_type type;
-    uint32_t state = 0u;
+    gui_node_state state = gui_node_state(0);
     icy::gui_variant value;
     icy::color color = icy::colors::white;
     gui_text text;
@@ -171,7 +161,7 @@ public:
     mutable icy::array<gui_widget_data*> children;
     icy::gui_widget_type type = icy::gui_widget_type::none;
     icy::gui_widget_layout layout = icy::gui_widget_layout::none;
-    uint32_t state = icy::gui_widget_state::_default;
+    icy::gui_widget_state state = icy::gui_widget_state::_default;
     icy::array<gui_widget_item> items;
     icy::map<gui_widget_attr, icy::gui_variant> attr;
 public:
@@ -300,7 +290,7 @@ public:
         return m_dpi;
     }
     icy::window_size size(const uint32_t widget) const noexcept;
-    icy::error_type send_data(gui_model_data_sys& model, const icy::gui_widget widget, const icy::gui_node node, const icy::gui_data_bind& func, bool& erase) const noexcept;
+    icy::error_type send_data(gui_model_data_sys& model, const icy::gui_widget widget, const icy::gui_node node, const icy::gui_data_bind& func, bool& erase) noexcept;
     icy::error_type recv_data(const gui_model_proxy_read& proxy, const gui_node_data& node, const icy::gui_widget widget, const icy::gui_data_bind& func, bool& erase) noexcept;
     icy::error_type timer(icy::timer::pair& pair) noexcept;
     icy::error_type reset(const gui_reset_reason reason) noexcept;

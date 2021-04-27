@@ -91,8 +91,8 @@ error_type main_func()
     
     shared_ptr<window> window;
     ICY_ERROR(window_system->create(window));
-    ICY_ERROR(window->show(true));
     ICY_ERROR(window->restyle(window_style::windowed));
+    ICY_ERROR(window->show(true));
 
     shared_ptr<display_system> display_system;
     ICY_ERROR(create_display_system(display_system, window, adapter));
@@ -126,10 +126,20 @@ error_type main_func()
 
     size_t index = 0;
     ICY_ERROR(append_nodes(*model, root1, ""_s, 0, index));
-    
+
+    gui_node tab_0;
+    gui_node tab_1;
+    gui_node tab_2;
+    model->insert(root0, 0, 0, tab_0);
+    model->insert(root0, 0, 0, tab_1);
+    model->insert(root0, 0, 0, tab_2);
+    model->modify(tab_0, gui_node_prop::data, "Tab #1"_s);
+    model->modify(tab_1, gui_node_prop::data, "Tab #2"_s);
+    model->modify(tab_2, gui_node_prop::data, "Tab #3"_s);
+
 
     array<gui_widget> list;
-    gui_window->find("class"_s, "edit_model"_s, list);
+    gui_window->find("class"_s, "tab_model"_s, list);
     for (auto&& x : list)
         gui_system->create_bind(make_unique<gui_default_bind>(), *model, *gui_window, root0, x);
 
@@ -149,11 +159,8 @@ error_type main_func()
     auto query = 0u;
     ICY_ERROR(gui_window->render(gui_widget(), query));
 
-    //timer timer_gui;
     timer timer_dsp;
-    //ICY_ERROR(timer_gui.initialize(SIZE_MAX, std::chrono::milliseconds(16)));
     ICY_ERROR(timer_dsp.initialize(SIZE_MAX, std::chrono::milliseconds(10)));
-    ICY_ERROR(gui_window->render(gui_widget(), query));
 
     shared_ptr<texture> overlay;
 

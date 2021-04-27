@@ -106,6 +106,10 @@ namespace icy
         friend database_cursor_read;
         friend database_cursor_write;
     public:
+		bool operator==(const database_dbi& rhs) const noexcept
+		{
+			return m_dbi == rhs.m_dbi;
+		}
         error_type initialize_open_any_key(const database_txn_read& txn, const string_view name) noexcept;
         error_type initialize_open_int_key(const database_txn_read& txn, const string_view name) noexcept;
         error_type initialize_create_any_key(const database_txn_write& txn, const string_view name) noexcept;

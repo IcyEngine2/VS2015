@@ -195,6 +195,14 @@ gui_widget_type gui_str_to_type(const string_view str) noexcept
 	case "splitter"_hash:
 	case "Splitter"_hash:
 		return gui_widget_type::splitter;
+
+	case "view_tabs"_hash:
+	case "viewTabs"_hash:
+	case "ViewTabs"_hash:
+	case "tabs_view"_hash:
+	case "tabsView"_hash:
+	case "TabsView"_hash:
+		return gui_widget_type::view_tabs;
 	}
 
 	return gui_widget_type::none;

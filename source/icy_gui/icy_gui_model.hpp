@@ -6,19 +6,30 @@
 #include <icy_engine/core/icy_thread.hpp>
 #include <icy_gui/icy_gui.hpp>
 
-struct gui_node_state_enum
+enum class gui_node_state : uint32_t
 {
-    enum : uint32_t
-    {
-        none        =   0x00,
-        enabled     =   0x01,
-        visible     =   0x02,
-        checked     =   0x04,
-        checkable   =   0x08,
-        _default    =   enabled | visible,
-    };
+    none        =   0x00,
+    enabled     =   0x01,
+    visible     =   0x02,
+    checked     =   0x04,
+    checkable   =   0x08,
+    selected    =   0x10,
+    editable    =   0x20,
+    _default    =   enabled | visible,
 };
-using gui_node_state = decltype(gui_node_state_enum::none);
+
+inline void gui_node_state_set(gui_node_state& lhs, const gui_node_state rhs) noexcept
+{
+    lhs = gui_node_state(uint32_t(lhs) | uint32_t(rhs));
+}
+inline void gui_node_state_unset(gui_node_state& lhs, const gui_node_state rhs) noexcept
+{
+    lhs = gui_node_state(uint32_t(lhs) & ~uint32_t(rhs));
+}
+inline bool gui_node_state_isset(const gui_node_state lhs, const gui_node_state rhs) noexcept
+{
+    return !!(uint32_t(lhs) & uint32_t(rhs));
+}
 
 struct gui_node_data
 {
@@ -39,7 +50,7 @@ public:
     const gui_node_data* parent;
     uint32_t index;
     mutable icy::map<gui_node_data*, child_type> children;
-    uint32_t state = gui_node_state::_default;
+    gui_node_state state = gui_node_state::_default;
     icy::gui_variant data;
     icy::gui_variant user;
     icy::gui_variant row_header;
@@ -129,7 +140,7 @@ public:
     }
     icy::error_type process(const gui_model_event_type& event, icy::set<uint32_t>& output) noexcept;
     icy::error_type send_data(gui_window_data_sys& window, const icy::gui_widget widget, const icy::gui_node node, const icy::gui_data_bind& func, bool& erase) const noexcept;
-    icy::error_type recv_data(const gui_widget_data& widget, const icy::gui_node node, const icy::gui_data_bind& func, bool& erase) noexcept;
+    icy::error_type recv_data(gui_window_data_sys& window, gui_widget_data& widget, const icy::gui_node node, const icy::gui_data_bind& func, bool& erase) noexcept;
     icy::gui_node parent(const icy::gui_node node) const noexcept;
     uint32_t row(const icy::gui_node node) const noexcept;
     uint32_t col(const icy::gui_node node) const noexcept;

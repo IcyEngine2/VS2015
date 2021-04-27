@@ -29,8 +29,9 @@ static error_type gui_widget_init(gui_widget_data& widget) noexcept
     {
         widget.items.clear();
         gui_widget_item new_item;
-        new_item.type = gui_widget_item_type::root_text;
-        new_item.state |= gui_widget_item_state::enabled;
+        new_item.type = gui_widget_item_type::text;
+        gui_node_state_set(new_item.state, gui_node_state::enabled);
+        gui_node_state_set(new_item.state, gui_node_state::editable);
         ICY_ERROR(widget.items.push_back(std::move(new_item)));
         break;
     }
@@ -191,7 +192,7 @@ error_type gui_widget_data::modify(map<uint32_t, unique_ptr<gui_widget_data>>& d
         {
             for (auto&& item : widget.items)
             {
-                if (item.type == gui_widget_item_type::root_text)
+                if (item.type == gui_widget_item_type::text && gui_node_state_isset(item.state, gui_node_state::editable))
                 {
                     item.value = std::move(copy_val);
                     item.text = gui_text();
@@ -267,14 +268,15 @@ error_type gui_widget_data::modify(map<uint32_t, unique_ptr<gui_widget_data>>& d
             state = gui_widget_state::hscroll_inv;
             break;
         }
-        if (state)
+        if (state != gui_widget_state::none)
         {
             bool value = false;
             if (args.val.get(value))
             {
-                it->value->state &= ~state;
                 if (value)
-                    it->value->state |= state;
+                    gui_widget_state_set(it->value->state, state);
+                else
+                    gui_widget_state_unset(it->value->state, state);
             }
         }
         else if (const auto attr = gui_str_to_attr(str_key))
@@ -676,8 +678,7 @@ error_type gui_window_data_sys::update() noexcept
           
             switch (item.type)
             {
-            case gui_widget_item_type::root_text:
-            case gui_widget_item_type::cell_text:
+            case gui_widget_item_type::text:
             {
                 if (!item.text && (
                     widget.type == gui_widget_type::edit_line || 
@@ -723,13 +724,13 @@ error_type gui_window_data_sys::update(gui_widget_data& widget, size_t& level) n
     auto wy = 0.0f;
     for (auto&& ptr : widget.children)
     {
-        if (!(ptr->state & gui_widget_state::visible))
-            continue;
-
         ptr->min_x = am_newvariable(m_solver);
         ptr->min_y = am_newvariable(m_solver);
         ptr->max_x = am_newvariable(m_solver);
         ptr->max_y = am_newvariable(m_solver);
+
+        if (!gui_widget_state_isset(ptr->state, gui_widget_state::visible))
+            continue;
 
         ptr->weight_x = ptr->size_x;
         if (const auto width = ptr->attr.try_find(gui_widget_attr::width))
@@ -762,18 +763,18 @@ error_type gui_window_data_sys::update(gui_widget_data& widget, size_t& level) n
     
     for (auto&& ptr : widget.children)
     {
-        if (!(ptr->state & gui_widget_state::visible))
+        if (!gui_widget_state_isset(ptr->state, gui_widget_state::visible))
             continue;
     
-        ptr->weight_x /= wx;
-        ptr->weight_y /= wy;
+        if (wx) ptr->weight_x /= wx;
+        if (wy) ptr->weight_y /= wy;
     }
 
     wx = 0;
     wy = 0;
     for (auto&& ptr : widget.children)
     {
-        if (!(ptr->state & gui_widget_state::visible))
+        if (!gui_widget_state_isset(ptr->state, gui_widget_state::visible))
             continue;
 
         const auto attr_wx = ptr->attr.try_find(gui_widget_attr::weight_x);
@@ -800,11 +801,11 @@ error_type gui_window_data_sys::update(gui_widget_data& widget, size_t& level) n
     }
     for (auto&& ptr : widget.children)
     {
-        if (!(ptr->state & gui_widget_state::visible))
+        if (!gui_widget_state_isset(ptr->state, gui_widget_state::visible))
             continue;
 
-        ptr->weight_x /= wx;
-        ptr->weight_y /= wy;
+        if (wx) ptr->weight_x /= wx;
+        if (wy) ptr->weight_y /= wy;
     }
 
     const auto size_x = am_value(widget.max_x) - am_value(widget.min_x);
@@ -815,14 +816,69 @@ error_type gui_window_data_sys::update(gui_widget_data& widget, size_t& level) n
     const auto usr_level = am_Num(level_k * 1e5);
     const auto sys_level = am_Num(level_k * 1e7);
 
-    if (widget.layout == gui_widget_layout::vbox)
+    if (widget.type == gui_widget_type::view_tabs)
+    {
+        auto item_index = 0u;
+        for (auto&& item : widget.items)
+        {
+            if (item.type != gui_widget_item_type::text)
+            {
+                break;
+            }
+            if (gui_node_state_isset(item.state, gui_node_state::selected))
+            {
+                item_index = uint32_t(std::distance(widget.items.data(), &item)) + 1;
+                break;
+            }
+        }
+        for (auto&& ptr : widget.children)
+            gui_widget_state_unset(ptr->state, gui_widget_state::visible);
+        
+        if (item_index && item_index <= widget.children.size())
+        {
+            auto ptr = widget.children[item_index - 1];
+            gui_widget_state_set(ptr->state, gui_widget_state::visible);
+
+
+            const auto min_x = 0
+                + am_value(widget.min_x)
+                + ptr->margins[0].size
+                + ptr->borders[0].size
+                + ptr->padding[0].size;
+
+            const auto min_y = 0
+                + am_value(widget.min_y)
+                + ptr->margins[1].size
+                + ptr->borders[1].size
+                + ptr->padding[1].size 
+                + widget.size_y;
+
+            const auto max_x = 0
+                + am_value(widget.max_x)
+                - ptr->margins[2].size
+                - ptr->borders[2].size
+                - ptr->padding[2].size;
+
+            const auto max_y = 0
+                + am_value(widget.max_y)
+                - ptr->margins[3].size
+                - ptr->borders[3].size
+                - ptr->padding[3].size;
+
+            am_suggest(ptr->min_x, min_x, sys_level);
+            am_suggest(ptr->min_y, min_y, sys_level);
+            am_suggest(ptr->max_x, max_x, sys_level);
+            am_suggest(ptr->max_y, max_y, sys_level);
+        }
+    }
+    else if (widget.layout == gui_widget_layout::vbox)
     {
         gui_widget_data* prev = nullptr;
 
         auto n = 0u;
         for (auto&& ptr : widget.children)
         {
-            if (!(ptr->state & gui_widget_state::visible))
+            if (!(gui_widget_state_isset(ptr->state, gui_widget_state::visible)))
                 continue;
 
             ++n;
@@ -861,7 +917,7 @@ error_type gui_window_data_sys::update(gui_widget_data& widget, size_t& level) n
                     {
                         gui_widget_item new_item;
                         new_item.type = gui_widget_item_type::vsplitter;
-                        new_item.state |= gui_widget_item_state::enabled;
+                        gui_node_state_set(new_item.state, gui_node_state::enabled);
                         new_item.value = std::make_pair(prev->index, ptr->index);
                         ICY_ERROR(widget.items.push_back(std::move(new_item)));
                     }
@@ -938,7 +994,7 @@ error_type gui_window_data_sys::update(gui_widget_data& widget, size_t& level) n
         auto n = 0u;
         for (auto&& ptr : widget.children)
         {
-            if (!(ptr->state & gui_widget_state::visible))
+            if (!(gui_widget_state_isset(ptr->state, gui_widget_state::visible)))
                 continue;
             ++n;
             {
@@ -977,7 +1033,7 @@ error_type gui_window_data_sys::update(gui_widget_data& widget, size_t& level) n
                     {
                         gui_widget_item new_item;
                         new_item.type = gui_widget_item_type::hsplitter;
-                        new_item.state |= gui_widget_item_state::enabled;
+                        gui_node_state_set(new_item.state, gui_node_state::enabled);
                         new_item.value = std::make_pair(prev->index, ptr->index);
                         ICY_ERROR(widget.items.push_back(std::move(new_item)));
                     }
@@ -1046,7 +1102,6 @@ error_type gui_window_data_sys::update(gui_widget_data& widget, size_t& level) n
             am_addconstant(max_x, min_width);
             am_add(max_x);
 
-
             prev = ptr;
         }
     }
@@ -1054,7 +1109,7 @@ error_type gui_window_data_sys::update(gui_widget_data& widget, size_t& level) n
 
     for (auto&& child : widget.children)
     {
-        if (!(child->state & gui_widget_state::visible))
+        if (!gui_widget_state_isset(child->state, gui_widget_state::visible))
             continue;
 
         render_widget rwidget;
@@ -1077,18 +1132,17 @@ error_type gui_window_data_sys::update(gui_widget_data& widget, size_t& level) n
 
         const auto calc_hscroll = [&]
         {
-            if (child->state & gui_widget_state::hscroll)
+            if (gui_widget_state_isset(child->state, gui_widget_state::hscroll))
             {
                 hscroll = 1;
             }
-            else if (child->state & gui_widget_state::hscroll_auto)
+            else if (gui_widget_state_isset(child->state, gui_widget_state::hscroll_auto))
             {
                 for (auto&& item : child->items)
                 {
                     switch (item.type)
                     {
-                    case gui_widget_item_type::root_text:
-                    case gui_widget_item_type::cell_text:
+                    case gui_widget_item_type::text:
                     case gui_widget_item_type::col_header:
                     {
                         if (item.x + item.w > sx)
@@ -1103,18 +1157,17 @@ error_type gui_window_data_sys::update(gui_widget_data& widget, size_t& level) n
         };
         const auto calc_vscroll = [&]
         {
-            if (child->state & gui_widget_state::vscroll)
+            if (gui_widget_state_isset(child->state, gui_widget_state::vscroll))
             {
                 vscroll = 1;
             }
-            else if (child->state & gui_widget_state::vscroll_auto)
+            else if (gui_widget_state_isset(child->state, gui_widget_state::vscroll_auto))
             {
                 for (auto&& item : child->items)
                 {
                     switch (item.type)
                     {
-                    case gui_widget_item_type::root_text:
-                    case gui_widget_item_type::cell_text:
+                    case gui_widget_item_type::text:
                     case gui_widget_item_type::row_header:
                     {
                         if (item.y + item.h > sy)
@@ -1137,8 +1190,8 @@ error_type gui_window_data_sys::update(gui_widget_data& widget, size_t& level) n
         if (!hscroll && vscroll) calc_hscroll();
         if (!vscroll && hscroll) calc_vscroll();
 
-        if (child->state & gui_widget_state::hscroll_inv) hscroll *= -1;
-        if (child->state & gui_widget_state::vscroll_inv) vscroll *= -1;
+        if (gui_widget_state_isset(child->state, gui_widget_state::hscroll_inv)) hscroll *= -1;
+        if (gui_widget_state_isset(child->state, gui_widget_state::vscroll_inv)) vscroll *= -1;
 
         sx = max_x - min_x;
         sy = max_y - min_y;
@@ -1167,13 +1220,12 @@ error_type gui_window_data_sys::update(gui_widget_data& widget, size_t& level) n
             auto& item = child->items[k - 1];
             switch (item.type)
             {
-            case gui_widget_item_type::root_text:
-            case gui_widget_item_type::cell_text:
+            case gui_widget_item_type::text:
             {
                 auto max_item_x = item.x + item.w;
                 auto max_item_y = item.y + item.h;
-                if (child->state & gui_widget_state::has_row_header) max_item_x += child->row_header;
-                if (child->state & gui_widget_state::has_col_header) max_item_y += child->col_header;
+                if (gui_widget_state_isset(child->state, gui_widget_state::has_row_header)) max_item_x += child->row_header;
+                if (gui_widget_state_isset(child->state, gui_widget_state::has_col_header)) max_item_y += child->col_header;
                 child->scroll_x.max = std::max(child->scroll_x.max, max_item_x);
                 child->scroll_y.max = std::max(child->scroll_y.max, max_item_y);
                 break;
@@ -1210,9 +1262,8 @@ error_type gui_window_data_sys::update(gui_widget_data& widget, size_t& level) n
                         ICY_ERROR(child->items.push_back(pair.second));
                         pair.first = uint32_t(child->items.size());
                     }
-                    child->items[pair.first - 1].state |= 
-                        gui_widget_item_state::visible |
-                        gui_widget_item_state::enabled;
+                    gui_node_state_set(child->items[pair.first - 1].state, gui_node_state::visible);
+                    gui_node_state_set(child->items[pair.first - 1].state, gui_node_state::enabled);
                 }
                 auto& bk = child->items[items[0].first - 1];
                 auto& max = child->items[items[1].first - 1];
@@ -1302,7 +1353,8 @@ error_type gui_window_data_sys::update(gui_widget_data& widget, size_t& level) n
             {
                 for (auto&& pair : items)
                 {
-                    if (pair.first) child->items[pair.first - 1].state &= ~gui_widget_item_state::visible;
+                    if (pair.first) 
+                        gui_node_state_unset(child->items[pair.first - 1].state, gui_node_state::visible);
                 }
             }
             return error_type();
@@ -1310,14 +1362,19 @@ error_type gui_window_data_sys::update(gui_widget_data& widget, size_t& level) n
         ICY_ERROR(func(1));
         ICY_ERROR(func(0));
 
-        child->state &= ~gui_widget_state::has_hscroll;
-        child->state &= ~gui_widget_state::has_vscroll;
-        if (hscroll) child->state |= gui_widget_state::has_hscroll;
-        if (vscroll) child->state |= gui_widget_state::has_vscroll;
+        if (hscroll) 
+            gui_widget_state_set(child->state, gui_widget_state::has_hscroll);
+        else
+            gui_widget_state_unset(child->state, gui_widget_state::has_hscroll);
+        
+        if (vscroll) 
+            gui_widget_state_set(child->state, gui_widget_state::has_vscroll);
+        else
+            gui_widget_state_unset(child->state, gui_widget_state::has_vscroll);
 
         for (auto&& item : child->items)
         {
-            item.state &= ~gui_widget_item_state::visible;
+            gui_node_state_unset(item.state, gui_node_state::visible);
 
             auto item_x = item.x;
             auto item_y = item.y;
@@ -1325,30 +1382,29 @@ error_type gui_window_data_sys::update(gui_widget_data& widget, size_t& level) n
             auto max_x = sx;
             auto max_y = sy;
             
-            if (item.type == gui_widget_item_type::root_text ||
-                item.type == gui_widget_item_type::cell_text)
+            if (item.type == gui_widget_item_type::text)
             {
-                if (child->state & gui_widget_state::has_hscroll) 
+                if (gui_widget_state_isset(child->state, gui_widget_state::has_hscroll))
                     item_x -= child->scroll_x.val;
-                if (child->state & gui_widget_state::has_vscroll)
+                if (gui_widget_state_isset(child->state, gui_widget_state::has_vscroll))
                     item_y -= child->scroll_y.val;
-                if (child->state & gui_widget_state::has_row_header)
+                if (gui_widget_state_isset(child->state, gui_widget_state::has_row_header))
                     item_x += child->row_header;
-                if (child->state & gui_widget_state::has_col_header)
+                if (gui_widget_state_isset(child->state, gui_widget_state::has_col_header))
                     item_y += child->col_header;
             }
             else if (item.type == gui_widget_item_type::row_header)
             {
-                if (child->state & gui_widget_state::has_vscroll)
+                if (gui_widget_state_isset(child->state, gui_widget_state::has_vscroll))
                     item_y -= child->scroll_y.val;
-                if (child->state & gui_widget_state::has_col_header)
+                if (gui_widget_state_isset(child->state, gui_widget_state::has_col_header))
                     item_y += child->col_header;
             }
             else if (item.type == gui_widget_item_type::col_header)
             {
-                if (child->state & gui_widget_state::has_hscroll)
+                if (gui_widget_state_isset(child->state, gui_widget_state::has_hscroll))
                     item_x -= child->scroll_x.val;
-                if (child->state & gui_widget_state::has_row_header)
+                if (gui_widget_state_isset(child->state, gui_widget_state::has_row_header))
                     item_x += child->row_header;
             }
             else if (
@@ -1401,7 +1457,7 @@ error_type gui_window_data_sys::update(gui_widget_data& widget, size_t& level) n
             if (item_max_y < 0.0f || item_max_x < 0.0f || item_x >= max_x || item_y >= max_y)
                 continue;
 
-            item.state |= gui_widget_item_state::visible;
+            gui_node_state_set(item.state, gui_node_state::visible);
 
             render_item ritem;
             ritem.x = item_x + am_value(child->min_x);
@@ -1503,7 +1559,7 @@ error_type gui_window_data_sys::input_mouse_move(const int32_t px, const int32_t
     hover_type new_hover;
     for (auto it = m_render_list.rbegin(); it != m_render_list.rend(); ++it)
     {
-        if (!(it->widget->state & gui_widget_state::enabled))
+        if (!(gui_widget_state_isset(it->widget->state, gui_widget_state::enabled)))
             continue;
 
         const auto& widget = *it->widget;
@@ -1523,7 +1579,7 @@ error_type gui_window_data_sys::input_mouse_move(const int32_t px, const int32_t
         const auto& items = it->items;
         for (auto jt = it->items.rbegin(); jt != it->items.rend(); ++jt)
         {
-            if (!(jt->item->state & gui_widget_item_state::enabled))
+            if (!(gui_node_state_isset(jt->item->state, gui_node_state::enabled)))
                 continue;
 
             const auto item_min_x = lround(jt->x);
@@ -1540,12 +1596,12 @@ error_type gui_window_data_sys::input_mouse_move(const int32_t px, const int32_t
         if (new_hover.widget != m_hover.widget || new_hover.item != m_hover.item)
         {
             auto type = window_cursor::type::none;
-            if (widget.state & gui_widget_state::enabled)
+            if (gui_widget_state_isset(widget.state, gui_widget_state::enabled))
             {
                 if (new_hover.item)
                 {
                     const auto& item = widget.items[new_hover.item - 1];
-                    if (item.state & gui_widget_item_state::enabled)
+                    if (gui_node_state_isset(item.state, gui_node_state::enabled))
                     {
                         switch (item.type)
                         {
@@ -1557,11 +1613,13 @@ error_type gui_window_data_sys::input_mouse_move(const int32_t px, const int32_t
                             type = window_cursor::type::size_x;
                             break;
                         
-                        case gui_widget_item_type::cell_text:
-                        case gui_widget_item_type::root_text:
-                            type = window_cursor::type::ibeam;
+                        case gui_widget_item_type::text:
+                        {
+                            if (gui_node_state_isset(item.state, gui_node_state::editable))
+                                type = window_cursor::type::ibeam;
                             break;
-                        
+                        }
+
                         case gui_widget_item_type::hscroll_bk:
                         case gui_widget_item_type::hscroll_max:
                         case gui_widget_item_type::hscroll_min:
@@ -1591,10 +1649,10 @@ error_type gui_window_data_sys::input_mouse_move(const int32_t px, const int32_t
                 if (jt == m_data.end())
                     return make_stdlib_error(std::errc::invalid_argument);
                 
-                if (jt->value->state & gui_widget_state::enabled)
+                if (gui_widget_state_isset(jt->value->state, gui_widget_state::enabled))
                 {
                     const auto& item = jt->value->items[m_hover.item - 1];
-                    if (item.state & gui_widget_item_state::enabled)
+                    if (gui_node_state_isset(item.state, gui_node_state::enabled))
                     {
                         switch (item.type)
                         {
@@ -1711,6 +1769,11 @@ error_type gui_window_data_sys::input_mouse_release(const key key, const int32_t
     {
         if (m_press)
         {
+            if (auto hwnd = shared_ptr<icy::window>(m_window))
+            {
+                ICY_ERROR(hwnd->cursor(1, nullptr));
+            }
+
             auto it = m_data.find(m_press.widget);
             if (it == m_data.end())
             {
@@ -1761,10 +1824,6 @@ error_type gui_window_data_sys::input_mouse_release(const key key, const int32_t
                             ICY_ERROR(reset(gui_reset_reason::update_render_list));
                         }
                     }
-                    if (auto hwnd = shared_ptr<icy::window>(m_window))
-                    {
-                        ICY_ERROR(hwnd->cursor(1, nullptr));
-                    }
                     break;
                 }
                 case gui_widget_item_type::hsplitter:
@@ -1792,10 +1851,6 @@ error_type gui_window_data_sys::input_mouse_release(const key key, const int32_t
 
                             ICY_ERROR(reset(gui_reset_reason::update_render_list));
                         }
-                    }
-                    if (auto hwnd = shared_ptr<icy::window>(m_window))
-                    {
-                        ICY_ERROR(hwnd->cursor(1, nullptr));
                     }
                     break;
                 }
@@ -1855,7 +1910,7 @@ error_type gui_window_data_sys::input_mouse_press(const key key, const int32_t p
             {
             case gui_widget_item_type::vsplitter:
             {
-                m_splitter = py;
+                m_splitter = float(py);
                 if (auto hwnd = shared_ptr<icy::window>(m_window))
                 {
                     ICY_ERROR(hwnd->cursor(1, m_system->cursor(window_cursor::type::size_y)));
@@ -1864,7 +1919,7 @@ error_type gui_window_data_sys::input_mouse_press(const key key, const int32_t p
             }
             case gui_widget_item_type::hsplitter:
             {
-                m_splitter = px;
+                m_splitter = float(px);
                 if (auto hwnd = shared_ptr<icy::window>(m_window))
                 {
                     ICY_ERROR(hwnd->cursor(1, m_system->cursor(window_cursor::type::size_x)));
@@ -1915,19 +1970,24 @@ error_type gui_window_data_sys::input_mouse_press(const key key, const int32_t p
         if (widget.type == gui_widget_type::edit_line ||
             widget.type == gui_widget_type::edit_text)
         {
-            if (widget.items.empty() || widget.items[0].type != gui_widget_item_type::root_text)
-                return error_type();
-
-            auto& item = widget.items[0];
-            if (!item.text)
+            gui_widget_item* item = nullptr;
+            for (auto&& ptr : widget.items)
+            {
+                if (ptr.type == gui_widget_item_type::text && gui_node_state_isset(ptr.state, gui_node_state::editable))
+                {
+                    item = &ptr;
+                    break;
+                }
+            }
+            if (!item)
                 return error_type();
 
             DWRITE_HIT_TEST_METRICS metrics;
             auto trailing = FALSE;
             auto inside = FALSE;
-            ICY_COM_ERROR(item.text->HitTestPoint(float(m_press.dx), float(m_press.dy), &trailing, &inside, &metrics));
+            ICY_COM_ERROR(item->text->HitTestPoint(float(m_press.dx), float(m_press.dy), &trailing, &inside, &metrics));
             string str;
-            ICY_ERROR(to_string(item.value, str));
+            ICY_ERROR(to_string(item->value, str));
             auto pos = 0u;
             auto posw = 0u;
             for (auto it = str.begin(); it != str.end() && posw < metrics.textPosition; ++it, ++pos)
@@ -1940,8 +2000,23 @@ error_type gui_window_data_sys::input_mouse_press(const key key, const int32_t p
             }
             m_focus.text_select_beg = m_focus.text_select_end = pos;
             m_focus.text_trail_beg = m_focus.text_trail_end = !!trailing;
-            m_focus.item = 1;
+            m_focus.item = uint32_t(std::distance(widget.items.data(), item)) + 1;
             return reset(gui_reset_reason::update_text_caret);
+        }
+        else if (widget.type == gui_widget_type::view_tabs)
+        {
+            if (m_press.item)
+            {
+                auto& item = widget.items[m_press.item - 1];
+                if (item.type == gui_widget_item_type::text && gui_node_state_isset(item.state, gui_node_state::enabled))
+                {
+                    for (auto&& other_item : widget.items)
+                        gui_node_state_unset(other_item.state, gui_node_state::selected);
+                    gui_node_state_set(item.state, gui_node_state::selected); 
+                    ICY_ERROR(m_system->post_change(*this, { widget.index }));
+                    return reset(gui_reset_reason::update_render_list);
+                }
+            }
         }
     }
     return error_type();
@@ -1974,8 +2049,7 @@ error_type gui_window_data_sys::input_text(const string_view text) noexcept
 error_type gui_window_data_sys::solve_item(gui_widget_data& widget, gui_widget_item& item, const gui_font& font) noexcept
 {
     if (false
-        || item.type == gui_widget_item_type::root_text
-        || item.type == gui_widget_item_type::cell_text
+        || item.type == gui_widget_item_type::text
         || item.type == gui_widget_item_type::row_header
         || item.type == gui_widget_item_type::col_header)
     {
@@ -1996,7 +2070,7 @@ error_type gui_window_data_sys::solve_item(gui_widget_data& widget, gui_widget_i
         item.w = metrics.widthIncludingTrailingWhitespace;
         item.h = metrics.height;
 
-        if (item.type == gui_widget_item_type::root_text)
+        if (item.type == gui_widget_item_type::text)
         {
             if (widget.scroll_y.step == 0) widget.scroll_y.step = metrics.height / metrics.lineCount;
             if (widget.scroll_x.step == 0) widget.scroll_x.step = widget.scroll_y.step;
@@ -2017,7 +2091,7 @@ error_type gui_window_data_sys::make_view(const gui_model_proxy_read& proxy, con
         if (child->value.col != 0)
             continue;
 
-        if (!(child->key->state & gui_node_state::visible))
+        if (!(gui_node_state_isset(child->key->state, gui_node_state::visible)))
             continue;
 
         if (!func.filter(proxy, gui_node{ child->key->index }))
@@ -2041,7 +2115,7 @@ error_type gui_window_data_sys::make_view(const gui_model_proxy_read& proxy, con
     for (auto&& child : nodes)
     {
         gui_widget_item new_item;
-        new_item.type = gui_widget_item_type::root_text;
+        new_item.type = gui_widget_item_type::text;
         new_item.value = child->data;
         ICY_ERROR(solve_item(widget, new_item, m_font));
         if (new_item.text)
@@ -2049,23 +2123,30 @@ error_type gui_window_data_sys::make_view(const gui_model_proxy_read& proxy, con
             new_item.x = widget.size_x;
             new_item.y = widget.size_y;
             new_item.node = child->index;
-            if (child->state & gui_widget_state::enabled)
-                new_item.state |= gui_widget_item_state::enabled;
-            
+            new_item.state = child->state;
+
             ICY_ERROR(widget.items.push_back(std::move(new_item)));
-            widget.size_y += new_item.h;
-            if (widget.type == gui_widget_type::view_tree)
+            if (widget.type == gui_widget_type::view_tabs)
             {
-                widget.size_x += offset;
-                ICY_ERROR(make_view(proxy, *child, func, widget, level + 1));
-                widget.size_x -= offset;
+                widget.size_x += new_item.w;                
+            }
+            else
+            {
+                widget.size_y += new_item.h;
+                if (widget.type == gui_widget_type::view_tree)
+                {
+                    widget.size_x += offset;
+                    ICY_ERROR(make_view(proxy, *child, func, widget, level + 1));
+                    widget.size_x -= offset;
+                }
             }
         }
     }
 
     if (level == 0 && (widget.type == gui_widget_type::view_tree || widget.type == gui_widget_type::view_table))
     {
-        widget.state &= ~(gui_widget_state::has_row_header | gui_widget_state::has_col_header);
+        gui_widget_state_unset(widget.state, gui_widget_state::has_row_header);
+        gui_widget_state_unset(widget.state, gui_widget_state::has_col_header);
         widget.row_header = 0;
         widget.col_header = 0;
 
@@ -2085,11 +2166,11 @@ error_type gui_window_data_sys::make_view(const gui_model_proxy_read& proxy, con
                 gui_widget_item new_item;
                 new_item.type = gui_widget_item_type::row_header;
                 new_item.value = node->row_header;
-                new_item.state |= gui_widget_item_state::enabled;
+                new_item.state = gui_node_state::enabled;
                 ICY_ERROR(solve_item(widget, new_item, m_font));
                 if (new_item.text)
                 {
-                    widget.state |= gui_widget_state::has_row_header;
+                    gui_widget_state_set(widget.state, gui_widget_state::has_row_header);
                     widget.row_header = std::max(widget.row_header, new_item.w);
                     new_item.y = item.y;
                     new_item.node = item.node;
@@ -2103,11 +2184,11 @@ error_type gui_window_data_sys::make_view(const gui_model_proxy_read& proxy, con
                     gui_widget_item new_item;
                     new_item.type = gui_widget_item_type::col_header;
                     new_item.value = node.col_header;
-                    new_item.state |= gui_widget_item_state::enabled;
+                    gui_node_state_set(new_item.state, gui_node_state::enabled);
                     ICY_ERROR(solve_item(widget, new_item, m_font));
                     if (new_item.text)
                     {
-                        widget.state |= gui_widget_state::has_col_header;
+                        gui_widget_state_set(widget.state, gui_widget_state::has_col_header);
                         widget.col_header = std::max(widget.col_header, new_item.h);
                         new_item.node = node.index;
                         ICY_ERROR(col_headers.insert(col, std::move(new_item)));
@@ -2125,14 +2206,13 @@ error_type gui_window_data_sys::make_view(const gui_model_proxy_read& proxy, con
                     if (pair.value.row == row && pair.value.col != 0)
                     {
                         ICY_ERROR(add_col_header(pair.value.col, *pair.key));
-                        if (!(pair.key->state & gui_widget_state::visible))
+                        if (!gui_node_state_isset(pair.key->state, gui_node_state::visible))
                             continue;
                         
                         gui_widget_item new_item;
-                        new_item.type = gui_widget_item_type::cell_text;
+                        new_item.type = gui_widget_item_type::text;
                         new_item.value = pair.key->data;
-                        if (pair.key->state & gui_node_state::enabled)
-                            new_item.state |= gui_widget_item_state::enabled;
+                        new_item.state = pair.key->state;
                         ICY_ERROR(solve_item(widget, new_item, m_font));
                         if (new_item.text)
                         {
@@ -2207,7 +2287,7 @@ error_type gui_window_data_sys::exec_action(gui_widget_data& widget, gui_text_ac
     ICY_ASSERT(action.item < widget.items.size(), "CORRUPTED ACTION");
 
     auto& item = widget.items[action.item];
-    ICY_ASSERT(item.type == gui_widget_item_type::root_text || item.type == gui_widget_item_type::cell_text, "CORRUPTED ACTION ITEM");
+    ICY_ASSERT(item.type == gui_widget_item_type::text, "CORRUPTED ACTION ITEM");
 
     string str;
     ICY_ERROR(to_string(item.value, str));
@@ -2418,7 +2498,7 @@ window_size gui_window_data_sys::size(const uint32_t widget) const noexcept
 	
 	return window_size();
 }    
-error_type gui_window_data_sys::send_data(gui_model_data_sys& model, const gui_widget widget, const gui_node node, const gui_data_bind& func, bool& erase) const noexcept 
+error_type gui_window_data_sys::send_data(gui_model_data_sys& model, const gui_widget widget, const gui_node node, const gui_data_bind& func, bool& erase) noexcept 
 {
     auto it = m_data.find(widget.index);
     if (it == m_data.end())
@@ -2426,7 +2506,7 @@ error_type gui_window_data_sys::send_data(gui_model_data_sys& model, const gui_w
         erase = true;
         return error_type();
     }
-    ICY_ERROR(model.recv_data(*it->value, node, func, erase));
+    ICY_ERROR(model.recv_data(*this, *it->value, node, func, erase));
     return error_type();
 }
 error_type gui_window_data_sys::recv_data(const gui_model_proxy_read& proxy, const gui_node_data& node, const gui_widget index, const gui_data_bind& func, bool& erase) noexcept
@@ -2444,6 +2524,16 @@ error_type gui_window_data_sys::recv_data(const gui_model_proxy_read& proxy, con
     if (m_focus && m_focus.widget == index.index)
         m_focus = focus_type();
 
+    const auto reset_items = [&]
+    {
+        if (m_hover.widget == it->key) m_hover.item = 0;
+        if (m_press.widget == it->key) m_press.item = 0;
+        if (m_focus.widget == it->key) m_focus.item = 0;
+        widget.items.clear();
+        widget.size_x = 0;
+        widget.size_y = 0;
+    };
+
     switch (widget.type)
     {
     case gui_widget_type::edit_line:
@@ -2451,10 +2541,10 @@ error_type gui_window_data_sys::recv_data(const gui_model_proxy_read& proxy, con
     {        
         for (auto&& item : widget.items)
         {
-            if (item.type == gui_widget_item_type::root_text)
+            if (item.type == gui_widget_item_type::text)
             {
                 item.text = gui_text();
-                if ((node.state & gui_node_state::visible) && func.filter(proxy, gui_node{ node.index }))
+                if (gui_node_state_isset(node.state, gui_node_state::visible) && func.filter(proxy, gui_node{ node.index }))
                 {
                     item.value = node.data;
                 }
@@ -2470,20 +2560,16 @@ error_type gui_window_data_sys::recv_data(const gui_model_proxy_read& proxy, con
     case gui_widget_type::view_list:
     case gui_widget_type::view_table:
     case gui_widget_type::view_tree:
+    case gui_widget_type::view_tabs:
     {
-        if (m_hover.widget == it->key) m_hover.item = 0;
-        if (m_press.widget == it->key) m_press.item = 0;
-        if (m_focus.widget == it->key) m_focus.item = 0;
-
-        widget.items.clear();
-        widget.size_x = 0;
-        widget.size_y = 0;
-        if ((node.state & gui_node_state::visible) && func.filter(proxy, gui_node{ node.index }))
+        reset_items();
+        if (gui_node_state_isset(node.state, gui_node_state::visible) && func.filter(proxy, gui_node{ node.index }))
         {
             ICY_ERROR(make_view(proxy, node, func, widget));
         }
         break;
     }
+
     default:
         return error_type();
     }
@@ -2673,42 +2759,41 @@ error_type gui_window_data_sys::render(gui_texture& texture) noexcept
             to_value(*ptr, bkcolor);
 
         ICY_ERROR(texture.fill_rect({ x0, y0, x1, y1 }, bkcolor));
-        const auto clip_state = gui_widget_state::none
-            | gui_widget_state::has_hscroll
-            | gui_widget_state::has_vscroll
-            | gui_widget_state::has_row_header
-            | gui_widget_state::has_col_header;
 
-        auto clip = widget->state & clip_state;
-        if (clip)
+        auto clip = false;
+        if (false
+            || gui_widget_state_isset(widget->state, gui_widget_state::has_hscroll)
+            || gui_widget_state_isset(widget->state, gui_widget_state::has_vscroll)
+            || gui_widget_state_isset(widget->state, gui_widget_state::has_row_header)
+            || gui_widget_state_isset(widget->state, gui_widget_state::has_col_header))
         {
             auto clip_rect = gui_texture::rect_type{ x0, y0, x1, y1 };
             
-            if (widget->state & gui_widget_state::has_vscroll) 
+            if (gui_widget_state_isset(widget->state, gui_widget_state::has_vscroll))
                 clip_rect.max_x -= m_system->vscroll().size;
             
-            if (widget->state & gui_widget_state::has_hscroll) 
+            if (gui_widget_state_isset(widget->state, gui_widget_state::has_hscroll))
                 clip_rect.max_y -= m_system->hscroll().size;
             
-            if (widget->state & gui_widget_state::has_row_header)
+            if (gui_widget_state_isset(widget->state, gui_widget_state::has_row_header))
                 clip_rect.min_x += widget->row_header;
 
-            if (widget->state & gui_widget_state::has_col_header)
+            if (gui_widget_state_isset(widget->state, gui_widget_state::has_col_header))
                 clip_rect.min_y += widget->col_header;
 
             texture.push_clip(clip_rect);
+            clip = true;
         }
         auto it = pair.items.begin();
         for (; it != pair.items.end(); ++it)
         {
-            if (it->item->type == gui_widget_item_type::root_text ||
-                it->item->type == gui_widget_item_type::cell_text)
+            if (it->item->type == gui_widget_item_type::text)
             {
                 const auto item_index = uint32_t(std::distance(widget->items.data(), it->item));
                 ICY_ERROR(texture.draw_text(it->x, it->y, it->item->color, it->item->text.value));
                 if (m_focus && m_focus.widget == widget->index && m_focus.item == item_index + 1 && it->item->text)
                 {
-                    if (m_caret_visible)
+                    if (m_caret_visible && gui_node_state_isset(it->item->state, gui_node_state::editable))
                     {
                         DWRITE_HIT_TEST_METRICS metrics;
                         auto px = 0.0f;
@@ -2747,13 +2832,13 @@ error_type gui_window_data_sys::render(gui_texture& texture) noexcept
             clip = false;
         }
 
-        if (widget->state & gui_widget_state::has_row_header)
+        if (gui_widget_state_isset(widget->state, gui_widget_state::has_row_header))
         {
             auto clip_rect = gui_texture::rect_type{ x0, y0, x0 + widget->row_header, y1 };
-            if (widget->state & gui_widget_state::has_col_header)
+            if (gui_widget_state_isset(widget->state, gui_widget_state::has_col_header))
                 clip_rect.min_y += widget->col_header;
 
-            if (widget->state & gui_widget_state::has_hscroll)
+            if (gui_widget_state_isset(widget->state, gui_widget_state::has_hscroll))
                 clip_rect.max_y -= m_system->hscroll().size;
 
             texture.push_clip(clip_rect);
@@ -2770,13 +2855,13 @@ error_type gui_window_data_sys::render(gui_texture& texture) noexcept
             }
             texture.pop_clip();
         }
-        if (widget->state & gui_widget_state::has_col_header)
+        if (gui_widget_state_isset(widget->state, gui_widget_state::has_col_header))
         {
             auto clip_rect = gui_texture::rect_type{ x0, y0, x1, y0 + widget->col_header };
-            if (widget->state & gui_widget_state::has_row_header)
+            if (gui_widget_state_isset(widget->state, gui_widget_state::has_row_header))
                 clip_rect.min_x += widget->row_header;
 
-            if (widget->state & gui_widget_state::has_vscroll)
+            if (gui_widget_state_isset(widget->state, gui_widget_state::has_vscroll))
                 clip_rect.max_x -= m_system->vscroll().size;
 
             texture.push_clip(clip_rect);
@@ -2811,7 +2896,7 @@ error_type gui_window_data_sys::render(gui_texture& texture) noexcept
                 }
             }
         }
-        if (widget->state & gui_widget_state::has_vscroll)
+        if (gui_widget_state_isset(widget->state, gui_widget_state::has_vscroll))
         {
             for (; it != pair.items.end(); ++it)
             {
@@ -2833,7 +2918,7 @@ error_type gui_window_data_sys::render(gui_texture& texture) noexcept
                 }
             }
         }
-        if (widget->state & gui_widget_state::has_hscroll)
+        if (gui_widget_state_isset(widget->state, gui_widget_state::has_hscroll))
         {
             for (; it != pair.items.end(); ++it)
             {

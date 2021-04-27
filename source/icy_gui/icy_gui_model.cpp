@@ -57,6 +57,10 @@ error_type gui_node_data::modify(const gui_node_prop prop, const gui_variant& va
     case gui_node_prop::checked:
         state_flag = gui_node_state::checked;
         break;
+
+    case gui_node_prop::selected:
+        state_flag = gui_node_state::selected;
+        break;
     
     case gui_node_prop::user:
         user = value;
@@ -74,19 +78,22 @@ error_type gui_node_data::modify(const gui_node_prop prop, const gui_variant& va
         break;
     }
 
-    if (state_flag)
+    if (state_flag != gui_node_state::none)
     {
         auto flag = false;
         if (to_value(value, flag))
         {
             if (state_flag == gui_node_state::checked)
-                state |= gui_node_state::checkable;
-            state &= ~state_flag;
-            if (flag) state |= state_flag;
+                gui_node_state_set(state, gui_node_state::checkable);
+
+            if (flag) 
+                gui_node_state_set(state, state_flag);
+            else
+                gui_node_state_unset(state, state_flag);
         }
         else if (state_flag == gui_node_state::checked && value.type() == 0)
         {
-            state &= ~gui_node_state::checkable;
+            gui_node_state_unset(state, gui_node_state::checkable);
         }
     }
 
@@ -279,13 +286,15 @@ gui_variant gui_model_data_usr::process(const gui_model_query_type& query) const
             switch (query.prop)
             {
             case gui_node_prop::visible:
-                return (query.node->state & gui_node_state::visible) != 0;
+                return gui_node_state_isset(query.node->state, gui_node_state::visible);
             case gui_node_prop::enabled:
-                return (query.node->state & gui_node_state::enabled) != 0;
+                return gui_node_state_isset(query.node->state, gui_node_state::enabled);
             case gui_node_prop::checked:
-                return (query.node->state & gui_node_state::checked) != 0;
+                return gui_node_state_isset(query.node->state, gui_node_state::checked);
             case gui_node_prop::checkable:
-                return (query.node->state & gui_node_state::checkable) != 0;
+                return gui_node_state_isset(query.node->state, gui_node_state::selected);
+            case gui_node_prop::selected:
+                return gui_node_state_isset(query.node->state, gui_node_state::checkable);
             case gui_node_prop::data:
                 return query.node->data;
             case gui_node_prop::user:
@@ -370,7 +379,7 @@ error_type gui_model_data_sys::send_data(gui_window_data_sys& window, const gui_
     ICY_ERROR(window.recv_data(gui_model_proxy_read(*this), *it->value, widget, func, erase));
     return error_type();
 }
-error_type gui_model_data_sys::recv_data(const gui_widget_data& widget, const gui_node index, const gui_data_bind& func, bool& erase) noexcept
+error_type gui_model_data_sys::recv_data(gui_window_data_sys& window, gui_widget_data& widget, const gui_node index, const gui_data_bind& func, bool& erase) noexcept
 {
     auto it = m_data.find(index.index);
     if (it == m_data.end())
@@ -390,17 +399,70 @@ error_type gui_model_data_sys::recv_data(const gui_widget_data& widget, const gu
         node.data = gui_variant();
         for (auto&& item : widget.items)
         {
-            if (item.type == gui_widget_item_type::root_text)
+            if (item.type == gui_widget_item_type::text && gui_node_state_isset(item.state, gui_node_state::editable))
             {
                 auto decline = false;
                 ICY_ERROR(func.notify(proxy_read, { node.index }, gui_node_prop::data, item.value, decline));
                 if (!decline)
+                {
                     node.data = item.value;
+                }
+                else
+                {
+                    item.value = node.data;
+                    ICY_ERROR(window.reset(gui_reset_reason::update_render_list));
+                }
                 break;
             }
         }
         break;
     }
+    case gui_widget_type::view_tabs:
+    {
+        for (auto&& item : widget.items)
+        {
+            if (item.type == gui_widget_item_type::text)
+            {
+                gui_node_data* child = nullptr;
+                for (auto&& pair : node.children)
+                {
+                    if (pair.key->index == item.node)
+                    {
+                        child = pair.key;
+                        break;
+                    }
+                }
+                if (!child)
+                    continue;
+
+                const auto item_select = gui_node_state_isset(item.state, gui_node_state::selected);
+                const auto node_select = gui_node_state_isset(child->state, gui_node_state::selected);
+                if (item_select != node_select)
+                {
+                    auto decline = false;
+                    ICY_ERROR(func.notify(proxy_read, { node.index }, gui_node_prop::selected, item_select, decline));
+                    if (!decline)
+                    {
+                        if (item_select)
+                            gui_node_state_set(node.state, gui_node_state::selected);
+                        else
+                            gui_node_state_unset(node.state, gui_node_state::selected);
+                    }
+                    else
+                    {
+                        if (node_select)
+                            gui_node_state_set(item.state, gui_node_state::selected);
+                        else
+                            gui_node_state_unset(item.state, gui_node_state::selected);
+                        ICY_ERROR(window.reset(gui_reset_reason::update_render_list));
+                    }
+                }
+
+            }
+        }
+        break;
+    }
+
     case gui_widget_type::view_list:
     {
         break;
@@ -459,13 +521,15 @@ gui_variant gui_model_data_sys::query(const gui_node node, const gui_node_prop p
         switch (prop)
         {
         case gui_node_prop::enabled:
-            return (it->value->state & gui_node_state::enabled) != 0;
+            return gui_node_state_isset(it->value->state, gui_node_state::enabled);
+        case gui_node_prop::selected:
+            return gui_node_state_isset(it->value->state, gui_node_state::selected);
         case gui_node_prop::visible:
-            return (it->value->state & gui_node_state::visible) != 0;
+            return gui_node_state_isset(it->value->state, gui_node_state::visible);
         case gui_node_prop::checked:
-            return (it->value->state & gui_node_state::checked) != 0;
+            return gui_node_state_isset(it->value->state, gui_node_state::checked);
         case gui_node_prop::checkable:
-            return (it->value->state & gui_node_state::checkable) != 0;
+            return gui_node_state_isset(it->value->state, gui_node_state::enabled);
         case gui_node_prop::data:
             return it->value->data;
         case gui_node_prop::user:

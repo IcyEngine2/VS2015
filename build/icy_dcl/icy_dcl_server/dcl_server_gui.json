@@ -1,0 +1,33 @@
+{
+	"type": "main_window"
+	, "layout": "vbox"
+	, "widgets": [
+		{
+			"type": "splitter"
+			, "layout": "hbox"
+			, "widgets": [
+			{
+				"type": "splitter"
+				, "width": 300
+				, "layout": "vbox"
+				, "widgets": [
+					{
+						"type": "view_tree"
+						, "class": "dcl_info_model"
+						, "height": 200
+					},
+					{
+						"type": "view_tree"
+						, "class": "dcl_tree_model"
+						, "height": 500
+					}
+				]
+			},
+			{
+				"type": "view_tabs"
+				, "class": "dcl_tabs_model"
+			}
+			]
+		}	
+	]
+}

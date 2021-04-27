@@ -10,6 +10,14 @@
 #include "icons/icons.hpp"
 using namespace icy;
 
+#if _DEBUG
+#pragma comment(lib, "icy_engine_cored")
+#pragma comment(lib, "icy_engine_imaged")
+#else
+#pragma comment(lib, "icy_engine_image")
+#pragma comment(lib, "icy_engine_core")
+#endif
+
 #include <d2d1.h>
 
 ICY_STATIC_NAMESPACE_BEG

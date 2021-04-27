@@ -3,35 +3,40 @@
 	"layout": "vbox",
 	"widgets": [
 		{
-			"type": "edit_line"
-			, "bkcolor": "000000"
-			, "text": "hello\nAAA35"
-			, "class": "edit_model"
+			"type": "view_tabs"
+			, "class": "tab_model"
 			, "weight": 1
-		},
-		{
-			"type": "splitter"
-			, "layout": "hbox"
-			, "weight": 5
-			, "widgets":
-			[
+			, "widgets": [
 				{
-					"type": "view_tree"
-					, "bkcolor": "C000C0"
-					, "text": "world123"
-					, "class": "tree_model"
-					, "hscroll": true
-					, "flex_scroll": false
+					"type": "edit_line"
+					, "text": "Hi"				
 				},
 				{
 					"type": "edit_text"
-					, "bkcolor": "8040C0"
-					, "text": "right side",
-					, "width": 400
-				}			
+					, "text": "ABC123"				
+				},
+				{
+					"type": "splitter"
+					, "layout": "hbox"
+					, "weight": 5
+					, "widgets": [
+					{
+						"type": "view_tree"
+						, "bkcolor": "C000C0"
+						, "text": "world123"
+						, "class": "tree_model"
+						, "hscroll": true
+						, "flex_scroll": false
+					},
+					{
+						"type": "edit_text"
+						, "bkcolor": "8040C0"
+						, "text": "right side",
+						, "width": 400
+					}			
+					]
+				}
 			]
-		},
-
+		}
 	]
-
 }
