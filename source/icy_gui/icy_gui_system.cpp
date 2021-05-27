@@ -47,10 +47,10 @@ gui_system_data::~gui_system_data() noexcept
     m_windows.clear();
     filter(0);
 }
-error_type gui_system_data::initialize(const adapter adapter) noexcept
+error_type gui_system_data::initialize() noexcept
 {
     ICY_ERROR(m_sync.initialize());
-    ICY_ERROR(make_shared(m_render_system, adapter));
+    ICY_ERROR(make_shared(m_render_system));
     ICY_ERROR(m_render_system->initialize());
     ICY_ERROR(make_shared(m_thread));
     m_thread->system = this;
@@ -62,30 +62,34 @@ error_type gui_system_data::initialize(const adapter adapter) noexcept
         ICY_ERROR(m_cursors.insert(k, std::move(new_cursor)));
     }
 
-    m_vscroll.size = 21;
-    m_hscroll.size = 21;
-    
-    ICY_ERROR(m_render_system->create_image(m_vscroll.background, icon_vscroll_background));
-    ICY_ERROR(m_render_system->create_image(m_vscroll.max_default, icon_vscroll_max_default));
-    ICY_ERROR(m_render_system->create_image(m_vscroll.max_hovered, icon_vscroll_max_hovered));
-    ICY_ERROR(m_render_system->create_image(m_vscroll.max_focused, icon_vscroll_max_focused));
-    ICY_ERROR(m_render_system->create_image(m_vscroll.min_default, icon_vscroll_min_default));
-    ICY_ERROR(m_render_system->create_image(m_vscroll.min_hovered, icon_vscroll_min_hovered));
-    ICY_ERROR(m_render_system->create_image(m_vscroll.min_focused, icon_vscroll_min_focused));
-    ICY_ERROR(m_render_system->create_image(m_vscroll.val_default, icon_vscroll_val_default));
-    ICY_ERROR(m_render_system->create_image(m_vscroll.val_hovered, icon_vscroll_val_hovered));
-    ICY_ERROR(m_render_system->create_image(m_vscroll.val_focused, icon_vscroll_val_focused));
+    m_vscroll.size_x = 21;
+    m_vscroll.size_y = 17;
 
-    ICY_ERROR(m_render_system->create_image(m_hscroll.background, icon_hscroll_background));
-    ICY_ERROR(m_render_system->create_image(m_hscroll.max_default, icon_hscroll_max_default));
-    ICY_ERROR(m_render_system->create_image(m_hscroll.max_hovered, icon_hscroll_max_hovered));
-    ICY_ERROR(m_render_system->create_image(m_hscroll.max_focused, icon_hscroll_max_focused));
-    ICY_ERROR(m_render_system->create_image(m_hscroll.min_default, icon_hscroll_min_default));
-    ICY_ERROR(m_render_system->create_image(m_hscroll.min_hovered, icon_hscroll_min_hovered));
-    ICY_ERROR(m_render_system->create_image(m_hscroll.min_focused, icon_hscroll_min_focused));
-    ICY_ERROR(m_render_system->create_image(m_hscroll.val_default, icon_hscroll_val_default));
-    ICY_ERROR(m_render_system->create_image(m_hscroll.val_hovered, icon_hscroll_val_hovered));
-    ICY_ERROR(m_render_system->create_image(m_hscroll.val_focused, icon_hscroll_val_focused));
+    m_hscroll.size_x = 17;
+    m_hscroll.size_y = 21;
+    
+    const auto type = "image"_s;
+    ICY_ERROR(blob_add(icon_vscroll_background, type, m_vscroll.background));
+    ICY_ERROR(blob_add(icon_vscroll_max_default, type, m_vscroll.max_default));
+    ICY_ERROR(blob_add(icon_vscroll_max_hovered, type, m_vscroll.max_hovered));
+    ICY_ERROR(blob_add(icon_vscroll_max_focused, type, m_vscroll.max_focused));
+    ICY_ERROR(blob_add(icon_vscroll_min_default, type, m_vscroll.min_default));
+    ICY_ERROR(blob_add(icon_vscroll_min_hovered, type, m_vscroll.min_hovered));
+    ICY_ERROR(blob_add(icon_vscroll_min_focused, type, m_vscroll.min_focused));
+    ICY_ERROR(blob_add(icon_vscroll_val_default, type, m_vscroll.val_default));
+    ICY_ERROR(blob_add(icon_vscroll_val_hovered, type, m_vscroll.val_hovered));
+    ICY_ERROR(blob_add(icon_vscroll_val_focused, type, m_vscroll.val_focused));
+
+    ICY_ERROR(blob_add(icon_hscroll_background, type, m_hscroll.background));
+    ICY_ERROR(blob_add(icon_hscroll_max_default, type, m_hscroll.max_default));
+    ICY_ERROR(blob_add(icon_hscroll_max_hovered, type, m_hscroll.max_hovered));
+    ICY_ERROR(blob_add(icon_hscroll_max_focused, type, m_hscroll.max_focused));
+    ICY_ERROR(blob_add(icon_hscroll_min_default, type, m_hscroll.min_default));
+    ICY_ERROR(blob_add(icon_hscroll_min_hovered, type, m_hscroll.min_hovered));
+    ICY_ERROR(blob_add(icon_hscroll_min_focused, type, m_hscroll.min_focused));
+    ICY_ERROR(blob_add(icon_hscroll_val_default, type, m_hscroll.val_default));
+    ICY_ERROR(blob_add(icon_hscroll_val_hovered, type, m_hscroll.val_hovered));
+    ICY_ERROR(blob_add(icon_hscroll_val_focused, type, m_hscroll.val_focused));
 
     const uint64_t event_types = 0
         | event_type::system_internal 
@@ -102,6 +106,15 @@ error_type gui_system_data::exec() noexcept
     while (*this)
     {
         map<uint32_t, map<gui_window_data_usr*, array<gui_event>>> render_events;
+
+        const auto erase_window = [this](decltype(m_windows.begin()) it)
+        {
+            return m_windows.erase(it);
+        };
+        const auto erase_model = [this](decltype(m_models.begin()) it)
+        {
+            return m_models.erase(it);
+        };
 
         const auto update_model = [this](model_pair& pair, bool& erase)
         {
@@ -178,7 +191,7 @@ error_type gui_system_data::exec() noexcept
             auto erase = false;
             ICY_ERROR(update_model(it->value, erase));
             if (erase)
-                it = m_models.erase(it);
+                it = erase_model(it);
             else
                 ++it;
         }
@@ -187,7 +200,7 @@ error_type gui_system_data::exec() noexcept
             auto erase = false;
             ICY_ERROR(update_window(it->value, erase));
             if (erase)
-                it = m_windows.erase(it);
+                it = erase_window(it);
             else
                 ++it;
         }
@@ -205,7 +218,7 @@ error_type gui_system_data::exec() noexcept
                         ICY_ERROR(update_window(it->value, erase));
                         if (erase)
                         {
-                            it = m_windows.erase(it);
+                            it = erase_window(it);
                         }
                         else
                         {
@@ -226,7 +239,7 @@ error_type gui_system_data::exec() noexcept
                         ICY_ERROR(update_window(it->value, erase));
                         if (erase)
                         {
-                            it = m_windows.erase(it);
+                            it = erase_window(it);
                         }
                         else
                         {
@@ -248,7 +261,7 @@ error_type gui_system_data::exec() noexcept
                         ICY_ERROR(update_window(it->value, erase));
                         if (erase)
                         {
-                            it = m_windows.erase(it);
+                            it = erase_window(it);
                         }
                         else
                         {
@@ -287,18 +300,18 @@ error_type gui_system_data::exec() noexcept
                     auto jt = m_models.find(shared_ptr<gui_model_data_usr>(event_data.model_usr).get());
                     if (it != m_windows.end() && jt != m_models.end())
                     {
-                        auto erase_window = false;
-                        auto erase_model = false;
-                        ICY_ERROR(update_window(it->value, erase_window));
-                        ICY_ERROR(update_model(jt->value, erase_model));
-                        if (erase_window)
+                        auto do_erase_window = false;
+                        auto do_erase_model = false;
+                        ICY_ERROR(update_window(it->value, do_erase_window));
+                        ICY_ERROR(update_model(jt->value, do_erase_model));
+                        if (do_erase_window)
                         {
-                            m_windows.erase(it);
+                            erase_window(it);
                             break;
                         }
-                        if (erase_model)
+                        if (do_erase_model)
                         {
-                            m_models.erase(jt);
+                            erase_model(jt);
                             break;
                         }
                         ICY_ERROR(process_bind(bind, gui_bind_type::model_to_window, erase));
@@ -337,16 +350,68 @@ error_type gui_system_data::exec() noexcept
         }
         for (auto&& pair : m_windows)
         {
-            if (!m_update.try_find(&pair.value.system))
-                continue;
-
-            gui_event event;
-            if (event.window = shared_ptr<gui_window_data_usr>(pair.value.user))
+            if (m_update.try_find(&pair.value.system))
             {
-                ICY_ERROR(event::post(this, event_type::gui_update, std::move(event)));
+                gui_event event;
+                if (event.window = shared_ptr<gui_window_data_usr>(pair.value.user))
+                {
+                    ICY_ERROR(event::post(this, event_type::gui_update, std::move(event)));
+                }
+            }
+            if (auto select = m_select.try_find(&pair.value.system))
+            {
+                gui_event event;
+                if (event.window = shared_ptr<gui_window_data_usr>(pair.value.user))
+                {
+                    for (auto&& bind : m_binds)
+                    {
+                        if (bind.window == event.window)
+                        {
+                            if (bind.widget.index != select->first)
+                                continue;
+
+                            event.widget = bind.widget;
+                            event.model = shared_ptr<gui_data_write_model>(bind.model);
+                            auto sys_model = m_models.try_find(event.model.get());
+                            if (event.model && sys_model)
+                            {
+                                event.node = select->second ? gui_node { select->second } : bind.node;
+                                event.data = sys_model->system.query(event.node, gui_node_prop::user);
+                                ICY_ERROR(event::post(this, event_type::gui_select, std::move(event)));                                
+                            }
+                        }
+                    }
+                }
+            }
+            if (auto context = m_context.try_find(&pair.value.system))
+            {
+                gui_event event;
+                if (event.window = shared_ptr<gui_window_data_usr>(pair.value.user))
+                {
+                    for (auto&& bind : m_binds)
+                    {
+                        if (bind.window == event.window)
+                        {
+                            if (bind.widget.index != context->first)
+                                continue;
+
+                            event.widget = bind.widget;
+                            event.model = shared_ptr<gui_data_write_model>(bind.model);
+                            auto sys_model = m_models.try_find(event.model.get());
+                            if (event.model && sys_model)
+                            {
+                                event.node = context->second ? gui_node { context->second } : bind.node;
+                                event.data = sys_model->system.query(event.node, gui_node_prop::user);
+                                ICY_ERROR(event::post(this, event_type::gui_context, std::move(event)));
+                            }
+                        }
+                    }
+                }
             }
         }
         m_update.clear();
+        m_select.clear();
+        m_context.clear();
 
         for (auto&& pair_thread_map : render_events)
         {
@@ -432,10 +497,7 @@ error_type gui_system_data::render(gui_window_data_sys& window, icy::gui_event& 
     const auto size = window.size(new_event.widget.index);
     if (size.x > 0 && size.y > 0)
     {
-        shared_ptr<gui_texture> new_texture;
-        ICY_ERROR(m_render_system->create_texture(new_texture, { uint32_t(size.x), uint32_t(size.y) }, render_flags::none));
-        ICY_ERROR(window.render(*new_texture));
-        new_event.texture = std::move(new_texture);
+        ICY_ERROR(window.render(new_event.render));
     }
     return error_type();
 }
@@ -516,11 +578,11 @@ error_type gui_system_data::process_bind(const bind_tuple& bind, const gui_bind_
     return error_type();
 }
 
-error_type icy::create_gui_system(shared_ptr<gui_system>& system, const adapter adapter) noexcept
+error_type icy::create_gui_system(shared_ptr<gui_system>& system) noexcept
 {
     shared_ptr<gui_system_data> new_system;
     ICY_ERROR(make_shared(new_system));
-    ICY_ERROR(new_system->initialize(adapter));
+    ICY_ERROR(new_system->initialize());
     system = std::move(new_system);
     return error_type();
 }

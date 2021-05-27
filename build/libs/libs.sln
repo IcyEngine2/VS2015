@@ -57,6 +57,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "xau", "xau\xau.vcxproj", "{
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "xkb", "xkb\xkb.vcxproj", "{2EE46E27-A57C-4EE3-9A31-FDE93DCB7FE6}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ldap", "ldap\ldap.vcxproj", "{B7548571-2AF1-414E-BB45-A4020EE7E8A1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -209,6 +211,12 @@ Global
 		{2EE46E27-A57C-4EE3-9A31-FDE93DCB7FE6}.Release|x64.ActiveCfg = Release|x64
 		{2EE46E27-A57C-4EE3-9A31-FDE93DCB7FE6}.Release|x64.Build.0 = Release|x64
 		{2EE46E27-A57C-4EE3-9A31-FDE93DCB7FE6}.Release|x86.ActiveCfg = Release|x64
+		{B7548571-2AF1-414E-BB45-A4020EE7E8A1}.Debug|x64.ActiveCfg = Debug|x64
+		{B7548571-2AF1-414E-BB45-A4020EE7E8A1}.Debug|x64.Build.0 = Debug|x64
+		{B7548571-2AF1-414E-BB45-A4020EE7E8A1}.Debug|x86.ActiveCfg = Debug|x64
+		{B7548571-2AF1-414E-BB45-A4020EE7E8A1}.Release|x64.ActiveCfg = Release|x64
+		{B7548571-2AF1-414E-BB45-A4020EE7E8A1}.Release|x64.Build.0 = Release|x64
+		{B7548571-2AF1-414E-BB45-A4020EE7E8A1}.Release|x86.ActiveCfg = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -7,7 +7,7 @@
 #include <icy_engine/utility/icy_com.hpp>
 #include <icy_gui/icy_gui.hpp>
 
-struct ID2D1Bitmap;
+//struct ID2D1Bitmap;
 struct ID2D1Device;
 struct ID3D11Device;
 struct IDWriteTextLayout;
@@ -34,7 +34,7 @@ struct gui_text
     IDWriteTextLayout* operator->() const noexcept;
     icy::com_ptr<IUnknown> value;
 };
-struct gui_image
+/*struct blob
 {
     explicit operator bool() const noexcept
     {
@@ -43,10 +43,10 @@ struct gui_image
     ID2D1Bitmap* operator->() const noexcept;
     icy::window_size size() const noexcept;
     icy::com_ptr<IUnknown> value;
-};
+};*/
 
 class gui_render_system;
-class gui_texture : public icy::texture
+/*class gui_texture : public icy::texture
 {
 public:
     struct rect_type
@@ -83,30 +83,28 @@ private:
     icy::com_ptr<IUnknown> m_texture_d3d;
     icy::com_ptr<IUnknown> m_texture_d2d;
     icy::com_ptr<IUnknown> m_context;
-};
+};*/
 class gui_render_system
 {
-public:
-    friend gui_texture;
 public:    
-    gui_render_system(const icy::adapter adapter) noexcept : m_adapter(adapter)
+    /*gui_render_system(const icy::adapter adapter) noexcept : m_adapter(adapter)
     {
 
-    }
+    }*/
     icy::error_type initialize() noexcept;
     icy::error_type enum_font_names(icy::array<icy::string>& fonts) const noexcept;
     icy::error_type create_font(gui_font& font, icy::shared_ptr<icy::window> hwnd, const gui_system_font_type type) const noexcept;
     icy::error_type create_text(gui_text& text, const gui_font& font, const icy::string_view str) const noexcept;
-    icy::error_type create_image(gui_image& image, const icy::const_array_view<uint8_t> bytes) const noexcept;
-    icy::error_type create_texture(icy::shared_ptr<gui_texture>& texture, const icy::window_size size, const icy::render_flags flags) const noexcept;
+    //icy::error_type create_image(blob& image, const icy::const_array_view<uint8_t> bytes) const noexcept;
+    //icy::error_type create_texture(icy::shared_ptr<gui_texture>& texture, const icy::window_size size, const icy::render_flags flags) const noexcept;
 private:
-    icy::adapter m_adapter;
+    //icy::adapter m_adapter;
     icy::library m_lib_user32 = icy::library("user32");
     icy::library m_lib_dwrite = icy::library("dwrite");
-    icy::library m_lib_d3d = icy::library("d3d11");
-    icy::library m_lib_d2d = icy::library("d2d1");
+    //icy::library m_lib_d3d = icy::library("d3d11");
+    //icy::library m_lib_d2d = icy::library("d2d1");
     icy::com_ptr<IUnknown> m_factory_dwrite;
-    icy::com_ptr<IUnknown> m_device_d3d;
-    icy::com_ptr<IUnknown> m_device_d2d;
-    icy::com_ptr<IUnknown> m_factory_d2d;
+    //icy::com_ptr<IUnknown> m_device_d3d;
+    //icy::com_ptr<IUnknown> m_device_d2d;
+    //icy::com_ptr<IUnknown> m_factory_d2d;
 };

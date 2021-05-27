@@ -6,12 +6,14 @@
 #include <icy_engine/core/icy_matrix.hpp>
 #include <icy_engine/core/icy_color.hpp>
 #include <icy_engine/core/icy_string.hpp>
+#include <icy_engine/core/icy_blob.hpp>
 
 namespace icy
 {
     struct window;
     struct window_system;
     struct window_cursor;
+    struct window_render_item;
     class thread;
 
     enum class window_style : uint32_t
@@ -57,6 +59,8 @@ namespace icy
     {
         return window_style(uint32_t(lhs) | uint32_t(rhs));
     }
+
+    
     struct window
     {
         virtual ~window() noexcept = 0
@@ -73,7 +77,7 @@ namespace icy
         virtual window_flags flags() const noexcept = 0;
         virtual window_size size() const noexcept = 0;
         virtual uint32_t dpi() const noexcept = 0;
-        virtual error_type repaint(matrix<color>&& colors) noexcept = 0;
+        virtual error_type repaint(array<window_render_item>& items) noexcept = 0;
     };
 
 
@@ -109,6 +113,36 @@ namespace icy
         uint32_t window = 0;
         window_action_type type = window_action_type::none;
         string clipboard_text;
+    };
+    enum class window_render_item_type : uint32_t
+    {
+        none,
+        clear,
+        clip_push,
+        clip_pop,
+        rect,
+        text,
+        image,
+    };
+    struct window_render_item
+    {
+        window_render_item() noexcept = default;
+        window_render_item(window_render_item&& rhs) noexcept : type(rhs.type),
+            min_x(rhs.min_x), min_y(rhs.min_y), max_x(rhs.max_x), max_y(rhs.max_y),
+            color(rhs.color), handle(rhs.handle)
+        {
+            rhs.handle = nullptr;
+        }
+        ICY_DEFAULT_MOVE_ASSIGN(window_render_item);
+        ~window_render_item() noexcept;
+        window_render_item_type type = window_render_item_type::none;
+        float min_x = 0;
+        float min_y = 0;
+        float max_x = 0;
+        float max_y = 0;
+        color color;
+        void* handle = nullptr;
+        blob blob;
     };
     struct window_cursor
     {

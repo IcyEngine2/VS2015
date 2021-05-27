@@ -5,9 +5,12 @@
 #include <icy_engine/core/icy_thread.hpp>
 #include <icy_engine/core/icy_set.hpp>
 #include <icy_engine/core/icy_map.hpp>
+#include <icy_engine/core/icy_blob.hpp>
+#include <icy_engine/utility/icy_com.hpp>
 
 #if _WIN32
 #include <Windows.h>
+#include <d2d1.h>
 #endif
 
 static const uint32_t default_window_w = 800;
@@ -55,10 +58,10 @@ enum class internal_message_type : uint32_t
     destroy,
     restyle,
     rename,
+    repaint,
     //close,
     show,
     cursor,
-    repaint,
     query,
 };
 struct internal_message
@@ -81,8 +84,8 @@ struct internal_message
     window_flags flags = window_flags::none;
     bool show = false;
     cursor_type cursor;
-    matrix<color> repaint;
     shared_ptr<query_type> query;
+    array<window_render_item> repaint;
 };
 struct win32_flag_enum
 {
@@ -145,8 +148,6 @@ static decltype(&::SetCursor) win32_set_cursor;
 static decltype(&::GetDpiForWindow) win32_get_dpi_for_window;
 static decltype(&::SetCapture) win32_set_capture;
 static decltype(&::ReleaseCapture) win32_release_capture;
-//static decltype(&::AddClipboardFormatListener) win32_add_clipboard_format_listener;
-//static decltype(&::RemoveClipboardFormatListener) win32_remove_clipboard_format_listener;
 static decltype(&::OpenClipboard) win32_open_clipboard;
 static decltype(&::CloseClipboard) win32_close_clipboard;
 static decltype(&::GetClipboardData) win32_get_clipboard_data;
@@ -212,7 +213,7 @@ public:
         }
         return 96;
     }
-    error_type repaint(matrix<color>&& colors) noexcept override;
+    error_type repaint(array<window_render_item>& items) noexcept override;
     error_type win_handle(void*& handle) const noexcept override;
 private:
     weak_ptr<window_system_data> m_system;
@@ -241,7 +242,7 @@ public:
     error_type rename(const string_view name) noexcept;
     error_type show(const bool value) noexcept;
     error_type cursor(const uint32_t priority, shared_ptr<window_cursor> cursor) noexcept;
-    error_type repaint(const matrix<color>* colors) noexcept;
+    error_type repaint(array<window_render_item>&& items) noexcept;
     error_type resize(bool& changed) noexcept;
 #if X11_GUI
     error_type start_timer(const duration_type timeout) noexcept
@@ -293,6 +294,7 @@ private:
     } m_cursor;
     wchar_t m_chr = 0;
     uint32_t m_capture = 0;
+    array<window_render_item> m_repaint;
 };
 class window_thread_data : public thread
 {
@@ -342,6 +344,7 @@ public:
     error_type exec() noexcept override;
     void exit(const error_type error) noexcept;
     error_type post(internal_message&& msg) noexcept;
+
 #if X11_GUI
     Display& display() const noexcept
     {
@@ -350,6 +353,11 @@ public:
     error_type error() const noexcept
     {
         return m_error;
+    }
+#else
+    ID2D1DCRenderTarget& render() noexcept
+    {
+        return *m_render;
     }
 #endif
 private:
@@ -377,9 +385,14 @@ private:
     struct jmp_type { jmp_buf buf; };
     icy::unique_ptr<jmp_type> m_jmp;
 #elif _WIN32
+    library m_lib_d2d1 = library("d2d1");
+    library m_lib_dwrite = library("dwrite");
     library m_lib_user32 = library("user32");
     library m_lib_gdi32 = library("gdi32");
     HCURSOR m_cursor = nullptr;
+    com_ptr<ID2D1Factory> m_factory;
+    com_ptr<ID2D1DCRenderTarget> m_render;
+    map<uint32_t, com_ptr<ID2D1Bitmap>> m_images;
 #endif
     wchar_t m_cname[64] = {};
     shared_ptr<window_thread_data> m_thread;
@@ -657,9 +670,9 @@ error_type window_data_sys::cursor(const uint32_t priority, shared_ptr<window_cu
     }
     return error_type();
 }
-error_type window_data_sys::repaint(const matrix<color>* colors) noexcept
+error_type window_data_sys::repaint(array<window_render_item>&& repaint) noexcept
 {
-#if X11_GUI
+/*#if X11_GUI
     if (colors)
     {
         for (auto row = 0; row < std::min(int(colors->rows()), m_image->height); ++row)
@@ -674,8 +687,10 @@ error_type window_data_sys::repaint(const matrix<color>* colors) noexcept
     auto display = &system.display();
     if (XPutImage(display, m_hwnd, m_gc, m_image, 0, 0, 0, 0, m_image->width, m_image->height))
         return system.error();
-#endif
-
+#endif*/
+    m_repaint = std::move(repaint);
+    if (!win32_invalidate_rect(m_hwnd, nullptr, TRUE))
+        return last_system_error();
     return error_type();
 }
 error_type window_data_sys::resize(bool& change) noexcept
@@ -882,22 +897,9 @@ LRESULT window_data_sys::proc(uint32_t msg, WPARAM wparam, LPARAM lparam) noexce
     };
     const auto on_repaint = [this]
     {
-        /* auto render = shared_ptr<render_factory>(m_repaint.render);
-         if (!render || !m_repaint.device)
-             return error_type();
-
          RECT rect;
          if (!win32_get_client_rect(m_hwnd, &rect))
              return last_system_error();
-
-         com_ptr<ID2D1Factory> factory;
-         m_repaint.device->GetFactory(&factory);
-
-         const auto pixel = D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED);
-
-         com_ptr<ID2D1DCRenderTarget> target;
-         ICY_COM_ERROR(factory->CreateDCRenderTarget(&D2D1::RenderTargetProperties(
-             D2D1_RENDER_TARGET_TYPE::D2D1_RENDER_TARGET_TYPE_DEFAULT, pixel), &target));
 
          PAINTSTRUCT ps;
          auto hdc = win32_begin_paint(m_hwnd, &ps);
@@ -907,38 +909,71 @@ LRESULT window_data_sys::proc(uint32_t msg, WPARAM wparam, LPARAM lparam) noexce
          auto end_paint_done = false;
          ICY_SCOPE_EXIT{ if (!end_paint_done) win32_end_paint(m_hwnd, &ps); };
 
-         ICY_COM_ERROR(target->BindDC(hdc, &rect));
-         target->BeginDraw();
+         auto& render = m_system.render();
+         ICY_COM_ERROR(render.BindDC(hdc, &rect));
+         render.BeginDraw();
+         com_ptr<ID2D1SolidColorBrush> brush;
+         ICY_COM_ERROR(render.CreateSolidColorBrush(D2D1::ColorF(0), &brush));
 
          auto end_draw_done = false;
-         ICY_SCOPE_EXIT{ if (!end_draw_done) target->EndDraw(); };
+         ICY_SCOPE_EXIT{ if (!end_draw_done) render.EndDraw(); };
 
-         target->Clear(D2D1::ColorF(0, 0, 0, 0));
-
-         for (const auto& layer : m_repaint.map)
+         const auto to_color = [](const color color)
          {
-             for (auto&& cmd : layer.value)
+             return D2D1::ColorF(color.to_rgb(), color.a / 255.0f);
+         };
+         const auto to_rect = [](const window_render_item& item)
+         {
+             return D2D1::RectF(item.min_x, item.min_y, item.max_x, item.max_y);
+         };
+         for (auto&& item : m_repaint)
+         {
+             switch (item.type)
              {
-                 target->SetTransform(reinterpret_cast<const D2D1_MATRIX_3X2_F*>(&cmd.transform));
-                 if (cmd.geometry.data)
-                 {
-                     ICY_ERROR(cmd.geometry.data->render(*target));
-                 }
-                 if (cmd.text)
-                 {
-                     com_ptr<ID2D1SolidColorBrush> brush;
-                     ICY_COM_ERROR(target->CreateSolidColorBrush(D2D1::ColorF(cmd.color.to_rgb(), cmd.color.a / 255.0f), &brush));
-                     target->DrawTextLayout(D2D1::Point2F(), cmd.text, brush, D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
-                 }
+             case window_render_item_type::clear: 
+             {
+                 render.Clear(to_color(item.color));
+                 break;
+             }
+             case window_render_item_type::clip_push:
+             {
+                 render.PushAxisAlignedClip(to_rect(item), D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+                 break;
+             }
+             case window_render_item_type::clip_pop:
+             {
+                 render.PopAxisAlignedClip();
+                 break;
+             }
+             case window_render_item_type::rect:
+             {
+                 brush->SetColor(to_color(item.color));
+                 render.FillRectangle(to_rect(item), brush);
+                 break;
+             }
+             case window_render_item_type::text:
+             {
+                 brush->SetColor(to_color(item.color));
+                 render.DrawTextLayout({ item.min_x, item.min_y }, static_cast<IDWriteTextLayout*>(item.handle), brush);
+                 break;
+             }
+             case window_render_item_type::image:
+             {
+                 //brush->SetColor(to_color(item.color));
+                 //render.DrawTextLayout({ item.min_x, item.min_y }, static_cast<IDWriteTextLayout*>(item.handle), brush);
+                 break;
+             }
+             default:
+                 break;
              }
          }
          end_draw_done = true;
-         ICY_COM_ERROR(target->EndDraw());
+         ICY_COM_ERROR(render.EndDraw());
 
          end_paint_done = true;
          if (!win32_end_paint(m_hwnd, &ps))
              return last_system_error();
-             */
+
         return error_type();
     };
 
@@ -949,9 +984,11 @@ LRESULT window_data_sys::proc(uint32_t msg, WPARAM wparam, LPARAM lparam) noexce
     //  break;
 
     case WM_PAINT:
-        //if (const auto error = on_repaint())
-        //    m_system->exit(error);
+    {
+        if (const auto error = on_repaint())
+            m_system.exit(error);
         break;
+    }
 
     case WM_MENUCHAR:
         return MAKELRESULT(0, MNC_CLOSE);
@@ -1179,7 +1216,7 @@ error_type window_data_usr::cursor(const uint32_t priority, const shared_ptr<win
     msg.cursor = { cursor, priority };
     return system->post(std::move(msg));
 }
-error_type window_data_usr::repaint(matrix<color>&& colors) noexcept
+error_type window_data_usr::repaint(array<window_render_item>& items) noexcept
 {
     auto system = shared_ptr<window_system_data>(m_system);
     if (!system)
@@ -1188,7 +1225,7 @@ error_type window_data_usr::repaint(matrix<color>&& colors) noexcept
     internal_message msg;
     msg.type = internal_message_type::repaint;
     msg.index = m_index;
-    msg.repaint = std::move(colors);
+    msg.repaint = std::move(items);
     return system->post(std::move(msg));
 }
 
@@ -1283,6 +1320,8 @@ error_type window_system_data::initialize() noexcept
     if (!m_display)
         return make_stdlib_error(std::errc::not_enough_memory);
 #elif _WIN32
+    ICY_ERROR(m_lib_d2d1.initialize());
+    ICY_ERROR(m_lib_dwrite.initialize());
     ICY_ERROR(m_lib_user32.initialize());
     ICY_ERROR(m_lib_gdi32.initialize());
 
@@ -1330,9 +1369,6 @@ error_type window_system_data::initialize() noexcept
     ICY_USER32_FUNC(win32_close_clipboard, CloseClipboard);
     ICY_USER32_FUNC(win32_get_clipboard_data, GetClipboardData);
 
-    //ICY_USER32_FUNC(win32_add_clipboard_format_listener, AddClipboardFormatListener);
-    //ICY_USER32_FUNC(win32_remove_clipboard_format_listener, RemoveClipboardFormatListener);
-
     m_cursor = static_cast<HCURSOR>(win32_load_cursor(nullptr, IDC_ARROW));
     if (!m_cursor)
         return last_system_error();
@@ -1349,6 +1385,26 @@ error_type window_system_data::initialize() noexcept
     {
         memset(m_cname, 0, sizeof(m_cname));
         return last_system_error();
+    }
+
+
+    using d2d1_func_type = HRESULT(WINAPI *)(D2D1_FACTORY_TYPE, REFIID, const D2D1_FACTORY_OPTIONS*, void**);
+    if (auto func = static_cast<d2d1_func_type>(m_lib_d2d1.find("D2D1CreateFactory")))
+    {
+        D2D1_FACTORY_OPTIONS options = {};
+#if _DEBUG
+        options.debugLevel = D2D1_DEBUG_LEVEL::D2D1_DEBUG_LEVEL_WARNING;
+#endif
+        ICY_COM_ERROR(func(D2D1_FACTORY_TYPE_MULTI_THREADED, 
+            __uuidof(ID2D1Factory), &options, reinterpret_cast<void**>(&m_factory)));
+        const auto pixel = D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED);
+
+        ICY_COM_ERROR(m_factory->CreateDCRenderTarget(&D2D1::RenderTargetProperties(
+            D2D1_RENDER_TARGET_TYPE::D2D1_RENDER_TARGET_TYPE_DEFAULT, pixel), &m_render));
+    }
+    else
+    {
+        return make_stdlib_error(std::errc::function_not_supported);
     }
 #endif
 
@@ -1457,7 +1513,7 @@ error_type window_system_data::exec() noexcept
             }
             else if (event_data.type == internal_message_type::repaint)
             {
-                ICY_ERROR(it->value.repaint(&event_data.repaint));
+                ICY_ERROR(it->value.repaint(std::move(event_data.repaint)));
             }
             else if (event_data.type == internal_message_type::query)
             {
@@ -1645,4 +1701,10 @@ error_type icy::create_window_system(shared_ptr<window_system>& system) noexcept
     ICY_ERROR(new_ptr->initialize());
     system = std::move(new_ptr);
     return error_type();
+}
+
+window_render_item::~window_render_item() noexcept
+{
+    if (handle)
+        static_cast<IUnknown*>(handle)->Release();
 }

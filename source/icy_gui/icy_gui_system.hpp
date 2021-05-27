@@ -40,22 +40,23 @@ public:
     };
     struct scroll_type
     {
-        float size = 0;
-        gui_image background;
-        gui_image val_default;
-        gui_image val_hovered;
-        gui_image val_focused;
-        gui_image min_default;
-        gui_image min_hovered;
-        gui_image min_focused;
-        gui_image max_default;
-        gui_image max_hovered;
-        gui_image max_focused;
+        float size_x = 0;
+        float size_y = 0;
+        icy::blob background;
+        icy::blob val_default;
+        icy::blob val_hovered;
+        icy::blob val_focused;
+        icy::blob min_default;
+        icy::blob min_hovered;
+        icy::blob min_focused;
+        icy::blob max_default;
+        icy::blob max_hovered;
+        icy::blob max_focused;
     };
 public:
     ~gui_system_data();
     icy::error_type exec() noexcept override;
-    icy::error_type initialize(const icy::adapter adapter) noexcept;
+    icy::error_type initialize() noexcept;
     icy::error_type signal(const icy::event_data* event) noexcept override
     {
         return m_sync.wake();
@@ -93,6 +94,26 @@ public:
         }
         return it->value.try_insert(widget.index);
     }
+    icy::error_type post_select(gui_window_data_sys& window, const uint32_t widget, const uint32_t node) noexcept
+    {
+        auto it = m_select.find(&window);
+        if (it == m_select.end())
+        {
+            ICY_ERROR(m_select.insert(&window, std::pair<uint32_t, uint32_t>(), &it));
+        }
+        it->value = { widget, node };
+        return icy::error_type();
+    }
+    icy::error_type post_context(gui_window_data_sys& window, const uint32_t widget, const uint32_t node) noexcept
+    {
+        auto it = m_context.find(&window);
+        if (it == m_context.end())
+        {
+            ICY_ERROR(m_context.insert(&window, std::pair<uint32_t, uint32_t>(), &it));
+        }
+        it->value = { widget, node };
+        return icy::error_type();
+    }
     icy::duration_type caret_blink_time() const noexcept
     {
         return std::chrono::milliseconds(400);
@@ -107,7 +128,24 @@ public:
             return *ptr;
         return nullptr;
     }
-    //icy::gui_keybind key_bind(const icy::input_message& msg) const noexcept;
+    gui_model_data_sys* model(icy::weak_ptr<icy::gui_data_write_model> ptr) noexcept
+    {
+        for (auto&& pair : m_models)
+        {
+            if (pair.value.user == ptr)
+                return &pair.value.system;
+        }
+        return nullptr;
+    }
+    icy::shared_ptr<icy::gui_window> window(gui_window_data_sys& sys) noexcept
+    {
+        for (auto&& pair : m_windows)
+        {
+            if (&pair.value.system == &sys)
+                return icy::shared_ptr<gui_window_data_usr>(pair.value.user);
+        }
+        return nullptr;
+    }
 private:
     struct window_pair
     {
@@ -150,6 +188,8 @@ private:
     scroll_type m_hscroll;
     icy::set<gui_window_data_sys*> m_update;
     icy::map<gui_window_data_sys*, icy::set<uint32_t>> m_change;
+    icy::map<gui_window_data_sys*, std::pair<uint32_t, uint32_t>> m_select;
+    icy::map<gui_window_data_sys*, std::pair<uint32_t, uint32_t>> m_context;
 };
 namespace icy
 {

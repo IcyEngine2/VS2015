@@ -460,7 +460,7 @@ error_type gui_window_data_usr::destroy(const gui_widget widget) noexcept
         notify(new_event);
     return error_type();
 }
-error_type gui_window_data_usr::find(const icy::string_view prop, const icy::gui_variant value, icy::array<icy::gui_widget>& list) const noexcept
+error_type gui_window_data_usr::find(const string_view prop, const gui_variant value, array<gui_widget>& list) const noexcept
 {
     list.clear();
     const auto prop_key = gui_str_to_attr(prop);
@@ -490,6 +490,15 @@ error_type gui_window_data_usr::find(const icy::string_view prop, const icy::gui
             }
         }
     }
+    return error_type();
+}
+error_type gui_window_data_usr::show_menu(const gui_data_write_model& model, const gui_node node) noexcept
+{
+    gui_window_event_type* new_event = nullptr;
+    ICY_ERROR(gui_window_event_type::make(new_event, gui_window_event_type::show_menu));
+    ICY_SCOPE_EXIT{ gui_window_event_type::clear(new_event); };
+    new_event->val = std::pair<shared_ptr<gui_data_write_model>, gui_node>(make_shared_from_this(&model), node);
+    notify(new_event);
     return error_type();
 }
 error_type gui_window_data_usr::render(const gui_widget widget, uint32_t& query) const noexcept
@@ -541,25 +550,48 @@ error_type gui_window_data_sys::initialize(const shared_ptr<icy::window> window,
 error_type gui_window_data_sys::input(const input_message& msg) noexcept
 {
     ICY_ERROR(update());
+ 
+    if (!m_menu.widgets.empty())
+    {
+        ICY_ERROR(input_menu(msg));
+    }
+    if (!m_menu.widgets.empty())
+    {
+        return error_type();
+    }
+    
     switch (msg.type)
     {
     case input_type::mouse_move:
         ICY_ERROR(input_mouse_move(msg.point_x, msg.point_y, key_mod(msg.mods)));
         break;
     case input_type::mouse_press:
-        ICY_ERROR(input_mouse_press(msg.key, msg.point_x, msg.point_y, key_mod(msg.mods)));
+        if (msg.key == key::mouse_left)
+        {
+            ICY_ERROR(input_mouse_press_lmb(msg.point_x, msg.point_y, key_mod(msg.mods)));
+        }
+        else if (msg.key == key::mouse_right)
+        {
+            ICY_ERROR(input_mouse_press_rmb(msg.point_x, msg.point_y, key_mod(msg.mods)));
+        }
         break;
+    
     case input_type::mouse_release:
-        ICY_ERROR(input_mouse_release(msg.key, msg.point_x, msg.point_y, key_mod(msg.mods)));
+        if (msg.key == key::mouse_left)
+        {
+            ICY_ERROR(input_mouse_release_lmb(msg.point_x, msg.point_y, key_mod(msg.mods)));
+        }
+        else if (msg.key == key::mouse_right)
+        {
+            ICY_ERROR(input_mouse_release_rmb(msg.point_x, msg.point_y, key_mod(msg.mods)));
+        }
         break;
+
     case input_type::mouse_wheel:
         ICY_ERROR(input_mouse_wheel(msg.point_x, msg.point_y, key_mod(msg.mods), msg.wheel));
         break;
     case input_type::mouse_double:
         ICY_ERROR(input_mouse_double(msg.key, msg.point_x, msg.point_y, key_mod(msg.mods)));
-        break;
-    //case input_type::mouse_hold:
-    //    ICY_ERROR(input_mouse_hold(msg.key, msg.point_x, msg.point_y, key_mod(msg.mods), output));
         break;
     case input_type::key_press:
         ICY_ERROR(input_key_press(msg.key, key_mod(msg.mods)));
@@ -662,26 +694,30 @@ error_type gui_window_data_sys::update() noexcept
     am_autoupdate(m_solver, 1);
 
     auto& root = *m_data.front().value.get();
-    root.min_x = am_newvariable(m_solver);
-    root.min_y = am_newvariable(m_solver);
-    root.max_x = am_newvariable(m_solver);
-    root.max_y = am_newvariable(m_solver);
 
-    for (auto&& pair : m_data)
+    const auto mkvar = [this](gui_widget_data& widget)
     {
-        auto& widget = *pair.value;
+        widget.min_x = am_newvariable(m_solver);
+        widget.min_y = am_newvariable(m_solver);
+        widget.max_x = am_newvariable(m_solver);
+        widget.max_y = am_newvariable(m_solver);
+    };
+    mkvar(root);
+
+    const auto update_widget = [this](gui_widget_data& widget) -> error_type
+    {
         widget.size_x = 0;
         widget.size_y = 0;
         for (auto&& item : widget.items)
         {
             ICY_ERROR(solve_item(widget, item, m_font));
-          
+
             switch (item.type)
             {
             case gui_widget_item_type::text:
             {
                 if (!item.text && (
-                    widget.type == gui_widget_type::edit_line || 
+                    widget.type == gui_widget_type::edit_line ||
                     widget.type == gui_widget_type::edit_text))
                 {
                     item.value = ""_s;
@@ -694,6 +730,12 @@ error_type gui_window_data_sys::update() noexcept
             }
             }
         }
+        return error_type();
+    };
+
+    for (auto&& pair : m_data)
+    {
+        ICY_ERROR(update_widget(*pair.value));
     }
     am_suggest(root.min_x, 0, AM_REQUIRED);
     am_suggest(root.min_y, 0, AM_REQUIRED);
@@ -706,7 +748,36 @@ error_type gui_window_data_sys::update() noexcept
     {
         return lhs.level < rhs.level;
     };
-    std::stable_sort(m_render_list.begin(), m_render_list.end(), pred);
+    auto count = m_render_list.size();
+    std::stable_sort(m_render_list.begin(), m_render_list.begin() + count, pred);    
+    
+    if (auto model = m_system->model(m_menu.model))
+    {
+        auto max_x = 0.0f;
+        auto max_y = 0.0f;
+        for (auto&& child : m_menu.widgets)
+        {
+            ICY_ERROR(update_widget(child));
+            max_x += child.size_x;
+            max_y = std::max(max_y, child.size_y);
+        }
+
+        mkvar(m_menu.root);
+        am_suggest(m_menu.root.min_x, m_menu.point_x, AM_REQUIRED * 10);
+        am_suggest(m_menu.root.min_y, m_menu.point_y, AM_REQUIRED * 10);
+        am_suggest(m_menu.root.max_x, m_menu.point_x + max_x, AM_REQUIRED);
+        am_suggest(m_menu.root.max_y, m_menu.point_y + max_y, AM_REQUIRED);
+
+        level = 0;
+        ICY_ERROR(update(m_menu.root, level));
+    }
+    else
+    {
+        m_menu = menu_type();
+    }
+
+    std::stable_sort(m_render_list.begin() + count, m_render_list.end(), pred);
+    
     m_state |= gui_window_state_updated;
 
     return error_type();
@@ -968,7 +1039,11 @@ error_type gui_window_data_sys::update(gui_widget_data& widget, size_t& level) n
             case gui_widget_type::view_tree:
             case gui_widget_type::edit_text:
             {
-                min_height = m_system->vscroll().size * 3;
+                if (gui_widget_state_isset(ptr->state, gui_widget_state::vscroll) ||
+                    gui_widget_state_isset(ptr->state, gui_widget_state::vscroll_auto))
+                {
+                    min_height = m_system->vscroll().size_y * 3;
+                }
                 break;
             }
             case gui_widget_type::edit_line:
@@ -1085,12 +1160,16 @@ error_type gui_window_data_sys::update(gui_widget_data& widget, size_t& level) n
             case gui_widget_type::view_tree:
             case gui_widget_type::edit_text:
             {
-                min_width = m_system->hscroll().size * 3 + m_system->vscroll().size;
+                if (gui_widget_state_isset(ptr->state, gui_widget_state::hscroll) ||
+                    gui_widget_state_isset(ptr->state, gui_widget_state::hscroll_auto))
+                {
+                    min_width = m_system->hscroll().size_x * 3 + m_system->vscroll().size_x;
+                }
                 break;
             }
             case gui_widget_type::edit_line:
             {
-                min_width = m_system->hscroll().size * 3;
+                min_width = m_system->hscroll().size_x * 3;
                 break;
             }
             }
@@ -1184,8 +1263,8 @@ error_type gui_window_data_sys::update(gui_widget_data& widget, size_t& level) n
 
         calc_hscroll();
         calc_vscroll();
-        if (hscroll) sy -= m_system->hscroll().size;
-        if (vscroll) sx -= m_system->vscroll().size;
+        if (hscroll) sy -= m_system->hscroll().size_y;
+        if (vscroll) sx -= m_system->vscroll().size_x;
 
         if (!hscroll && vscroll) calc_hscroll();
         if (!vscroll && hscroll) calc_vscroll();
@@ -1195,8 +1274,8 @@ error_type gui_window_data_sys::update(gui_widget_data& widget, size_t& level) n
 
         sx = max_x - min_x;
         sy = max_y - min_y;
-        if (hscroll) sy -= m_system->hscroll().size;
-        if (vscroll) sx -= m_system->vscroll().size;
+        if (hscroll) sy -= m_system->hscroll().size_y;
+        if (vscroll) sx -= m_system->vscroll().size_x;
 
         using scroll_items_type = std::pair<uint32_t, gui_widget_item_type>[4];
 
@@ -1272,23 +1351,23 @@ error_type gui_window_data_sys::update(gui_widget_data& widget, size_t& level) n
 
                 bk.image = sys_scroll.background;
 
-                if (m_press.widget == child->index && m_press.item == items[1].first)
+                if (m_press_lmb.widget == child->index && m_press_lmb.item == items[1].first)
                     max.image = sys_scroll.max_focused;
-                else if (m_hover.widget == child->index && m_hover.item == items[1].first && !m_press)
+                else if (m_hover.widget == child->index && m_hover.item == items[1].first && !m_press_lmb)
                     max.image = sys_scroll.max_hovered;
                 else
                     max.image = sys_scroll.max_default;
 
-                if (m_press.widget == child->index && m_press.item == items[2].first)
+                if (m_press_lmb.widget == child->index && m_press_lmb.item == items[2].first)
                     min.image = sys_scroll.min_focused;
-                else if (m_hover.widget == child->index && m_hover.item == items[2].first && !m_press)
+                else if (m_hover.widget == child->index && m_hover.item == items[2].first && !m_press_lmb)
                     min.image = sys_scroll.min_hovered;
                 else
                     min.image = sys_scroll.min_default;
 
-                if (m_press.widget == child->index && m_press.item == items[3].first)
+                if (m_press_lmb.widget == child->index && m_press_lmb.item == items[3].first)
                     val.image = sys_scroll.val_focused;
-                else if (m_hover.widget == child->index && m_hover.item == items[3].first && !m_press)
+                else if (m_hover.widget == child->index && m_hover.item == items[3].first && !m_press_lmb)
                     val.image = sys_scroll.val_hovered;
                 else
                     val.image = sys_scroll.val_default;
@@ -1299,19 +1378,19 @@ error_type gui_window_data_sys::update(gui_widget_data& widget, size_t& level) n
                     {
                         auto& item = child->items[pair.first - 1];
                         item.x = sx;
-                        item.w = sys_scroll.size;
+                        item.w = sys_scroll.size_x;
                         item.y = 0;
                         item.h = 0;                    
                     }
-                    min.h = float(min.image.size().y);
-                    max.h = float(max.image.size().y);
+                    min.h = sys_scroll.size_y;
+                    max.h = sys_scroll.size_y;
                     max.y = sy - max.h;
                     if (hscroll)
-                        max.y += m_system->hscroll().size;
+                        max.y += m_system->hscroll().size_y;
 
                     const auto canvas = child->scroll_y.area_size = max.y - min.h;
 
-                    val.h = std::min(canvas, std::max(sys_scroll.size, canvas * sy / std::max(sy, child->scroll_y.max)));
+                    val.h = std::min(canvas, std::max(sys_scroll.size_y, canvas * sy / std::max(sy, child->scroll_y.max)));
                     val.y = min.h;
 
                     child->scroll_y.clamp();
@@ -1328,16 +1407,16 @@ error_type gui_window_data_sys::update(gui_widget_data& widget, size_t& level) n
                     {
                         auto& item = child->items[pair.first - 1];
                         item.y = sy;
-                        item.h = sys_scroll.size;
+                        item.h = sys_scroll.size_y;
                         item.x = 0;
                         item.w = 0;
                     }
-                    min.w = float(min.image.size().x);
-                    max.w = float(max.image.size().x);
+                    min.w = sys_scroll.size_x;
+                    max.w = sys_scroll.size_x;
                     max.x = sx - max.w;
                     const auto canvas = child->scroll_x.area_size = max.x - min.w;
 
-                    val.w = std::min(canvas, std::max(sys_scroll.size, canvas * sx / std::max(sx, child->scroll_x.max)));
+                    val.w = std::min(canvas, std::max(sys_scroll.size_x, canvas * sx / std::max(sx, child->scroll_x.max)));
                     val.x = min.w;
                     
                     child->scroll_x.clamp();
@@ -1469,6 +1548,129 @@ error_type gui_window_data_sys::update(gui_widget_data& widget, size_t& level) n
         ICY_ERROR(m_render_list.push_back(std::move(rwidget)));
     }
 
+    return error_type();
+}
+error_type gui_window_data_sys::input_menu(const icy::input_message& msg) noexcept
+{
+    switch (msg.type)
+    {
+    case input_type::mouse_move:
+    {
+        gui_widget_data* old_hover = nullptr;
+        gui_widget_item* old_hover_item = nullptr;
+        for (auto&& widget : m_menu.widgets)
+        {
+            if (gui_widget_state_isset(widget.state, gui_widget_state::is_hovered))
+            {
+                old_hover_item = nullptr;
+                old_hover = &widget;
+                for (auto&& item : widget.items)
+                {
+                    if (gui_node_state_isset(item.state, gui_node_state::selected))
+                    {
+                        old_hover_item = &item;
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+        gui_widget_data* new_hover = nullptr;
+        gui_widget_item* new_hover_item = nullptr;
+        for (auto&& widget : m_menu.widgets)
+        {
+            const auto min_x = lround(am_value(widget.min_x));
+            const auto min_y = lround(am_value(widget.min_y));
+            const auto max_x = lround(am_value(widget.max_x));
+            const auto max_y = lround(am_value(widget.max_y));
+
+            if (msg.point_x < min_x || msg.point_y < min_y || msg.point_x >= max_x || msg.point_y >= max_y)
+                continue;
+
+            new_hover = &widget;
+            for (auto&& item : widget.items)
+            {
+                if (msg.point_x < min_x + item.x ||
+                    msg.point_y < min_y + item.y ||
+                    msg.point_x >= min_x + item.x + item.w ||
+                    msg.point_y >= min_y + item.y + item.h)
+                    continue;
+
+                new_hover_item = &item;
+                break;
+            }
+            break;
+        }
+
+        if (old_hover)
+        {
+            gui_widget_state_unset(old_hover->state, gui_widget_state::is_hovered);
+            if (old_hover_item)
+                gui_node_state_unset(old_hover_item->state, gui_node_state::selected);
+        }
+        if (new_hover)
+        {
+            gui_widget_state_set(new_hover->state, gui_widget_state::is_hovered);
+            if (new_hover_item)
+                gui_node_state_set(new_hover_item->state, gui_node_state::selected);
+        }
+
+        if (new_hover != old_hover || new_hover_item != old_hover_item)
+        {
+            ICY_ERROR(reset(gui_reset_reason::update_menu_select));
+        }
+        break;
+    }
+    case input_type::mouse_press:
+    {
+        if (msg.key == key::mouse_left || msg.key == key::mouse_right)
+        {
+            gui_widget_data* hover = nullptr;
+            for (auto&& widget : m_menu.widgets)
+            {
+                if (gui_widget_state_isset(widget.state, gui_widget_state::is_hovered))
+                    hover = &widget;
+            }
+            auto done = false;
+            if (hover)
+            {
+                gui_widget_item* hover_item = nullptr;
+                for (auto&& item : hover->items)
+                {
+                    if (gui_node_state_isset(item.state, gui_node_state::selected))
+                        hover_item = &item;
+                }
+                if (hover_item)
+                {
+                    gui_event new_event;
+                    new_event.node = { hover_item->node };
+                    new_event.window = m_system->window(*this);
+                    new_event.model = shared_ptr<gui_data_write_model>(m_menu.model);
+                    if (auto model = m_system->model(m_menu.model))
+                    {   
+                        new_event.data = model->query({ hover_item->node }, gui_node_prop::user);
+                        if (new_event.window && new_event.model)
+                        {
+                            ICY_ERROR(event::post(m_system, event_type::gui_select, std::move(new_event)));
+                        }
+                    }
+                    done = true;
+                }
+            }
+            else
+            {
+                done = true;
+            }
+            if (done)
+            {
+                m_menu = menu_type();
+                ICY_ERROR(input_mouse_move(msg.point_x, msg.point_y, key_mod(msg.mods)));
+                ICY_ERROR(reset(gui_reset_reason::update_render_list));
+            }
+        }      
+        break;
+    }
+    }
     return error_type();
 }
 error_type gui_window_data_sys::input_key_press(const key key, const key_mod mods) noexcept
@@ -1679,24 +1881,24 @@ error_type gui_window_data_sys::input_mouse_move(const int32_t px, const int32_t
     {
         
     }
-    if (m_press)
+    if (m_press_lmb)
     {
-        auto it = m_data.find(m_press.widget);
+        auto it = m_data.find(m_press_lmb.widget);
         if (it == m_data.end())
         {
             return make_stdlib_error(std::errc::invalid_argument);
         }
-        else if (m_press.item)
+        else if (m_press_lmb.item)
         {
             auto& widget = *it->value.get();
-            auto& item = widget.items[m_press.item - 1];
+            auto& item = widget.items[m_press_lmb.item - 1];
             if (item.type == gui_widget_item_type::vscroll_val)
             {
                 auto flex_scroll = false;
                 if (const auto ptr = widget.attr.try_find(gui_widget_attr::flex_scroll))
                     to_value(*ptr, flex_scroll);
                 
-                const auto local = py - (m_press.dy + m_system->vscroll().min_default.size().y + am_value(widget.min_y));
+                const auto local = py - (m_press_lmb.dy + m_system->vscroll().size_y + am_value(widget.min_y));
                 const auto num = (widget.scroll_y.max - widget.scroll_y.view_size) * local;
                 const auto den = (widget.scroll_y.area_size - item.h);
                 
@@ -1725,7 +1927,7 @@ error_type gui_window_data_sys::input_mouse_move(const int32_t px, const int32_t
                 if (const auto ptr = widget.attr.try_find(gui_widget_attr::flex_scroll))
                     to_value(*ptr, flex_scroll);
 
-                const auto local = px - (m_press.dx + m_system->hscroll().min_default.size().x + am_value(widget.min_x));
+                const auto local = px - (m_press_lmb.dx + m_system->hscroll().size_x + am_value(widget.min_x));
                 const auto num = (widget.scroll_x.max - widget.scroll_x.view_size) * local;
                 const auto den = (widget.scroll_x.area_size - item.w);
 
@@ -1763,262 +1965,304 @@ error_type gui_window_data_sys::input_mouse_wheel(const int32_t px, const int32_
 
     return error_type();
 }
-error_type gui_window_data_sys::input_mouse_release(const key key, const int32_t px, const int32_t py, const key_mod mods) noexcept
+error_type gui_window_data_sys::input_mouse_release_lmb(const int32_t px, const int32_t py, const key_mod mods) noexcept
 {
-    if (key == key::mouse_left)
+    if (m_press_lmb)
     {
-        if (m_press)
+        if (auto hwnd = shared_ptr<icy::window>(m_window))
         {
-            if (auto hwnd = shared_ptr<icy::window>(m_window))
-            {
-                ICY_ERROR(hwnd->cursor(1, nullptr));
-            }
-
-            auto it = m_data.find(m_press.widget);
-            if (it == m_data.end())
-            {
-                return make_stdlib_error(std::errc::invalid_argument);
-            }
-            auto& widget = *it->value.get();
-            
-            if (m_hover.widget == m_press.widget && m_hover.item == m_press.item)
-            {               
-                if (m_press.item)
-                {
-                    auto& item = widget.items[m_press.item - 1];
-                    ICY_ERROR(click_widget_lmb(widget, &item));
-                }
-                else
-                {
-                    ICY_ERROR(click_widget_lmb(widget, nullptr));
-                }
-            }
-            if (m_press.item)
-            {
-                auto& item = widget.items[m_press.item - 1];
-                switch (item.type)
-                {
-                case gui_widget_item_type::vsplitter:
-                {
-                    auto pair = std::make_pair(0u, 0u);
-                    if (item.value.get(pair))
-                    {
-                        auto lhs = m_data.find(pair.first);
-                        auto rhs = m_data.find(pair.second);
-                        if (lhs != m_data.end() && rhs != m_data.end())
-                        {
-                            const auto delta = float(py) - m_splitter;
-
-                            const auto lhs_size = am_value(lhs->value->max_y) - am_value(lhs->value->min_y);
-                            auto lhs_h = lhs->value->attr.find(gui_widget_attr::height);
-                            if (lhs_h == lhs->value->attr.end())
-                                ICY_ERROR(lhs->value->attr.insert(gui_widget_attr::height, 0.0f, &lhs_h));
-                            lhs_h->value = std::max(0.0f, lhs_size + delta);
-
-                            const auto rhs_size = am_value(rhs->value->max_y) - am_value(rhs->value->min_y);
-                            auto rhs_h = rhs->value->attr.find(gui_widget_attr::height);
-                            if (rhs_h == rhs->value->attr.end())
-                                ICY_ERROR(rhs->value->attr.insert(gui_widget_attr::height, 0.0f, &rhs_h));
-                            rhs_h->value = std::max(0.0f, rhs_size - delta);
-
-                            ICY_ERROR(reset(gui_reset_reason::update_render_list));
-                        }
-                    }
-                    break;
-                }
-                case gui_widget_item_type::hsplitter:
-                {
-                    auto pair = std::make_pair(0u, 0u);
-                    if (item.value.get(pair))
-                    {
-                        auto lhs = m_data.find(pair.first);
-                        auto rhs = m_data.find(pair.second);
-                        if (lhs != m_data.end() && rhs != m_data.end())
-                        {
-                            const auto delta = float(px) - m_splitter;
-
-                            const auto lhs_size = am_value(lhs->value->max_x) - am_value(lhs->value->min_x);
-                            auto lhs_w = lhs->value->attr.find(gui_widget_attr::width);
-                            if (lhs_w == lhs->value->attr.end())
-                                ICY_ERROR(lhs->value->attr.insert(gui_widget_attr::width, 0.0f, &lhs_w));
-                            lhs_w->value = std::max(0.0f, lhs_size + delta);
-
-                            const auto rhs_size = am_value(rhs->value->max_x) - am_value(rhs->value->min_x);
-                            auto rhs_w = rhs->value->attr.find(gui_widget_attr::width);
-                            if (rhs_w == rhs->value->attr.end())
-                                ICY_ERROR(rhs->value->attr.insert(gui_widget_attr::width, 0.0f, &rhs_w));
-                            rhs_w->value = std::max(0.0f, rhs_size - delta);
-
-                            ICY_ERROR(reset(gui_reset_reason::update_render_list));
-                        }
-                    }
-                    break;
-                }
-
-                case gui_widget_item_type::vscroll_min:
-                    m_vscroll_min.cancel();
-                    ICY_ERROR(reset(gui_reset_reason::update_render_list));
-                    break;
-                case gui_widget_item_type::vscroll_max:
-                    m_vscroll_max.cancel();
-                    ICY_ERROR(reset(gui_reset_reason::update_render_list));
-                    break;
-                case gui_widget_item_type::vscroll_val:
-                    m_vscroll_val.cancel();
-                    ICY_ERROR(reset(gui_reset_reason::update_render_list));
-                    break;
-                case gui_widget_item_type::hscroll_min:
-                    m_hscroll_min.cancel();
-                    ICY_ERROR(reset(gui_reset_reason::update_render_list));
-                    break;
-                case gui_widget_item_type::hscroll_max:
-                    m_hscroll_max.cancel();
-                    ICY_ERROR(reset(gui_reset_reason::update_render_list));
-                    break;
-                case gui_widget_item_type::hscroll_val:
-                    m_hscroll_val.cancel();
-                    ICY_ERROR(reset(gui_reset_reason::update_render_list));
-                    break;
-                }
-            }
-            m_press = press_type();
+            ICY_ERROR(hwnd->cursor(1, nullptr));
         }
-    }
-    return error_type();
-}
-error_type gui_window_data_sys::input_mouse_press(const key key, const int32_t px, const int32_t py, const key_mod mods) noexcept
-{
-    if (key == key::mouse_left)
-    {
-        m_focus = focus_type();
-        m_press = m_hover;
-        if (!m_hover)
-            return error_type();// reset(gui_reset_reason::update_render_list);
-        
-        auto it = m_data.find(m_press.widget);
-        if (it == m_data.end())
-            return make_stdlib_error(std::errc::invalid_argument);
-        
-        auto& widget = *it->value.get();
-        m_focus.widget = m_press.widget;
-        m_focus.item = m_press.item;
 
-        if (m_press.item)
+        auto it = m_data.find(m_press_lmb.widget);
+        if (it == m_data.end())
         {
-            const auto& item = widget.items[m_press.item - 1];
+            return make_stdlib_error(std::errc::invalid_argument);
+        }
+        auto& widget = *it->value.get();
+
+        if (m_hover.widget == m_press_lmb.widget && m_hover.item == m_press_lmb.item)
+        {
+            if (m_press_lmb.item)
+            {
+                auto& item = widget.items[m_press_lmb.item - 1];
+                //ICY_ERROR(click_widget_lmb(widget, &item));
+                ICY_ERROR(m_system->post_select(*this, widget.index, item.node));
+            }
+            else
+            {
+                //ICY_ERROR(click_widget_lmb(widget, nullptr));
+            }
+        }
+        if (m_press_lmb.item)
+        {
+            auto& item = widget.items[m_press_lmb.item - 1];
             switch (item.type)
             {
             case gui_widget_item_type::vsplitter:
             {
-                m_splitter = float(py);
-                if (auto hwnd = shared_ptr<icy::window>(m_window))
+                auto pair = std::make_pair(0u, 0u);
+                if (item.value.get(pair))
                 {
-                    ICY_ERROR(hwnd->cursor(1, m_system->cursor(window_cursor::type::size_y)));
+                    auto lhs = m_data.find(pair.first);
+                    auto rhs = m_data.find(pair.second);
+                    if (lhs != m_data.end() && rhs != m_data.end())
+                    {
+                        const auto delta = float(py) - m_splitter;
+
+                        const auto lhs_size = am_value(lhs->value->max_y) - am_value(lhs->value->min_y);
+                        auto lhs_h = lhs->value->attr.find(gui_widget_attr::height);
+                        if (lhs_h == lhs->value->attr.end())
+                            ICY_ERROR(lhs->value->attr.insert(gui_widget_attr::height, 0.0f, &lhs_h));
+                        lhs_h->value = std::max(0.0f, lhs_size + delta);
+
+                        const auto rhs_size = am_value(rhs->value->max_y) - am_value(rhs->value->min_y);
+                        auto rhs_h = rhs->value->attr.find(gui_widget_attr::height);
+                        if (rhs_h == rhs->value->attr.end())
+                            ICY_ERROR(rhs->value->attr.insert(gui_widget_attr::height, 0.0f, &rhs_h));
+                        rhs_h->value = std::max(0.0f, rhs_size - delta);
+
+                        ICY_ERROR(reset(gui_reset_reason::update_render_list));
+                    }
                 }
                 break;
             }
             case gui_widget_item_type::hsplitter:
             {
-                m_splitter = float(px);
-                if (auto hwnd = shared_ptr<icy::window>(m_window))
+                auto pair = std::make_pair(0u, 0u);
+                if (item.value.get(pair))
                 {
-                    ICY_ERROR(hwnd->cursor(1, m_system->cursor(window_cursor::type::size_x)));
+                    auto lhs = m_data.find(pair.first);
+                    auto rhs = m_data.find(pair.second);
+                    if (lhs != m_data.end() && rhs != m_data.end())
+                    {
+                        const auto delta = float(px) - m_splitter;
+
+                        const auto lhs_size = am_value(lhs->value->max_x) - am_value(lhs->value->min_x);
+                        auto lhs_w = lhs->value->attr.find(gui_widget_attr::width);
+                        if (lhs_w == lhs->value->attr.end())
+                            ICY_ERROR(lhs->value->attr.insert(gui_widget_attr::width, 0.0f, &lhs_w));
+                        lhs_w->value = std::max(0.0f, lhs_size + delta);
+
+                        const auto rhs_size = am_value(rhs->value->max_x) - am_value(rhs->value->min_x);
+                        auto rhs_w = rhs->value->attr.find(gui_widget_attr::width);
+                        if (rhs_w == rhs->value->attr.end())
+                            ICY_ERROR(rhs->value->attr.insert(gui_widget_attr::width, 0.0f, &rhs_w));
+                        rhs_w->value = std::max(0.0f, rhs_size - delta);
+
+                        ICY_ERROR(reset(gui_reset_reason::update_render_list));
+                    }
                 }
                 break;
             }
 
             case gui_widget_item_type::vscroll_min:
-            {
-                widget.scroll_y.val -= widget.scroll_y.step;
-                widget.scroll_y.exp = widget.scroll_y.val;
-                widget.scroll_y.clamp();
-                ICY_ERROR(m_vscroll_min.reset(m_system->scroll_update_freq()));
-                return reset(gui_reset_reason::update_render_list);
-            }
+                m_vscroll_min.cancel();
+                ICY_ERROR(reset(gui_reset_reason::update_render_list));
+                break;
             case gui_widget_item_type::vscroll_max:
-            {
-                widget.scroll_y.val += widget.scroll_y.step;
-                widget.scroll_y.exp = widget.scroll_y.val;
-                widget.scroll_y.clamp();
-                ICY_ERROR(m_vscroll_max.reset(m_system->scroll_update_freq()));
-                return reset(gui_reset_reason::update_render_list);
-            }
-            case gui_widget_item_type::hscroll_min:
-            {
-                widget.scroll_x.val -= widget.scroll_x.step;
-                widget.scroll_x.exp = widget.scroll_x.val;
-                widget.scroll_x.clamp();
-                ICY_ERROR(m_hscroll_min.reset(m_system->scroll_update_freq()));
-                return reset(gui_reset_reason::update_render_list);
-            }
-            case gui_widget_item_type::hscroll_max:
-            {
-                widget.scroll_x.val += widget.scroll_x.step;
-                widget.scroll_x.exp = widget.scroll_x.val;
-                widget.scroll_x.clamp();
-                ICY_ERROR(m_hscroll_max.reset(m_system->scroll_update_freq()));
-                return reset(gui_reset_reason::update_render_list);
-            }
-            case gui_widget_item_type::vscroll_bk:
-            case gui_widget_item_type::hscroll_bk:
+                m_vscroll_max.cancel();
+                ICY_ERROR(reset(gui_reset_reason::update_render_list));
+                break;
             case gui_widget_item_type::vscroll_val:
+                m_vscroll_val.cancel();
+                ICY_ERROR(reset(gui_reset_reason::update_render_list));
+                break;
+            case gui_widget_item_type::hscroll_min:
+                m_hscroll_min.cancel();
+                ICY_ERROR(reset(gui_reset_reason::update_render_list));
+                break;
+            case gui_widget_item_type::hscroll_max:
+                m_hscroll_max.cancel();
+                ICY_ERROR(reset(gui_reset_reason::update_render_list));
+                break;
             case gui_widget_item_type::hscroll_val:
-                return error_type();
-            }
-        }
-
-        if (widget.type == gui_widget_type::edit_line ||
-            widget.type == gui_widget_type::edit_text)
-        {
-            gui_widget_item* item = nullptr;
-            for (auto&& ptr : widget.items)
-            {
-                if (ptr.type == gui_widget_item_type::text && gui_node_state_isset(ptr.state, gui_node_state::editable))
-                {
-                    item = &ptr;
-                    break;
-                }
-            }
-            if (!item)
-                return error_type();
-
-            DWRITE_HIT_TEST_METRICS metrics;
-            auto trailing = FALSE;
-            auto inside = FALSE;
-            ICY_COM_ERROR(item->text->HitTestPoint(float(m_press.dx), float(m_press.dy), &trailing, &inside, &metrics));
-            string str;
-            ICY_ERROR(to_string(item->value, str));
-            auto pos = 0u;
-            auto posw = 0u;
-            for (auto it = str.begin(); it != str.end() && posw < metrics.textPosition; ++it, ++pos)
-            {
-                wchar_t wchr[2] = {};
-                const auto wlen = it.to_utf16(wchr);
-                if (!wlen)
-                    return make_stdlib_error(std::errc::invalid_argument);
-                posw += uint32_t(wcslen(wchr));
-            }
-            m_focus.text_select_beg = m_focus.text_select_end = pos;
-            m_focus.text_trail_beg = m_focus.text_trail_end = !!trailing;
-            m_focus.item = uint32_t(std::distance(widget.items.data(), item)) + 1;
-            return reset(gui_reset_reason::update_text_caret);
-        }
-        else if (widget.type == gui_widget_type::view_tabs)
-        {
-            if (m_press.item)
-            {
-                auto& item = widget.items[m_press.item - 1];
-                if (item.type == gui_widget_item_type::text && gui_node_state_isset(item.state, gui_node_state::enabled))
-                {
-                    for (auto&& other_item : widget.items)
-                        gui_node_state_unset(other_item.state, gui_node_state::selected);
-                    gui_node_state_set(item.state, gui_node_state::selected); 
-                    ICY_ERROR(m_system->post_change(*this, { widget.index }));
-                    return reset(gui_reset_reason::update_render_list);
-                }
+                m_hscroll_val.cancel();
+                ICY_ERROR(reset(gui_reset_reason::update_render_list));
+                break;
             }
         }
     }
+    m_press_lmb = press_type();
+    return error_type();
+}
+error_type gui_window_data_sys::input_mouse_release_rmb(const int32_t px, const int32_t py, const key_mod mods) noexcept
+{
+    if (m_press_rmb)
+    {
+        auto it = m_data.find(m_press_rmb.widget);
+        if (it == m_data.end())
+        {
+            return make_stdlib_error(std::errc::invalid_argument);
+        }
+        auto& widget = *it->value.get();
+
+        if (m_hover.widget == m_press_rmb.widget && m_hover.item == m_press_rmb.item)
+        {
+            if (m_press_rmb.item)
+            {
+                auto& item = widget.items[m_press_rmb.item - 1];
+                ICY_ERROR(m_system->post_context(*this, widget.index, item.node));
+            }
+            else
+            {
+                ICY_ERROR(m_system->post_context(*this, widget.index, 0u));
+            }
+        }
+        if (m_press_rmb.item)
+        {
+            auto& item = widget.items[m_press_rmb.item - 1];
+        }
+    }
+    m_press_rmb = press_type();
+    return error_type();
+}
+error_type gui_window_data_sys::input_mouse_press_lmb(const int32_t px, const int32_t py, const key_mod mods) noexcept
+{
+    m_focus = focus_type();
+    m_press_lmb = m_hover;
+    if (!m_hover)
+        return error_type();// reset(gui_reset_reason::update_render_list);
+
+    auto it = m_data.find(m_press_lmb.widget);
+    if (it == m_data.end())
+        return make_stdlib_error(std::errc::invalid_argument);
+
+    auto& widget = *it->value.get();
+    m_focus.widget = m_press_lmb.widget;
+    m_focus.item = m_press_lmb.item;
+
+    if (m_press_lmb.item)
+    {
+        const auto& item = widget.items[m_press_lmb.item - 1];
+        switch (item.type)
+        {
+        case gui_widget_item_type::vsplitter:
+        {
+            m_splitter = float(py);
+            if (auto hwnd = shared_ptr<icy::window>(m_window))
+            {
+                ICY_ERROR(hwnd->cursor(1, m_system->cursor(window_cursor::type::size_y)));
+            }
+            break;
+        }
+        case gui_widget_item_type::hsplitter:
+        {
+            m_splitter = float(px);
+            if (auto hwnd = shared_ptr<icy::window>(m_window))
+            {
+                ICY_ERROR(hwnd->cursor(1, m_system->cursor(window_cursor::type::size_x)));
+            }
+            break;
+        }
+
+        case gui_widget_item_type::vscroll_min:
+        {
+            widget.scroll_y.val -= widget.scroll_y.step;
+            widget.scroll_y.exp = widget.scroll_y.val;
+            widget.scroll_y.clamp();
+            ICY_ERROR(m_vscroll_min.reset(m_system->scroll_update_freq()));
+            return reset(gui_reset_reason::update_render_list);
+        }
+        case gui_widget_item_type::vscroll_max:
+        {
+            widget.scroll_y.val += widget.scroll_y.step;
+            widget.scroll_y.exp = widget.scroll_y.val;
+            widget.scroll_y.clamp();
+            ICY_ERROR(m_vscroll_max.reset(m_system->scroll_update_freq()));
+            return reset(gui_reset_reason::update_render_list);
+        }
+        case gui_widget_item_type::hscroll_min:
+        {
+            widget.scroll_x.val -= widget.scroll_x.step;
+            widget.scroll_x.exp = widget.scroll_x.val;
+            widget.scroll_x.clamp();
+            ICY_ERROR(m_hscroll_min.reset(m_system->scroll_update_freq()));
+            return reset(gui_reset_reason::update_render_list);
+        }
+        case gui_widget_item_type::hscroll_max:
+        {
+            widget.scroll_x.val += widget.scroll_x.step;
+            widget.scroll_x.exp = widget.scroll_x.val;
+            widget.scroll_x.clamp();
+            ICY_ERROR(m_hscroll_max.reset(m_system->scroll_update_freq()));
+            return reset(gui_reset_reason::update_render_list);
+        }
+        case gui_widget_item_type::vscroll_bk:
+        case gui_widget_item_type::hscroll_bk:
+        case gui_widget_item_type::vscroll_val:
+        case gui_widget_item_type::hscroll_val:
+            return error_type();
+        }
+    }
+
+    if (widget.type == gui_widget_type::edit_line ||
+        widget.type == gui_widget_type::edit_text)
+    {
+        gui_widget_item* item = nullptr;
+        for (auto&& ptr : widget.items)
+        {
+            if (ptr.type == gui_widget_item_type::text && gui_node_state_isset(ptr.state, gui_node_state::editable))
+            {
+                item = &ptr;
+                break;
+            }
+        }
+        if (!item)
+            return error_type();
+
+        DWRITE_HIT_TEST_METRICS metrics;
+        auto trailing = FALSE;
+        auto inside = FALSE;
+        ICY_COM_ERROR(item->text->HitTestPoint(float(m_press_lmb.dx), float(m_press_lmb.dy), &trailing, &inside, &metrics));
+        string str;
+        ICY_ERROR(to_string(item->value, str));
+        auto pos = 0u;
+        auto posw = 0u;
+        for (auto it = str.begin(); it != str.end() && posw < metrics.textPosition; ++it, ++pos)
+        {
+            wchar_t wchr[2] = {};
+            const auto wlen = it.to_utf16(wchr);
+            if (!wlen)
+                return make_stdlib_error(std::errc::invalid_argument);
+            posw += uint32_t(wcslen(wchr));
+        }
+        m_focus.text_select_beg = m_focus.text_select_end = pos;
+        m_focus.text_trail_beg = m_focus.text_trail_end = !!trailing;
+        m_focus.item = uint32_t(std::distance(widget.items.data(), item)) + 1;
+        return reset(gui_reset_reason::update_text_caret);
+    }
+    else if (widget.type == gui_widget_type::view_tabs)
+    {
+        if (m_press_lmb.item)
+        {
+            auto& item = widget.items[m_press_lmb.item - 1];
+            if (item.type == gui_widget_item_type::text && gui_node_state_isset(item.state, gui_node_state::enabled))
+            {
+                for (auto&& other_item : widget.items)
+                    gui_node_state_unset(other_item.state, gui_node_state::selected);
+                gui_node_state_set(item.state, gui_node_state::selected);
+                ICY_ERROR(m_system->post_change(*this, { widget.index }));
+                return reset(gui_reset_reason::update_render_list);
+            }
+        }
+    }
+    return error_type();
+}
+error_type gui_window_data_sys::input_mouse_press_rmb(const int32_t px, const int32_t py, const key_mod mods) noexcept
+{
+    m_focus = focus_type();
+    m_press_rmb = m_hover;
+    if (!m_hover)
+        return error_type();// reset(gui_reset_reason::update_render_list);
+
+    auto it = m_data.find(m_press_rmb.widget);
+    if (it == m_data.end())
+        return make_stdlib_error(std::errc::invalid_argument);
+
+    auto& widget = *it->value.get();
+    m_focus.widget = m_press_rmb.widget;
+    m_focus.item = m_press_rmb.item;
     return error_type();
 }
 error_type gui_window_data_sys::input_mouse_double(const key key, const int32_t px, const int32_t py, const key_mod mods) noexcept
@@ -2265,11 +2509,28 @@ error_type gui_window_data_sys::make_view(const gui_model_proxy_read& proxy, con
 
     return error_type();
 }
-error_type gui_window_data_sys::click_widget_lmb(gui_widget_data& widget, gui_widget_item* const item) noexcept
+error_type gui_window_data_sys::append_menu() noexcept
 {
-    if (item)
+    auto model = m_system->model(m_menu.model);
+    if (!model)
+        return error_type();
+
+    const auto node_data = model->data(m_menu.nodes.back());
+    if (!node_data)
+        return error_type();
+
+    gui_widget_data widget(&m_menu.root, uint32_t(m_menu.widgets.size() + 1));
+    widget.parent = &m_menu.root;
+    widget.type = gui_widget_type::view_list;
+    ICY_ERROR(widget.attr.insert(gui_widget_attr::bkcolor, colors::navy));
+    gui_widget_state_unset(widget.state, gui_widget_state::vscroll_auto);
+    gui_widget_state_unset(widget.state, gui_widget_state::hscroll_auto);
+    ICY_ERROR(make_view(*model, *node_data, gui_data_bind(), widget));
+    ICY_ERROR(m_menu.widgets.push_back(std::move(widget)));
+    m_menu.root.children.clear();
+    for (auto&& child : m_menu.widgets)
     {
-        
+        ICY_ERROR(m_menu.root.children.push_back(&child));
     }
     return error_type();
 }
@@ -2485,6 +2746,30 @@ error_type gui_window_data_sys::process(const gui_window_event_type& event) noex
         gui_widget_data::erase(m_data, event.index);
         break;
     }
+    case gui_window_event_type::show_menu:
+    {
+        std::pair<shared_ptr<gui_data_write_model>, gui_node> pair;
+        if (event.val.get(pair))
+        {
+            m_menu = menu_type();
+            auto model = m_system->model(pair.first);
+            if (model)
+            {
+                const auto node_data = model->data(pair.second);
+                if (node_data)
+                {
+                    m_menu.point_x = float(m_last_x);
+                    m_menu.point_y = float(m_last_y);
+                    m_menu.model = pair.first;
+                    m_menu.root.type = gui_widget_type::window_popup;
+                    m_menu.root.layout = gui_widget_layout::hbox;
+                    ICY_ERROR(m_menu.nodes.push_back(pair.second));
+                    ICY_ERROR(append_menu());
+                }
+            }
+        }
+        break;
+    }
     default:
         return error_type();
     }
@@ -2527,7 +2812,7 @@ error_type gui_window_data_sys::recv_data(const gui_model_proxy_read& proxy, con
     const auto reset_items = [&]
     {
         if (m_hover.widget == it->key) m_hover.item = 0;
-        if (m_press.widget == it->key) m_press.item = 0;
+        if (m_press_lmb.widget == it->key) m_press_lmb.item = 0;
         if (m_focus.widget == it->key) m_focus.item = 0;
         widget.items.clear();
         widget.size_x = 0;
@@ -2585,15 +2870,15 @@ error_type gui_window_data_sys::timer(timer::pair& pair) noexcept
     gui_widget_data* widget = nullptr;
     const auto func = [&]() -> error_type
     {
-        if (!m_press)
+        if (!m_press_lmb)
         {
             pair.timer->cancel();
             return error_type();
         }
-        auto it = m_data.find(m_press.widget);
+        auto it = m_data.find(m_press_lmb.widget);
         if (it == m_data.end())
         {
-            m_press = press_type();
+            m_press_lmb = press_type();
             pair.timer->cancel();
             return make_stdlib_error(std::errc::invalid_argument);
         }
@@ -2643,7 +2928,7 @@ error_type gui_window_data_sys::timer(timer::pair& pair) noexcept
     else if (m_vscroll_min.check(pair, dt))
     {
         ICY_ERROR(func());
-        if (widget && m_hover.widget == m_press.widget && m_hover.item == m_press.item)
+        if (widget && m_hover.widget == m_press_lmb.widget && m_hover.item == m_press_lmb.item)
         {
             widget->scroll_y.val -= widget->scroll_y.step * dt * step_per_sec;
             widget->scroll_y.clamp();
@@ -2654,7 +2939,7 @@ error_type gui_window_data_sys::timer(timer::pair& pair) noexcept
     else if (m_hscroll_min.check(pair, dt))
     {
         ICY_ERROR(func());
-        if (widget && m_hover.widget == m_press.widget && m_hover.item == m_press.item)
+        if (widget && m_hover.widget == m_press_lmb.widget && m_hover.item == m_press_lmb.item)
         {
             widget->scroll_x.val -= widget->scroll_x.step * dt * step_per_sec;
             widget->scroll_x.clamp();
@@ -2665,7 +2950,7 @@ error_type gui_window_data_sys::timer(timer::pair& pair) noexcept
     else if (m_vscroll_max.check(pair, dt))
     {
         ICY_ERROR(func());
-        if (widget && m_hover.widget == m_press.widget && m_hover.item == m_press.item)
+        if (widget && m_hover.widget == m_press_lmb.widget && m_hover.item == m_press_lmb.item)
         {
             widget->scroll_y.val += widget->scroll_y.step * dt * step_per_sec;
             widget->scroll_y.clamp();
@@ -2676,7 +2961,7 @@ error_type gui_window_data_sys::timer(timer::pair& pair) noexcept
     else if (m_hscroll_max.check(pair, dt))
     {
         ICY_ERROR(func());
-        if (widget && m_hover.widget == m_press.widget && m_hover.item == m_press.item)
+        if (widget && m_hover.widget == m_press_lmb.widget && m_hover.item == m_press_lmb.item)
         {
             widget->scroll_x.val += widget->scroll_x.step * dt * step_per_sec;
             widget->scroll_x.clamp();
@@ -2724,7 +3009,7 @@ error_type gui_window_data_sys::reset(const gui_reset_reason reason) noexcept
     }
     return error_type();
 }
-error_type gui_window_data_sys::render(gui_texture& texture) noexcept
+error_type gui_window_data_sys::render(array<window_render_item>& list) noexcept
 {
     const auto& root = *m_data.front().value;
     color bkcolor;
@@ -2732,16 +3017,24 @@ error_type gui_window_data_sys::render(gui_texture& texture) noexcept
     if (const auto ptr = root.attr.try_find(gui_widget_attr::bkcolor))
         to_value(*ptr, bkcolor);
     
-    texture.draw_begin(bkcolor);
-    
-    const auto draw_splitter = [this, &texture](const render_item& item)
     {
-        gui_texture::rect_type rect;
-        rect.min_x = item.x;
-        rect.min_y = item.y;
-        rect.max_x = rect.min_x + item.item->w;
-        rect.max_y = rect.min_y + item.item->h;
-        texture.fill_rect(rect, colors::light_gray);
+        window_render_item render_item;
+        render_item.type = window_render_item_type::clear;
+        render_item.color = bkcolor;
+        ICY_ERROR(list.push_back(std::move(render_item)));
+    }
+    
+    const auto draw_splitter = [this, &list](const render_item& item)
+    {
+        window_render_item render_item;
+        render_item.type = window_render_item_type::rect;
+        render_item.min_x = item.x;
+        render_item.min_y = item.y;
+        render_item.max_x = render_item.min_x + item.item->w;
+        render_item.max_y = render_item.min_y + item.item->h;
+        render_item.color = colors::light_gray;
+        ICY_ERROR(list.push_back(std::move(render_item)));
+        return error_type();
     };
 
     render_item* splitter_item = nullptr;
@@ -2758,7 +3051,17 @@ error_type gui_window_data_sys::render(gui_texture& texture) noexcept
         if (const auto ptr = widget->attr.try_find(gui_widget_attr::bkcolor))
             to_value(*ptr, bkcolor);
 
-        ICY_ERROR(texture.fill_rect({ x0, y0, x1, y1 }, bkcolor));
+        {
+            window_render_item render_item;
+            render_item.type = window_render_item_type::rect;
+            render_item.color = bkcolor;
+            render_item.min_x = x0;
+            render_item.min_y = y0;
+            render_item.max_x = x1;
+            render_item.max_y = y1;
+            if (bkcolor.a)
+                ICY_ERROR(list.push_back(std::move(render_item)));
+        }
 
         auto clip = false;
         if (false
@@ -2767,21 +3070,27 @@ error_type gui_window_data_sys::render(gui_texture& texture) noexcept
             || gui_widget_state_isset(widget->state, gui_widget_state::has_row_header)
             || gui_widget_state_isset(widget->state, gui_widget_state::has_col_header))
         {
-            auto clip_rect = gui_texture::rect_type{ x0, y0, x1, y1 };
+            window_render_item render_item;
+            render_item.type = window_render_item_type::clip_push;
+            render_item.min_x = x0;
+            render_item.min_y = y0;
+            render_item.max_x = x1;
+            render_item.max_y = y1;
+            //auto clip_rect = gui_texture::rect_type{ x0, y0, x1, y1 };
             
             if (gui_widget_state_isset(widget->state, gui_widget_state::has_vscroll))
-                clip_rect.max_x -= m_system->vscroll().size;
+                render_item.max_x -= m_system->vscroll().size_x;
             
             if (gui_widget_state_isset(widget->state, gui_widget_state::has_hscroll))
-                clip_rect.max_y -= m_system->hscroll().size;
+                render_item.max_y -= m_system->hscroll().size_y;
             
             if (gui_widget_state_isset(widget->state, gui_widget_state::has_row_header))
-                clip_rect.min_x += widget->row_header;
+                render_item.min_x += widget->row_header;
 
             if (gui_widget_state_isset(widget->state, gui_widget_state::has_col_header))
-                clip_rect.min_y += widget->col_header;
+                render_item.min_y += widget->col_header;
 
-            texture.push_clip(clip_rect);
+            ICY_ERROR(list.push_back(std::move(render_item)));
             clip = true;
         }
         auto it = pair.items.begin();
@@ -2790,7 +3099,18 @@ error_type gui_window_data_sys::render(gui_texture& texture) noexcept
             if (it->item->type == gui_widget_item_type::text)
             {
                 const auto item_index = uint32_t(std::distance(widget->items.data(), it->item));
-                ICY_ERROR(texture.draw_text(it->x, it->y, it->item->color, it->item->text.value));
+                {
+                    window_render_item render_item;
+                    render_item.type = window_render_item_type::text;
+                    render_item.min_x = it->x;
+                    render_item.min_y = it->y;
+                    render_item.color = it->item->color;
+                    auto handle = it->item->text.value.get();
+                    render_item.handle = handle;
+                    handle->AddRef();
+                    ICY_ERROR(list.push_back(std::move(render_item)));
+                }
+
                 if (m_focus && m_focus.widget == widget->index && m_focus.item == item_index + 1 && it->item->text)
                 {
                     if (m_caret_visible && gui_node_state_isset(it->item->state, gui_node_state::editable))
@@ -2812,12 +3132,14 @@ error_type gui_window_data_sys::render(gui_texture& texture) noexcept
                         }
                         ICY_COM_ERROR(it->item->text->HitTestTextPosition(posw, m_focus.text_trail_end, &px, &py, &metrics));
 
-                        gui_texture::rect_type caret_rect;
-                        caret_rect.min_x = it->x + px;
-                        caret_rect.min_y = it->y + py;
-                        caret_rect.max_x = caret_rect.min_x + 2;
-                        caret_rect.max_y = caret_rect.min_y + metrics.height;
-                        ICY_ERROR(texture.fill_rect(caret_rect, colors::white));
+                        window_render_item render_item;
+                        render_item.type = window_render_item_type::rect;
+                        render_item.min_x = it->x + px;
+                        render_item.min_y = it->y + py;
+                        render_item.max_x = render_item.min_x + 2;
+                        render_item.max_y = render_item.min_y + metrics.height;
+                        render_item.color = colors::white;
+                        ICY_ERROR(list.push_back(std::move(render_item)));
                     }
                 }
             }
@@ -2828,55 +3150,94 @@ error_type gui_window_data_sys::render(gui_texture& texture) noexcept
         }
         if (clip)
         {
-            texture.pop_clip();
+            window_render_item render_item;
+            render_item.type = window_render_item_type::clip_pop;
+            ICY_ERROR(list.push_back(std::move(render_item)));
             clip = false;
         }
 
         if (gui_widget_state_isset(widget->state, gui_widget_state::has_row_header))
         {
-            auto clip_rect = gui_texture::rect_type{ x0, y0, x0 + widget->row_header, y1 };
-            if (gui_widget_state_isset(widget->state, gui_widget_state::has_col_header))
-                clip_rect.min_y += widget->col_header;
+            {
+                window_render_item render_item;
+                render_item.type = window_render_item_type::clip_push;
+                render_item.min_x = x0;
+                render_item.min_y = y0;
+                render_item.max_x = x0 + widget->row_header;
+                render_item.max_y = y1;
 
-            if (gui_widget_state_isset(widget->state, gui_widget_state::has_hscroll))
-                clip_rect.max_y -= m_system->hscroll().size;
+                if (gui_widget_state_isset(widget->state, gui_widget_state::has_col_header))
+                    render_item.min_y += widget->col_header;
 
-            texture.push_clip(clip_rect);
+                if (gui_widget_state_isset(widget->state, gui_widget_state::has_hscroll))
+                    render_item.max_y -= m_system->hscroll().size_y;
+
+                ICY_ERROR(list.push_back(std::move(render_item)));
+            }
             for (; it != pair.items.end(); ++it)
             {
                 if (it->item->type == gui_widget_item_type::row_header)
                 {
-                    ICY_ERROR(texture.draw_text(it->x, it->y, it->item->color, it->item->text.value));
+                    window_render_item render_item;
+                    render_item.type = window_render_item_type::text;
+                    render_item.min_x = it->x;
+                    render_item.min_y = it->y;
+                    render_item.color = it->item->color;
+                    auto handle = it->item->text.value;
+                    render_item.handle = handle.get();
+                    handle->AddRef();
+                    ICY_ERROR(list.push_back(std::move(render_item)));
                 }
                 else
                 {
                     break;
                 }
             }
-            texture.pop_clip();
+            window_render_item render_item;
+            render_item.type = window_render_item_type::clip_pop;
+            ICY_ERROR(list.push_back(std::move(render_item)));
         }
         if (gui_widget_state_isset(widget->state, gui_widget_state::has_col_header))
         {
-            auto clip_rect = gui_texture::rect_type{ x0, y0, x1, y0 + widget->col_header };
-            if (gui_widget_state_isset(widget->state, gui_widget_state::has_row_header))
-                clip_rect.min_x += widget->row_header;
+            {
+                window_render_item render_item;
+                render_item.type = window_render_item_type::clip_push;
+                render_item.min_x = x0;
+                render_item.min_y = y0;
+                render_item.max_x = x1;
+                render_item.max_y = y0 + widget->col_header;
 
-            if (gui_widget_state_isset(widget->state, gui_widget_state::has_vscroll))
-                clip_rect.max_x -= m_system->vscroll().size;
+                if (gui_widget_state_isset(widget->state, gui_widget_state::has_row_header))
+                    render_item.min_x += widget->row_header;
 
-            texture.push_clip(clip_rect);
+                if (gui_widget_state_isset(widget->state, gui_widget_state::has_vscroll))
+                    render_item.max_x -= m_system->vscroll().size_x;
+
+                ICY_ERROR(list.push_back(std::move(render_item)));
+            }
+
             for (; it != pair.items.end(); ++it)
             {
                 if (it->item->type == gui_widget_item_type::col_header)
                 {
-                    ICY_ERROR(texture.draw_text(it->x, it->y, it->item->color, it->item->text.value));
+                    window_render_item render_item;
+                    render_item.type = window_render_item_type::text;
+                    render_item.min_x = it->x;
+                    render_item.min_y = it->y;
+                    render_item.color = it->item->color;
+                    auto handle = it->item->text.value;
+                    render_item.handle = handle.get();
+                    handle->AddRef();
+                    ICY_ERROR(list.push_back(std::move(render_item)));
                 }
                 else
                 {
                     break;
                 }
             }
-            texture.pop_clip();
+            window_render_item render_item;
+            render_item.type = window_render_item_type::clip_pop;
+            ICY_ERROR(list.push_back(std::move(render_item)));
         }
         if (widget->type == gui_widget_type::splitter)
         {
@@ -2887,7 +3248,7 @@ error_type gui_window_data_sys::render(gui_texture& texture) noexcept
                     it->item->type == gui_widget_item_type::hsplitter)
                 {
                     draw_splitter(*it);
-                    if (m_press && m_press.widget == widget->index && m_press.item == item_index + 1)
+                    if (m_press_lmb && m_press_lmb.widget == widget->index && m_press_lmb.item == item_index + 1)
                         splitter_item = &*it;
                 }
                 else
@@ -2905,12 +3266,14 @@ error_type gui_window_data_sys::render(gui_texture& texture) noexcept
                     it->item->type == gui_widget_item_type::vscroll_max ||
                     it->item->type == gui_widget_item_type::vscroll_val)
                 {
-                    gui_texture::rect_type rect;
-                    rect.min_x = rect.max_x = it->x;
-                    rect.min_y = rect.max_y = it->y;
-                    rect.max_x += it->item->w;
-                    rect.max_y += it->item->h;
-                    texture.draw_image(rect, it->item->image.value);
+                    window_render_item render_item;
+                    render_item.type = window_render_item_type::image;
+                    render_item.min_x = render_item.max_x = it->x;
+                    render_item.min_y = render_item.max_y = it->y;
+                    render_item.max_x += it->item->w;
+                    render_item.max_y += it->item->h;
+                    render_item.blob = it->item->image;
+                    ICY_ERROR(list.push_back(std::move(render_item)));
                 }
                 else
                 {
@@ -2927,12 +3290,14 @@ error_type gui_window_data_sys::render(gui_texture& texture) noexcept
                     it->item->type == gui_widget_item_type::hscroll_max ||
                     it->item->type == gui_widget_item_type::hscroll_val)
                 {
-                    gui_texture::rect_type rect;
-                    rect.min_x = rect.max_x = it->x;
-                    rect.min_y = rect.max_y = it->y;
-                    rect.max_x += it->item->w;
-                    rect.max_y += it->item->h;
-                    texture.draw_image(rect, it->item->image.value);
+                    window_render_item render_item;
+                    render_item.type = window_render_item_type::image;
+                    render_item.min_x = render_item.max_x = it->x;
+                    render_item.min_y = render_item.max_y = it->y;
+                    render_item.max_x += it->item->w;
+                    render_item.max_y += it->item->h;
+                    render_item.blob = it->item->image;
+                    ICY_ERROR(list.push_back(std::move(render_item)));
                 }
                 else
                 {
@@ -2959,7 +3324,6 @@ error_type gui_window_data_sys::render(gui_texture& texture) noexcept
         }
     }
 
-    ICY_ERROR(texture.draw_end());
     return error_type();
 }
 

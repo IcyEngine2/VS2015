@@ -60,11 +60,12 @@ private:
     {
         return *m_thread;
     }
-    error_type repaint(const texture& texture) noexcept override
+    /*error_type repaint(const texture& texture) noexcept override
     {
         return repaint(texture, window_size(), window_size());
     }
     error_type repaint(const texture& texture, const window_size offset, const window_size size) noexcept override;
+    */
     error_type resize(const window_size size) noexcept override
     {
         if (size.x == 0 || size.y == 0)
@@ -447,7 +448,7 @@ error_type display_system_data::signal(const event_data* event) noexcept
 {
     return m_update.wake();
 }
-error_type display_system_data::repaint(const texture& texture, const window_size offset, const window_size size) noexcept
+/*error_type display_system_data::repaint(const texture& texture, const window_size offset, const window_size size) noexcept
 {
     const auto handle = texture.handle();
     if (!handle)
@@ -462,7 +463,7 @@ error_type display_system_data::repaint(const texture& texture, const window_siz
     ICY_ERROR(m_frame.queue.push(std::move(new_texture)));
     ICY_ERROR(m_update.wake());
     return error_type();
-}
+}*/
 
 error_type icy::create_display_system(shared_ptr<display_system>& system, shared_ptr<window> window, const adapter adapter) noexcept
 {

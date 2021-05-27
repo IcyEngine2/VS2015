@@ -9,12 +9,17 @@
 #pragma comment(lib, "icy_engine_graphicsd")
 #pragma comment(lib, "icy_engine_imaged")
 #pragma comment(lib, "icy_guid")
+#pragma comment(lib, "libldapd")
 #else
 #pragma comment(lib, "icy_engine_core")
 #pragma comment(lib, "icy_engine_graphics")
 #pragma comment(lib, "icy_engine_image")
 #pragma comment(lib, "icy_gui")
+#pragma comment(lib, "libldap")
 #endif
+
+#define LDAP_DEPRECATED 1
+#include "../../source/libs/ldap/include/ldap.h"
 
 using namespace icy;
 
@@ -76,6 +81,44 @@ error_type append_nodes(gui_data_write_model& model, gui_node parent,
 error_type main_func()
 {
     ICY_ERROR(event_system::initialize());
+
+    auto ldap = ldap_init("192.168.230.120", 389);
+    if (!ldap)
+        return error_type();
+    int ldap_version = LDAP_VERSION3;
+    auto e0 = ldap_set_option_x(ldap, LDAP_OPT_PROTOCOL_VERSION, &ldap_version);
+    auto e1 = ldap_simple_bind_s(ldap, "Emily@AD", "D268Al7654");
+
+    char* attrs[] = { nullptr };
+    LDAPMessage* msg = nullptr;
+    auto e2 = ldap_search_s(ldap, nullptr, LDAP_SCOPE_SUBTREE, nullptr, attrs, 0, &msg);
+
+    auto count = ldap_count_entries(ldap, msg);
+
+    for (auto entry = ldap_first_entry(ldap, msg); entry; entry = ldap_next_entry(ldap, entry))
+    {
+        auto dname = ldap_get_dn(ldap, entry);
+        BerElement* ber = nullptr;
+        for (auto attribute = ldap_first_attribute(ldap, entry, &ber); attribute; attribute = ldap_next_attribute(ldap, entry, ber))
+        {
+            if (auto values = ldap_get_values(ldap, entry, attribute))
+            {
+                /* cycle through all values returned for this attribute */
+                for (auto i = 0; values[i]; ++i)
+                {
+                    i = i + 0;
+                    /* print each value of a attribute here */
+                    //printf("%s: %s\n", attribute, values[i]);
+                }
+                ldap_value_free(values);
+            }
+        }
+        ldap_memfree(dname);
+    }
+    ldap_msgfree(msg);
+    ldap_unbind(ldap);
+
+    
 
     array<adapter> gpu;
     ICY_ERROR(adapter::enumerate(adapter_flags::d3d11 | adapter_flags::hardware | adapter_flags::debug, gpu));

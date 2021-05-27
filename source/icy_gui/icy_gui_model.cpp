@@ -324,14 +324,25 @@ error_type gui_model_data_sys::process(const gui_model_event_type& event, set<ui
     }
     case gui_model_event_type::destroy:
     {
-        auto it = m_data.find(event.index);
-        if (it == m_data.end() || event.index == 0)
-            return error_type();
+        if (event.index == 0)
+        {
+            icy::unique_ptr<gui_node_data> root;
+            ICY_ERROR(icy::make_unique(gui_node_data(nullptr, 0), root));
+            m_data.clear();
+            ICY_ERROR(m_data.insert(0u, std::move(root)));                        
+        }
+        else
+        {
 
-        auto parent = it->value->parent;
-        gui_node_data::erase(m_data, event.index);
-        if (parent)
-            bind_node = parent->index;
+            auto it = m_data.find(event.index);
+            if (it == m_data.end())
+                return error_type();
+
+            auto parent = it->value->parent;
+            gui_node_data::erase(m_data, event.index);
+            if (parent)
+                bind_node = parent->index;
+        }
         break;
     }
     case gui_model_event_type::modify:
@@ -454,7 +465,7 @@ error_type gui_model_data_sys::recv_data(gui_window_data_sys& window, gui_widget
                             gui_node_state_set(item.state, gui_node_state::selected);
                         else
                             gui_node_state_unset(item.state, gui_node_state::selected);
-                        ICY_ERROR(window.reset(gui_reset_reason::update_render_list));
+                        ICY_ERROR(window.reset(gui_reset_reason::update_item_select));
                     }
                 }
 

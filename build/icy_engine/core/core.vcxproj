@@ -86,6 +86,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\..\source\icy_engine\core\icy_blob.cpp" />
     <ClCompile Include="..\..\..\source\icy_engine\core\icy_color.cpp" />
     <ClCompile Include="..\..\..\source\icy_engine\core\icy_console.cpp" />
     <ClCompile Include="..\..\..\source\icy_engine\core\icy_event.cpp" />
@@ -101,6 +102,7 @@
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_array.hpp" />
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_array_view.hpp" />
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_atomic.hpp" />
+    <ClInclude Include="..\..\..\include\icy_engine\core\icy_blob.hpp" />
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_color.hpp" />
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_console.hpp" />
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_core.hpp" />

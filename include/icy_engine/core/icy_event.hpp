@@ -18,7 +18,7 @@ namespace icy
             bitcnt_network  =   0x04,
             bitcnt_console  =   0x03,
             bitcnt_window   =   0x05,
-            bitcnt_gui      =   0x02,
+            bitcnt_gui      =   0x04,
             bitcnt_display  =   0x01,
             bitcnt_render   =   0x02,
 
@@ -89,7 +89,8 @@ namespace icy
 
             gui_update              =   1ui64   <<  (offset_gui + 0x00),
             gui_render              =   1ui64   <<  (offset_gui + 0x01),
-            //gui_query               =   1ui64   <<  (offset_gui + 0x02),
+            gui_context             =   1ui64   <<  (offset_gui + 0x02),
+            gui_select              =   1ui64   <<  (offset_gui + 0x03),
             gui_any                 =   mask_gui,
 
             display_update          =   1ui64   <<  (offset_display + 0x00),

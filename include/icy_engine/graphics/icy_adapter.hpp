@@ -81,7 +81,7 @@ namespace icy
         data_type* data = nullptr;
     };
 
-    struct texture
+    /*struct texture
     {
         virtual ~texture() noexcept = 0
         {
@@ -90,5 +90,5 @@ namespace icy
         virtual void* handle() const noexcept = 0;
         virtual window_size size() const noexcept = 0;
         virtual icy::adapter adapter() const noexcept = 0;
-    };
+    };*/
 }

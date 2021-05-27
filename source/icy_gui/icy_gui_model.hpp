@@ -113,6 +113,10 @@ private:
     //uint32_t row(const icy::gui_node node) const noexcept override;
     //uint32_t col(const icy::gui_node node) const noexcept override;
     //icy::gui_variant query(const icy::gui_node node, const icy::gui_node_prop prop) const noexcept override;
+    icy::shared_ptr<icy::gui_system> system() const noexcept override
+    {
+        return icy::shared_ptr<icy::gui_system>(m_system);
+    }
     icy::error_type modify(const icy::gui_node node, const icy::gui_node_prop prop, const icy::gui_variant& value) noexcept override;
     icy::error_type insert(const icy::gui_node parent, const uint32_t row, const uint32_t col, icy::gui_node& node) noexcept override;
     icy::error_type destroy(const icy::gui_node node) noexcept override;

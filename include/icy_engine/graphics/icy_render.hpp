@@ -34,7 +34,7 @@ namespace icy
         };
     }
 
-    struct render_system;
+   /* struct render_system;
     struct render_query
     {
         virtual ~render_query() noexcept = 0
@@ -104,4 +104,5 @@ namespace icy
     };
 
     error_type create_render_system(shared_ptr<render_system>& system, const adapter adapter) noexcept;
+    */
 }

@@ -136,14 +136,6 @@ gui_widget_type gui_str_to_type(const string_view str) noexcept
 	case "MainMenu"_hash:
 		return gui_widget_type::menu_main;
 
-	case "menu_popup"_hash:
-	case "menuPopup"_hash:
-	case "MenuPopup"_hash:
-	case "popup_menu"_hash:
-	case "popupMenu"_hash:
-	case "PopupMenu"_hash:
-		return gui_widget_type::menu_popup;
-
 	case "view_combo"_hash:
 	case "viewCombo"_hash:
 	case "ViewCombo"_hash:

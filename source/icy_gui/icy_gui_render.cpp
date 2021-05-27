@@ -18,17 +18,17 @@ IDWriteTextLayout* gui_text::operator->() const noexcept
 {
 	return static_cast<IDWriteTextLayout*>(value.get());
 }
-ID2D1Bitmap* gui_image::operator->() const noexcept
+/*ID2D1Bitmap* blob::operator->() const noexcept
 {
 	return static_cast<ID2D1Bitmap*>(value.get());
 }
-window_size gui_image::size() const noexcept
+window_size blob::size() const noexcept
 {
 	auto value = (*this)->GetSize();
 	return window_size(lround(value.width), lround(value.height));
-}
+}*/
 
-error_type gui_texture::initialize() noexcept
+/*error_type gui_texture::initialize() noexcept
 {
 	com_ptr<ID3D11Texture2D> texture_d3d;
 	auto d3d_desc = CD3D11_TEXTURE2D_DESC(DXGI_FORMAT_R8G8B8A8_UNORM, m_size.x, m_size.y,
@@ -131,14 +131,14 @@ void gui_texture::draw_image(const rect_type& rect, const icy::com_ptr<IUnknown>
 	const auto context = static_cast<ID2D1DeviceContext*>(m_context.get());
 	const auto dst = D2D1::RectF(rect.min_x, rect.min_y, rect.max_x, rect.max_y);
 	context->DrawBitmap(static_cast<ID2D1Bitmap*>(image.get()), dst);
-}
+}*/
 
 error_type gui_render_system::initialize() noexcept
 {
 	ICY_ERROR(m_lib_user32.initialize());
 	ICY_ERROR(m_lib_dwrite.initialize());
-	ICY_ERROR(m_lib_d3d.initialize());
-	ICY_ERROR(m_lib_d2d.initialize());
+	//ICY_ERROR(m_lib_d3d.initialize());
+	//ICY_ERROR(m_lib_d2d.initialize());
 
 	if (const auto func = ICY_FIND_FUNC(m_lib_dwrite, DWriteCreateFactory))
 	{
@@ -149,7 +149,7 @@ error_type gui_render_system::initialize() noexcept
 		return make_stdlib_error(std::errc::function_not_supported);
 	}
 
-	com_ptr<ID3D11Device> device_d3d;
+	/*com_ptr<ID3D11Device> device_d3d;
 	if (const auto func = ICY_FIND_FUNC(m_lib_d3d, D3D11CreateDevice))
 	{
 		const auto level = m_adapter.flags() & adapter_flags::d3d10 ? D3D_FEATURE_LEVEL_10_1 : D3D_FEATURE_LEVEL_11_0;
@@ -187,13 +187,13 @@ error_type gui_render_system::initialize() noexcept
 	{
 		return make_stdlib_error(std::errc::function_not_supported);
 	}
-
+	
 	com_ptr<ID2D1Factory> factory;
 	device_d2d->GetFactory(&factory);
 
 	m_device_d3d = device_d3d;
 	m_device_d2d = device_d2d;
-	m_factory_d2d = factory;
+	m_factory_d2d = factory;*/
 	
 	return error_type();
 }
@@ -304,7 +304,7 @@ error_type gui_render_system::create_text(gui_text& text, const gui_font& font, 
 	text.value = layout;
 	return error_type();
 }
-error_type gui_render_system::create_image(gui_image& output, const icy::const_array_view<uint8_t> bytes) const noexcept
+/*error_type gui_render_system::create_image(blob& output, const icy::const_array_view<uint8_t> bytes) const noexcept
 {
 	image image;
 	ICY_ERROR(image.load(global_realloc, nullptr, bytes, image_type::png));
@@ -324,11 +324,11 @@ error_type gui_render_system::create_image(gui_image& output, const icy::const_a
 
 	output.value = std::move(bitmap);
 	return error_type();
-}
+}*/
 
-error_type gui_render_system::create_texture(shared_ptr<gui_texture>& texture, const window_size size, const render_flags flags) const noexcept
+/*error_type gui_render_system::create_texture(shared_ptr<gui_texture>& texture, const window_size size, const render_flags flags) const noexcept
 {
 	ICY_ERROR(make_shared(texture, make_shared_from_this(this), size, flags));
 	ICY_ERROR(texture->initialize());
 	return error_type();
-}
+}*/

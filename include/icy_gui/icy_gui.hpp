@@ -10,6 +10,8 @@
 
 namespace icy
 {
+    struct window_render_item;
+
     template<typename T>
     static constexpr uint32_t gui_variant_type() noexcept
     {
@@ -500,7 +502,6 @@ namespace icy
         window_main,
         window_popup,
         menu_main,
-        menu_popup,
         view_combo,
         view_list,
         view_tree,
@@ -572,12 +573,14 @@ namespace icy
     {
         uint32_t index = 0;
     };
+    struct gui_system;
     struct gui_data_write_model
     {
         virtual ~gui_data_write_model() noexcept = 0
         {
 
         }
+        virtual shared_ptr<gui_system> system() const noexcept = 0;
         virtual error_type modify(const gui_node node, const gui_node_prop prop, const gui_variant& value) noexcept = 0;
         virtual error_type insert(const gui_node parent, const uint32_t row, const uint32_t col, gui_node& node) noexcept = 0;
         virtual error_type destroy(const gui_node node) noexcept = 0;
@@ -593,7 +596,6 @@ namespace icy
         virtual uint32_t col(const gui_node node) const noexcept = 0;
         virtual gui_variant query(const gui_node node, const gui_node_prop prop) const noexcept = 0;
     };
-    struct texture;
     struct gui_window
     {
         virtual ~gui_window() noexcept = 0
@@ -614,6 +616,7 @@ namespace icy
         virtual error_type insert(const gui_widget parent, const size_t offset, const gui_widget_type type, const gui_widget_layout layout, gui_widget& widget) noexcept = 0;
         virtual error_type destroy(const gui_widget widget) noexcept = 0;
         virtual error_type find(const string_view prop, const gui_variant value, array<gui_widget>& list) const noexcept = 0;
+        virtual error_type show_menu(const gui_data_write_model& model, const gui_node node) noexcept = 0;
     };
     struct gui_system;
     struct gui_data_bind
@@ -647,13 +650,16 @@ namespace icy
         virtual error_type create_window(shared_ptr<gui_window>& window, shared_ptr<icy::window> handle, icy::string_view json) noexcept = 0;
         virtual error_type enum_font_names(array<string>& fonts) const noexcept = 0;
     };
-    error_type create_gui_system(shared_ptr<gui_system>& system, const adapter adapter) noexcept;
+    error_type create_gui_system(shared_ptr<gui_system>& system) noexcept;
 
     struct gui_event
     {
         uint32_t query = 0;
         shared_ptr<gui_window> window;
         gui_widget widget;
-        icy::shared_ptr<texture> texture;
+        array<window_render_item> render;
+        shared_ptr<gui_data_write_model> model;
+        gui_node node;
+        icy::gui_variant data;
     };
 }

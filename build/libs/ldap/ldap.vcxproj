@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>16.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{b7548571-2af1-414e-bb45-a4020ee7e8a1}</ProjectGuid>
+    <RootNamespace>ldap</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\..\vsprops\LibDebugL2.props" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\..\vsprops\LibReleaseL2.props" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>true</LinkIncremental>
+    <TargetName>lib$(ProjectName)d</TargetName>
+    <IncludePath>$(ProjectDir)..\..\..\source\libs\ldap\include;$(ProjectDir)..\..\..\include\;$(VC_IncludePath);$(WindowsSDK_IncludePath)</IncludePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <TargetName>lib$(ProjectName)</TargetName>
+    <IncludePath>$(ProjectDir)..\..\..\source\libs\ldap\include;$(ProjectDir)..\..\..\include\;$(VC_IncludePath);$(WindowsSDK_IncludePath)</IncludePath>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions> _WINSOCK_DEPRECATED_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;LDAP_LIBRARY;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <DisableSpecificWarnings>4244;4267</DisableSpecificWarnings>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+    <Lib>
+      <AdditionalDependencies>ws2_32.lib</AdditionalDependencies>
+    </Lib>
+    <ProjectReference>
+      <LinkLibraryDependencies>true</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions> _WINSOCK_DEPRECATED_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;LDAP_LIBRARY;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <DisableSpecificWarnings>4244;4267</DisableSpecificWarnings>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+    <Lib>
+      <AdditionalDependencies>ws2_32.lib</AdditionalDependencies>
+    </Lib>
+    <ProjectReference>
+      <LinkLibraryDependencies>true</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\..\source\libs\ldap\abandon.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\bprint.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\charray.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\controls.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\cyrus.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\decode.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\encode.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\error.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\extended.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\fetch.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\filter.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\free.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\getattr.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\getdn.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\getentry.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\getvalues.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\init.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\io.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\lber_options.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\ldap_options.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\ldif.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\memory.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\nt_err.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\open.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\os-ip.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\print.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\references.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\request.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\result.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\sasl.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\sbind.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\schema.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\search.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\sockbuf.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\unbind.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\url.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\utf-8.c" />
+    <ClCompile Include="..\..\..\source\libs\ldap\util-int.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\..\source\libs\ldap\include\ac\assert.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\ac\bytes.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\ac\ctype.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\ac\errno.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\ac\fdset.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\ac\localize.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\ac\param.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\ac\socket.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\ac\stdarg.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\ac\stdlib.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\ac\string.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\ac\time.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\ac\unistd.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\lber.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\lber_pvt.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\lber_types.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\ldap.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\ldap_cdefs.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\ldap_config.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\ldap_defaults.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\ldap_features.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\ldap_log.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\ldap_pvt.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\ldap_pvt_uc.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\ldap_queue.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\ldap_schema.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\ldap_utf8.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\ldif.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\lutil.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\lutil_lockf.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\portable.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\include\ucdata.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\lber-int.h" />
+    <ClInclude Include="..\..\..\source\libs\ldap\ldap-int.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

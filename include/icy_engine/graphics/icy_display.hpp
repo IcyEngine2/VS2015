@@ -13,7 +13,7 @@ namespace icy
         return fps ? std::chrono::nanoseconds(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(1)).count() / fps) : max_timeout;
     }
 
-    struct texture;
+    //struct texture;
     class thread;
 
     struct display_message
@@ -28,8 +28,8 @@ namespace icy
         {
             return const_cast<icy::thread&>(static_cast<const display_system*>(this)->thread());
         }
-        virtual error_type repaint(const texture& texture) noexcept = 0;
-        virtual error_type repaint(const texture& texture, const window_size offset, const window_size size) noexcept = 0;
+        //virtual error_type repaint(const texture& texture) noexcept = 0;
+        //virtual error_type repaint(const texture& texture, const window_size offset, const window_size size) noexcept = 0;
         virtual error_type resize(const window_size size) noexcept = 0;
         virtual error_type frame(const duration_type delta) noexcept = 0;
     };

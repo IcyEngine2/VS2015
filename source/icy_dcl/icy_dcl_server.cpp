@@ -59,9 +59,7 @@ error_type main_ex(heap& heap)
 
     shared_ptr<dcl_system> dcl_system;
     ICY_ERROR(create_dcl_system(dcl_system, "dcl_1.dat"_s, 16_gb));
-    ICY_ERROR(dcl_system->thread().launch());
-    ICY_ERROR(dcl_system->thread().rename("GUI Thread"_s));
-
+    
     shared_ptr<gui_window> gui_window;
     ICY_ERROR(gui_system->create_window(gui_window, window, string_view(bytes.data(), bytes.size())));
 
@@ -79,7 +77,7 @@ error_type main_ex(heap& heap)
         | event_type::display_update
         | event_type::window_resize
         | event_type::global_timer
-        | event_type_dcl));
+    ));
 
     ICY_ERROR(window->show(true));
 
@@ -115,7 +113,13 @@ error_type main_ex(heap& heap)
 
     gui_node root_node;
     ICY_ERROR(tree_model->insert(gui_node(), 0, 0, root_node));
-    ICY_ERROR(dcl_system->bind(*tree_model, root_node, dcl_index()));
+
+    shared_ptr<dcl_project> project;
+    ICY_ERROR(dcl_system->add_project("test1"_s, project));
+    ICY_ERROR(project->tree_view(*tree_model, root_node, dcl_index()));
+    
+    dcl_index index;
+    ICY_ERROR(project->create_directory(dcl_index(), "Hello"_s, index));
 
     shared_ptr<texture> overlay;
     while (*loop)

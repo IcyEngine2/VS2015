@@ -150,7 +150,7 @@ namespace icy
 		iterator find(const key_type& key) noexcept
 		{
 			const auto it = lower_bound(key);
-			if (it != end() && icy::compare(it->key, key) == 0)
+			if (it != end() && it->key == key)
 				return it;
 			return end();
 		}
