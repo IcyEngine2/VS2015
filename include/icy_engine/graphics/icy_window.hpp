@@ -129,7 +129,7 @@ namespace icy
         window_render_item() noexcept = default;
         window_render_item(window_render_item&& rhs) noexcept : type(rhs.type),
             min_x(rhs.min_x), min_y(rhs.min_y), max_x(rhs.max_x), max_y(rhs.max_y),
-            color(rhs.color), handle(rhs.handle)
+            color(rhs.color), handle(rhs.handle), blob(std::move(rhs.blob))
         {
             rhs.handle = nullptr;
         }

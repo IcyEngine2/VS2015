@@ -7,24 +7,6 @@
 
 class gui_render_system;
 
-class gui_thread_data : public icy::thread
-{
-public:
-    icy::gui_system* system = nullptr;
-    void cancel() noexcept override
-    {
-        icy::post_quit_event();
-    }
-    icy::error_type run() noexcept override
-    {
-        if (auto error = system->exec())
-        {
-            cancel();
-            return error;
-        }
-        return icy::error_type();
-    }
-};
 class gui_system_data : public icy::gui_system
 {
 public:
@@ -178,7 +160,7 @@ private:
 private:
     icy::sync_handle m_sync;
     icy::shared_ptr<gui_render_system> m_render_system;
-    icy::shared_ptr<gui_thread_data> m_thread;
+    icy::shared_ptr<icy::event_thread> m_thread;
     icy::map<uint32_t, icy::shared_ptr<icy::window_cursor>> m_cursors;
     icy::map<gui_model_data_usr*, model_pair> m_models;
     icy::map<gui_window_data_usr*, window_pair> m_windows;

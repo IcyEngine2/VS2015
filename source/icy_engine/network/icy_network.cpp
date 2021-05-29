@@ -1,10 +1,12 @@
 #include "icy_network_system.hpp"
 #include "icy_network_address.hpp"
+#include <icy_engine/core/icy_thread.hpp>
 
 using namespace icy;
 
 network_system_tcp_client::~network_system_tcp_client() noexcept
 {
+    if (m_thread) m_thread->wait();
     filter(0);
     detail::network_system_data::destroy(m_data);
 }
@@ -22,28 +24,28 @@ error_type network_system_tcp_client::recv(const size_t capacity) noexcept
 }
 error_type network_system_tcp_client::exec() noexcept
 {
-    while (true)
+    while (*this)
     {
         if (auto event = pop())
         {
-            if (event->type == event_type::global_quit)
-                break;
+
         }
         ICY_ERROR(m_data->loop_tcp(*this));
     }
-    return {};
+    return error_type();
 }
 error_type network_system_tcp_client::exec_once() noexcept
 {
     return m_data->loop_tcp(*this);
 }
-error_type network_system_tcp_client::signal(const event_data& event) noexcept
+error_type network_system_tcp_client::signal(const event_data* event) noexcept
 {
     return m_data->cancel();
 }
 
 network_system_udp_client::~network_system_udp_client() noexcept
 {
+    if (m_thread) m_thread->wait();
     filter(0);
     detail::network_system_data::destroy(m_data);
 }
@@ -67,24 +69,24 @@ error_type network_system_udp_client::send(const network_address& address, const
 }
 error_type network_system_udp_client::exec() noexcept
 {
-    while (true)
+    while (*this)
     {
         if (auto event = pop())
         {
-            if (event->type == event_type::global_quit)
-                break;
+
         }
         ICY_ERROR(m_data->loop_udp(*this));
     }
-    return {};
+    return error_type();
 }
-error_type network_system_udp_client::signal(const event_data& event) noexcept
+error_type network_system_udp_client::signal(const event_data* event) noexcept
 {
     return m_data->cancel();
 }
 
 network_system_http_client::~network_system_http_client() noexcept
 {
+    if (m_thread) m_thread->wait();
     filter(0);
     detail::network_system_data::destroy(m_data);
 }
@@ -92,7 +94,7 @@ error_type network_system_http_client::exec() noexcept
 {
     return m_data->loop_tcp(*this);
 }
-error_type network_system_http_client::signal(const event_data& event) noexcept
+error_type network_system_http_client::signal(const event_data* event) noexcept
 {
     return m_data->cancel();
 }
@@ -125,18 +127,17 @@ error_type network_system_tcp_server::recv(const network_tcp_connection conn, co
 }
 error_type network_system_tcp_server::exec() noexcept
 {
-    while (true)
+    while (*this)
     {
         if (auto event = pop())
         {
-            if (event->type == event_type::global_quit)
-                break;
+
         }
         ICY_ERROR(m_data->loop_tcp(*this));
     }
-    return {};
+    return error_type();
 }
-error_type network_system_tcp_server::signal(const event_data&) noexcept
+error_type network_system_tcp_server::signal(const event_data*) noexcept
 {
     return m_data->cancel();
 }
@@ -154,18 +155,17 @@ error_type network_system_udp_server::send(const network_address& addr, const co
 }
 error_type network_system_udp_server::exec() noexcept
 {
-    while (true)
+    while (*this)
     {
         if (auto event = pop())
         {
-            if (event->type == event_type::global_quit)
-                break;
+
         }
         ICY_ERROR(m_data->loop_udp(*this));
     }
-    return {};
+    return error_type();
 }
-error_type network_system_udp_server::signal(const event_data& event) noexcept
+error_type network_system_udp_server::signal(const event_data* event) noexcept
 {
     return m_data->cancel();
 }
@@ -183,33 +183,36 @@ error_type network_system_http_server::reply(const network_tcp_connection conn, 
 }
 error_type network_system_http_server::exec() noexcept
 {
-    while (true)
+    while (*this)
     {
         if (auto event = pop())
         {
-            if (event->type == event_type::global_quit)
-                break;
+
         }
         ICY_ERROR(m_data->loop_tcp(*this));
     }
-    return {};
+    return error_type();
 }
-error_type network_system_http_server::signal(const event_data&) noexcept
+error_type network_system_http_server::signal(const event_data*) noexcept
 {
     return m_data->cancel();
 }
 
-error_type icy::create_event_system(shared_ptr<network_system_tcp_client>& system, const network_address& address, const const_array_view<uint8_t> bytes, const duration_type timeout) noexcept
+error_type icy::create_network_tcp_client(shared_ptr<network_system_tcp_client>& system, const network_address& address, const const_array_view<uint8_t> bytes, const duration_type timeout) noexcept
 {
     std::remove_reference_t<decltype(system)> new_system;
     ICY_ERROR(make_shared(new_system));
     ICY_ERROR(detail::network_system_data::create(new_system->m_data, false));
-    new_system->filter(event_type::global_quit);
+    new_system->filter(event_type::system_internal);
     ICY_ERROR(new_system->m_data->connect(address, bytes, timeout));
+    shared_ptr<event_thread> thread;
+    ICY_ERROR(make_shared(thread, event_thread()));
+    thread->system = new_system.get();
+    new_system->m_thread = std::move(thread);
     system = std::move(new_system);
-    return {};
+    return error_type();
 }
-error_type icy::create_event_system(shared_ptr<network_system_tcp_client>& system, const network_address& address, const http_request& request, const duration_type timeout) noexcept
+error_type icy::create_network_tcp_client(shared_ptr<network_system_tcp_client>& system, const network_address& address, const http_request& request, const duration_type timeout) noexcept
 {
     string str;
     ICY_ERROR(to_string(request, str));
@@ -220,22 +223,30 @@ error_type icy::create_event_system(shared_ptr<network_system_tcp_client>& syste
     std::remove_reference_t<decltype(system)> new_system;
     ICY_ERROR(make_shared(new_system));
     ICY_ERROR(detail::network_system_data::create(new_system->m_data, true));
-    new_system->filter(event_type::global_quit);
+    new_system->filter(event_type::system_internal);
     ICY_ERROR(new_system->m_data->connect(address, bytes, timeout));
+    shared_ptr<event_thread> thread;
+    ICY_ERROR(make_shared(thread, event_thread()));
+    thread->system = new_system.get();
+    new_system->m_thread = std::move(thread);
     system = std::move(new_system);
-    return {};
+    return error_type();
 }
-error_type icy::create_event_system(shared_ptr<network_system_udp_client>& system, const network_server_config& args) noexcept
+error_type icy::create_network_udp_client(shared_ptr<network_system_udp_client>& system, const network_server_config& args) noexcept
 {
     std::remove_reference_t<decltype(system)> new_system;
     ICY_ERROR(make_shared(new_system));
     ICY_ERROR(detail::network_system_data::create(new_system->m_data, false));
     ICY_ERROR(new_system->m_data->launch(args, detail::network_socket::type::udp));
-    new_system->filter(event_type::global_quit);
+    shared_ptr<event_thread> thread;
+    ICY_ERROR(make_shared(thread, event_thread()));
+    thread->system = new_system.get();
+    new_system->m_thread = std::move(thread);
+    new_system->filter(event_type::system_internal);
     system = std::move(new_system);
-    return {};
+    return error_type();
 }
-error_type icy::create_event_system(shared_ptr<network_system_http_client>& system, const network_address& address, const http_request& request, const duration_type timeout, const size_t buffer) noexcept
+error_type icy::create_network_http_client(shared_ptr<network_system_http_client>& system, const network_address& address, const http_request& request, const duration_type timeout, const size_t buffer) noexcept
 {
     string str;
     ICY_ERROR(to_string(request, str));
@@ -249,40 +260,44 @@ error_type icy::create_event_system(shared_ptr<network_system_http_client>& syst
     std::remove_reference_t<decltype(system)> new_system;
     ICY_ERROR(make_shared(new_system));
     ICY_ERROR(detail::network_system_data::create(new_system->m_data, true));
-    new_system->filter(event_type::global_quit);
+    new_system->filter(event_type::system_internal);
     ICY_ERROR(new_system->m_data->connect(address, bytes, timeout, std::move(recv_buffer)));
+    shared_ptr<event_thread> thread;
+    ICY_ERROR(make_shared(thread, event_thread()));
+    thread->system = new_system.get();
+    new_system->m_thread = std::move(thread);
     system = std::move(new_system);
-    return {};
+    return error_type();
 }
-error_type icy::create_event_system(shared_ptr<network_system_tcp_server>& system, const network_server_config& args) noexcept
+error_type icy::create_network_tcp_server(shared_ptr<network_system_tcp_server>& system, const network_server_config& args) noexcept
 {
     std::remove_reference_t<decltype(system)> new_system;
     ICY_ERROR(make_shared(new_system));
     ICY_ERROR(detail::network_system_data::create(new_system->m_data, false));
     ICY_ERROR(new_system->m_data->launch(args, detail::network_socket::type::tcp));
     system = std::move(new_system);
-    system->filter(event_type::global_quit);
-    return {};
+    system->filter(event_type::system_internal);
+    return error_type();
 }
-error_type icy::create_event_system(shared_ptr<network_system_udp_server>& system, const network_server_config& args) noexcept
+error_type icy::create_network_udp_server(shared_ptr<network_system_udp_server>& system, const network_server_config& args) noexcept
 {
     std::remove_reference_t<decltype(system)> new_system;
     ICY_ERROR(make_shared(new_system));
     ICY_ERROR(detail::network_system_data::create(new_system->m_data, false));
     ICY_ERROR(new_system->m_data->launch(args, detail::network_socket::type::udp));
     system = std::move(new_system);
-    system->filter(event_type::global_quit);
-    return {};
+    system->filter(event_type::system_internal);
+    return error_type();
 }
-error_type icy::create_event_system(shared_ptr<network_system_http_server>& system, const network_server_config& args) noexcept
+error_type icy::create_network_http_server(shared_ptr<network_system_http_server>& system, const network_server_config& args) noexcept
 {
     std::remove_reference_t<decltype(system)> new_system;
     ICY_ERROR(make_shared(new_system));
     ICY_ERROR(detail::network_system_data::create(new_system->m_data, true));
     ICY_ERROR(new_system->m_data->launch(args, detail::network_socket::type::tcp));
     system = std::move(new_system);
-    system->filter(event_type::global_quit);
-    return {};
+    system->filter(event_type::system_internal);
+    return error_type();
 }
 
 class network_udp_socket::data_type
@@ -507,7 +522,7 @@ error_type network_tcp_connection::make_timer() noexcept
             return last_system_error();
     }
     SetThreadpoolTimer(m_timer, nullptr, 0, 0);
-    return {};
+    return error_type();
 }
 network_tcp_connection::~network_tcp_connection() noexcept
 {
@@ -528,7 +543,7 @@ error_type network_tcp_request::create(const network_request_type type, const si
 
     request = new (memory) network_tcp_request(type, capacity, conn);
     conn.m_requests.push_back(request);
-    return {};
+    return error_type();
 }
 error_type network_tcp_request::recv(const size_t max) noexcept
 {
@@ -545,7 +560,7 @@ error_type network_tcp_request::recv(const size_t max) noexcept
         if (error != WSA_IO_PENDING)
             return make_system_error(make_system_error_code(uint32_t(error)));
     }
-    return {};
+    return error_type();
 }
 error_type network_tcp_request::send() noexcept
 {
@@ -561,7 +576,7 @@ error_type network_tcp_request::send() noexcept
         if (error != WSA_IO_PENDING)
             return make_system_error(make_system_error_code(uint32_t(error)));
     }
-    return {};
+    return error_type();
 }
 error_type network_tcp_request::recv_http(bool& done) noexcept
 {
@@ -620,7 +635,7 @@ error_type network_tcp_request::recv_http(bool& done) noexcept
         else
             return recv(capacity);
     }
-    return {};
+    return error_type();
 }
 
 error_type network_udp_request_ex::recv(const SOCKET sock) noexcept
@@ -641,7 +656,7 @@ error_type network_udp_request_ex::recv(const SOCKET sock) noexcept
     {
         size = recv_bytes;
     }
-    return {};
+    return error_type();
 }
 error_type network_udp_request_ex::send(const SOCKET sock) noexcept
 {
@@ -660,7 +675,7 @@ error_type network_udp_request_ex::send(const SOCKET sock) noexcept
     {
         size = send_bytes;
     }
-    return {};
+    return error_type();
 }
 
 void network_system_base::shutdown() noexcept
@@ -727,14 +742,14 @@ error_type network_system_base::launch(const uint16_t port, const network_socket
     }
     m_socket = std::move(socket);
     m_addr_type = addr_type;
-    return {};
+    return error_type();
 }
 error_type network_system_base::stop(const uint32_t code) noexcept
 {
     ICY_ASSERT(code, "INVALID NETWORK CODE");
     if (!PostQueuedCompletionStatus(m_iocp, code, 0, nullptr))
         return last_system_error();
-    return {};
+    return error_type();
 }
 
 error_type network_system_tcp::connect(network_tcp_connection& conn, const network_address& address, const const_array_view<uint8_t> buffer) noexcept
@@ -782,7 +797,7 @@ error_type network_system_tcp::connect(network_tcp_connection& conn, const netwo
             return make_system_error(make_system_error_code(uint32_t(error)));
     }
     conn.reset();
-    return {};
+    return error_type();
 }
 error_type network_system_tcp::accept(network_tcp_connection& conn) noexcept
 {
@@ -813,7 +828,7 @@ error_type network_system_tcp::accept(network_tcp_connection& conn) noexcept
         if (error != WSA_IO_PENDING)
             return make_system_error(make_system_error_code(uint32_t(error)));
     }
-    return {};
+    return error_type();
 }
 error_type network_system_tcp::send(network_tcp_connection& conn, const const_array_view<uint8_t> buffer) noexcept
 {
@@ -844,7 +859,7 @@ error_type network_system_tcp::disconnect(network_tcp_connection& conn) noexcept
         if (error != WSA_IO_PENDING)
             return make_system_error(make_system_error_code(uint32_t(error)));
     }
-    return {};
+    return error_type();
 }
 error_type network_system_tcp::loop(network_tcp_reply& reply, uint32_t& code, const network_duration timeout) noexcept
 {
@@ -858,7 +873,7 @@ error_type network_system_tcp::loop(network_tcp_reply& reply, uint32_t& code, co
     if (!success)
         return last_system_error();
     if (!count)
-        return {};
+        return error_type();
 
     const auto request = reinterpret_cast<network_tcp_request*>(reinterpret_cast<char*>(entry.lpOverlapped) - offset);
     auto conn = reply.conn = reinterpret_cast<network_tcp_connection*>(entry.lpCompletionKey);
@@ -874,7 +889,7 @@ error_type network_system_tcp::loop(network_tcp_reply& reply, uint32_t& code, co
         {
             code = entry.dwNumberOfBytesTransferred;
         }
-        return {};
+        return error_type();
     }
     else if (!conn)
     {
@@ -886,7 +901,7 @@ error_type network_system_tcp::loop(network_tcp_reply& reply, uint32_t& code, co
     if (ptr == conn->m_requests.end())
     {
         reply = {};
-        return {};
+        return error_type();
     }
     ICY_SCOPE_EXIT
     {
@@ -979,7 +994,7 @@ error_type network_system_tcp::loop(network_tcp_reply& reply, uint32_t& code, co
     {
         return make_stdlib_error(std::errc::invalid_argument);
     }
-    return {};
+    return error_type();
 }
 /*error_type network_system_tcp::address(network_address& addr) noexcept
 {
@@ -1011,7 +1026,7 @@ error_type network_system_udp::multicast(const network_address& address, const b
     {
         return make_stdlib_error(std::errc::invalid_argument);
     }
-    return {};
+    return error_type();
 }
 error_type network_system_udp::send(const network_address& address, const const_array_view<uint8_t> buffer) noexcept
 {
@@ -1026,7 +1041,7 @@ error_type network_system_udp::send(const network_address& address, const const_
         ICY_ERROR(m_requests.push_back(std::move(request)));
     }
     ICY_ERROR(ptr->send(m_socket));
-    return {};
+    return error_type();
 }
 error_type network_system_udp::recv(const size_t capacity) noexcept
 {
@@ -1041,7 +1056,7 @@ error_type network_system_udp::recv(const size_t capacity) noexcept
         ICY_ERROR(m_requests.push_back(std::move(request)));
     }
     ICY_ERROR(ptr->recv(m_socket));
-    return {};
+    return error_type();
 }
 error_type network_system_udp::loop(network_udp_request& reply, uint32_t& exit, const network_duration timeout) noexcept
 {
@@ -1058,12 +1073,12 @@ error_type network_system_udp::loop(network_udp_request& reply, uint32_t& exit, 
             return error;
     }
     if (!count)
-        return {};
+        return error_type();
 
     if (!entry.lpOverlapped)
     {
         exit = entry.dwNumberOfBytesTransferred;
-        return {};
+        return error_type();
     }
 
     const auto request = reinterpret_cast<network_udp_request_ex*>(reinterpret_cast<char*>(entry.lpOverlapped) - offset);
@@ -1084,7 +1099,7 @@ error_type network_system_udp::loop(network_udp_request& reply, uint32_t& exit, 
             m_requests[k - 1] = std::move(m_requests[k]);
         m_requests.pop_back();
     }
-    return {};
+    return error_type();
 }
 error_type network_system_udp::address(network_address& addr) noexcept
 {

@@ -24,24 +24,6 @@ struct display_texture
     com_ptr<ID3D11Texture2D> buffer;
     com_ptr<ID3D11ShaderResourceView> srv;
 };
-class display_system_thread : public thread
-{
-public:
-    display_system* system = nullptr;
-    void cancel() noexcept override
-    {
-        post_quit_event();
-    }
-    error_type run() noexcept override
-    {
-        if (auto error = system->exec())
-        {
-            cancel();
-            return error;
-        }
-        return error_type();
-    }
-};
 class display_system_data : public display_system
 {
 public:
@@ -107,7 +89,7 @@ private:
     icy::sync_handle m_update;
     bool m_gpu_ready = true;
     bool m_cpu_ready = true;
-    shared_ptr<display_system_thread> m_thread;
+    shared_ptr<event_thread> m_thread;
     frame_type m_frame;
     com_ptr<ID3D11RenderTargetView> m_rtv;
 };

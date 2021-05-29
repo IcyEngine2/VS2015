@@ -43,7 +43,7 @@ error_type icy::blob_add(const const_array_view<uint8_t> bytes, const string_vie
     ICY_ERROR(make_unique(blob_pair(), new_ptr));
     ICY_ERROR(new_ptr->bytes.assign(bytes));
     ICY_ERROR(new_ptr->type.append(type));
-    ICY_ERROR(g_blobs.insert(g_index + 1, std::move(new_ptr)));
+    ICY_ERROR(g_blobs.insert(object.index = g_index + 1, std::move(new_ptr)));
     g_index += 1;
     return error_type();
 }

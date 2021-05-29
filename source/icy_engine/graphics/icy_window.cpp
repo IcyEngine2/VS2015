@@ -7,6 +7,7 @@
 #include <icy_engine/core/icy_map.hpp>
 #include <icy_engine/core/icy_blob.hpp>
 #include <icy_engine/utility/icy_com.hpp>
+#include <icy_engine/image/icy_image.hpp>
 
 #if _WIN32
 #include <Windows.h>
@@ -344,7 +345,6 @@ public:
     error_type exec() noexcept override;
     void exit(const error_type error) noexcept;
     error_type post(internal_message&& msg) noexcept;
-
 #if X11_GUI
     Display& display() const noexcept
     {
@@ -355,9 +355,16 @@ public:
         return m_error;
     }
 #else
-    ID2D1DCRenderTarget& render() noexcept
+    ID2D1DCRenderTarget& render() const noexcept
     {
         return *m_render;
+    }
+    com_ptr<ID2D1Bitmap> image(const blob blob) const noexcept 
+    {
+        auto it = m_images.find(blob.index);
+        if (it != m_images.end())
+            return it->value;
+        return nullptr;
     }
 #endif
 private:
@@ -959,6 +966,8 @@ LRESULT window_data_sys::proc(uint32_t msg, WPARAM wparam, LPARAM lparam) noexce
              }
              case window_render_item_type::image:
              {
+                 if (auto image = m_system.image(item.blob))
+                     render.DrawBitmap(image, to_rect(item));
                  //brush->SetColor(to_color(item.color));
                  //render.DrawTextLayout({ item.min_x, item.min_y }, static_cast<IDWriteTextLayout*>(item.handle), brush);
                  break;
@@ -1513,6 +1522,31 @@ error_type window_system_data::exec() noexcept
             }
             else if (event_data.type == internal_message_type::repaint)
             {
+                for (auto&& item : event_data.repaint)
+                {
+                    if (item.type == window_render_item_type::image)
+                    {
+                        auto jt = m_images.find(item.blob.index);
+                        if (jt == m_images.end())
+                        {
+                            const auto bytes = blob_data(item.blob);
+
+                            icy::image image;
+                            ICY_ERROR(image.load(global_realloc, nullptr, bytes, image_type::png));
+                            matrix<color> colors(image.size().y, image.size().x);
+                            if (colors.empty())
+                                return make_stdlib_error(std::errc::not_enough_memory);
+                            ICY_ERROR(image.view(image_size(), colors));
+
+                            com_ptr<ID2D1Bitmap> bitmap;
+                            auto props = D2D1::BitmapProperties(
+                                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
+                            ICY_COM_ERROR(m_render->CreateBitmap(D2D1::SizeU(image.size().x, image.size().y),
+                                colors.data(), uint32_t(colors.cols() * 4), props, &bitmap));
+                            ICY_ERROR(m_images.insert(item.blob.index, std::move(bitmap)));
+                        }
+                    }
+                }
                 ICY_ERROR(it->value.repaint(std::move(event_data.repaint)));
             }
             else if (event_data.type == internal_message_type::query)

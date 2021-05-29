@@ -101,6 +101,21 @@ uint16_t network_address::port() const noexcept
     }
     return 0;
 }
+void network_address::port(uint16_t value) noexcept
+{
+    if (!m_addr)
+        return;
+
+#if _WIN32
+    const auto lower = value & 0xFF;
+    const auto upper = value >> 0x08;
+    value = lower << 0x08 | upper;
+#endif
+    if (m_addr_len == sizeof(sockaddr_in))
+        reinterpret_cast<sockaddr_in*>(m_addr)->sin_port = value;
+    else if (m_addr_len == sizeof(sockaddr_in6))
+        reinterpret_cast<sockaddr_in6*>(m_addr)->sin6_port = value;
+}
 error_type network_address::query(array<network_address>& array, const string_view host, const string_view port, const duration_type timeout) noexcept
 {
     auto lib = "ws2_32"_lib;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "icy_smart_pointer.hpp"
+#include "icy_thread.hpp"
 
 #if _DEBUG
 #define ICY_EVENT_CHECK_TYPE 1
@@ -356,4 +357,23 @@ namespace icy
         new_event->release();
         return error;
     }
+
+    class event_thread : public thread
+    {
+    public:
+        event_system* system = nullptr;
+        void cancel() noexcept override
+        {
+            post_quit_event();
+        }
+        error_type run() noexcept override
+        {
+            if (auto error = system->exec())
+            {
+                cancel();
+                return error;
+            }
+            return error_type();
+        }
+    };
 }

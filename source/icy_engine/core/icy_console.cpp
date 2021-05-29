@@ -1,12 +1,12 @@
 #include <icy_engine/core/icy_console.hpp>
 #include <icy_engine/core/icy_array.hpp>
 #include <icy_engine/core/icy_string.hpp>
+#include <icy_engine/core/icy_thread.hpp>
 #include <Windows.h>
 
 using namespace icy;
 
-
-error_type icy::create_event_system(shared_ptr<console_system>& system) noexcept
+error_type icy::create_console_system(shared_ptr<console_system>& system) noexcept
 {
     auto new_console = false;
     if (!AllocConsole())
@@ -35,8 +35,14 @@ error_type icy::create_event_system(shared_ptr<console_system>& system) noexcept
     shared_ptr<console_system> new_system;
     ICY_ERROR(make_shared(new_system, console_system::tag()));
     //ICY_ERROR(new_system->m_mutex.initialize());   
-    ICY_ERROR(new_system->m_sync.initialize());   
-    new_system->filter(event_type::console_any);
+    ICY_ERROR(new_system->m_sync.initialize()); 
+
+    shared_ptr<event_thread> thread;
+    ICY_ERROR(make_shared(thread));
+    thread->system = new_system.get();
+    new_system->m_thread = std::move(thread);
+
+    new_system->filter(event_type::system_internal);
     system = std::move(new_system);
     new_console = false;
     return error_type();
@@ -48,15 +54,13 @@ console_system::~console_system() noexcept
 
 error_type console_system::exec() noexcept
 {
+    uint32_t wait_key = 0;
     while (*this)
     {
         while (auto event = event_system::pop())
         {
             const auto& event_data = event->data<console_event>();
-            if (!event_data.internal)
-                continue;
-
-            if (event->type == event_type::console_write)
+            if (event_data._type == event_type::console_write)
             {
                 const auto r = (event_data.color.r) ? FOREGROUND_RED : 0;
                 const auto g = (event_data.color.g) ? FOREGROUND_GREEN : 0;
@@ -88,39 +92,11 @@ error_type console_system::exec() noexcept
                         return last_system_error();
                 }
             }
-            else if (event->type == event_type::console_read_key)
+            else if (event_data._type == event_type::console_read_key)
             {
-                auto done = false;
-                while (!done)
-                {
-                    const auto wait = WaitForSingleObject(GetStdHandle(STD_INPUT_HANDLE), ms_timeout(max_timeout));
-                    if (wait != WAIT_OBJECT_0)
-                        return last_system_error();
-
-                    INPUT_RECORD buffer[256];
-                    auto count = 0ul;
-                    if (!ReadConsoleInputW(GetStdHandle(STD_INPUT_HANDLE), buffer, _countof(buffer), &count))
-                        return last_system_error();
-
-                    for (auto k = 0u; k < count; ++k)
-                    {
-                        if (buffer[k].EventType == 0)
-                            return error_type();
-                        if (buffer[k].EventType != KEY_EVENT)
-                            continue;
-                        if (!buffer[k].Event.KeyEvent.bKeyDown)
-                            continue;
-
-                        const auto win32_msg = buffer[k].Event.KeyEvent;
-                        console_event new_event;
-                        new_event.key = key(win32_msg.wVirtualKeyCode);
-                        ICY_ERROR(event::post(this, event_type::console_read_key, std::move(new_event)));
-                        done = true;
-                        break;
-                    }
-                }
+                ++wait_key;
             }
-            else if (event->type == event_type::console_read_line)
+            else if (event_data._type == event_type::console_read_line)
             {
                 wchar_t buffer[4096] = {};
                 auto count = 0ul;
@@ -140,7 +116,38 @@ error_type console_system::exec() noexcept
                 ICY_ERROR(event::post(this, event_type::console_read_line, std::move(new_event)));
             }
         }
-        ICY_ERROR(m_sync.wait());
+        HANDLE handles[2] = {};
+        handles[0] = m_sync.handle();
+        handles[1] = wait_key ? GetStdHandle(STD_INPUT_HANDLE) : nullptr;
+        auto wait = WaitForMultipleObjectsEx(wait_key ? 2 : 1, handles, FALSE, ms_timeout(max_timeout), TRUE);
+        if (wait == WAIT_OBJECT_0)
+        {
+            ;//
+        }
+        else if (wait == WAIT_OBJECT_0 + 1)
+        {
+            INPUT_RECORD buffer[256];
+            auto count = 0ul;
+            if (!ReadConsoleInputW(GetStdHandle(STD_INPUT_HANDLE), buffer, _countof(buffer), &count))
+                return last_system_error();
+
+            for (auto k = 0u; k < count; ++k)
+            {
+                if (buffer[k].EventType == 0)
+                    return error_type();
+                if (buffer[k].EventType != KEY_EVENT)
+                    continue;
+                if (!buffer[k].Event.KeyEvent.bKeyDown)
+                    continue;
+
+                const auto win32_msg = buffer[k].Event.KeyEvent;
+                console_event new_event;
+                new_event.key = key(win32_msg.wVirtualKeyCode);
+                ICY_ERROR(event::post(this, event_type::console_read_key, std::move(new_event)));
+                --wait_key;
+                break;
+            }
+        }
     }
     return error_type();
 }
@@ -158,25 +165,3 @@ error_type console_system::signal(const event_data* event) noexcept
     ICY_ERROR(m_sync.wake());
     return error_type();
 }
-/*error_type console_system::read_line(string& str) noexcept
-{
-    shared_ptr<event_queue> loop;
-    ICY_ERROR(create_event_queue(loop, event_type::console_read_line));
-    ICY_ERROR(post(loop.get(), event_type::console_read_line));
-    event event;
-    ICY_ERROR(loop->pop(event));
-    if (event->type == event_type::console_read_line)
-        ICY_ERROR(copy(event->data<string>(), str));
-    return error_type();
-}
-error_type console_system::read_key(key& key) noexcept
-{
-    shared_ptr<event_queue> loop;
-    ICY_ERROR(create_event_queue(loop, event_type::console_read_key));
-    ICY_ERROR(post(loop.get(), event_type::console_read_key));
-    event event;
-    ICY_ERROR(loop->pop(event));
-    if (event->type == event_type::console_read_key)
-        key = event->data<icy::key>();
-    return error_type();
-}*/

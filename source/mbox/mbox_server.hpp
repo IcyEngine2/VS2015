@@ -6,6 +6,12 @@
 #include <icy_engine/core/icy_memory.hpp>
 #include <icy_gui/icy_gui.hpp>
 
+#define MBOX_VERSION_MAJOR  3
+#define MBOX_VERSION_MINOR  0
+#define MBOX_MULTICAST_ADDR "236.22.83.171"_s
+#define MBOX_MULTICAST_PORT "7608"_s
+
+
 enum class mbox_type : uint32_t
 {
     none,
@@ -13,7 +19,7 @@ enum class mbox_type : uint32_t
     device,
     application_folder,
     application,
-    launch_config,
+    character_group,
     account,
     server,
     character,
@@ -27,6 +33,10 @@ enum class mbox_type : uint32_t
     macro,
     timer_folder,
     timer,
+    event_folder,
+    event_key_press,
+    event_key_release,
+    _total,
 };
 enum class mbox_operation_type : uint32_t
 {
@@ -35,13 +45,17 @@ enum class mbox_operation_type : uint32_t
     del_tag,
     launch_timer,
     cancel_timer,
-    send_keybind,
+    send_input,
     run_macro,
     run_script,
+    run_action,
+    add_event,
+    del_event,
+    _total,
 };
-
-struct mbox_launch
+struct mbox_character_config
 {
+    uint32_t index = 0;
     uint32_t device = 0;
     uint32_t character = 0;
 };
@@ -52,8 +66,8 @@ struct mbox_operation
 
     }
     mbox_operation_type type;
-    uint32_t reference = 0u;
-    std::string text;
+    uint32_t link = 0u;
+    icy::string text;   //  Input or Script.Function
 };
 struct mbox_base
 {
@@ -77,15 +91,13 @@ public:
     icy::string name;
     node_map tree_nodes;
     icy::map<uint32_t, mbox_base*> children;
-    icy::string device_ipaddr;
-    icy::string app_launcher;
-    icy::string app_process;
-    icy::string app_addons;
-    icy::map<uint32_t, mbox_launch> launch;
+    icy::string device_uid;
+    icy::string app_launch_path;
+    icy::string app_process_path;
+    icy::array<mbox_character_config> character_group;
     icy::array<mbox_operation> operations;
-    icy::string code;
+    icy::string text;
 };
-
 
 extern const icy::error_source error_source_mbox;
 extern const icy::error_type mbox_error_corrupted_data;
@@ -111,3 +123,5 @@ private:
         uint32_t index;
     } m_info;
 };
+
+icy::error_type mbox_try_create(const mbox_base& pval, const mbox_type type) noexcept;
