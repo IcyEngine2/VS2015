@@ -137,7 +137,7 @@ key icy::detail::scan_vk_to_key(uint16_t vkey, uint16_t scan, const bool isE0) n
     if (vkey == VK_SHIFT || vkey == VK_NUMLOCK)
     {
         library lib("user32.dll");
-        if (lib.initialize() == error_type{})
+        if (lib.initialize() == error_type())
         {
             if (const auto func = ICY_FIND_FUNC(lib, MapVirtualKeyW))
             {
@@ -168,7 +168,7 @@ key icy::detail::scan_vk_to_key(uint16_t vkey, uint16_t scan, const bool isE0) n
 	}
 	return key;
 }
-uint16_t icy::detail::from_winapi(input_message& msg, const size_t wParam, const ptrdiff_t lParam, const std::bitset<256> & buffer) noexcept
+uint16_t icy::detail::key_from_winapi(input_message& msg, const size_t wParam, const ptrdiff_t lParam, const uint8_t(&buffer)[256]) noexcept
 {
     auto mod = key_mod::none;
     key_mod_set(mod, buffer);
@@ -180,11 +180,11 @@ uint16_t icy::detail::from_winapi(input_message& msg, const size_t wParam, const
 	msg = input_message(event, key, mod);
 	return LOWORD(lParam);
 }
-uint16_t icy::detail::from_winapi(input_message& key, const MSG& msg, const std::bitset<256> & buffer) noexcept
+uint16_t icy::detail::key_from_winapi(input_message& key, const MSG& msg, const uint8_t(&buffer)[256]) noexcept
 {
-	return from_winapi(key, msg.wParam, msg.lParam, buffer);
+	return key_from_winapi(key, msg.wParam, msg.lParam, buffer);
 }
-void icy::detail::from_winapi(input_message& mouse, const uint32_t offset_x, const uint32_t offset_y, const uint32_t msg, const size_t wParam, const ptrdiff_t lParam, const std::bitset<256> & buffer) noexcept
+void icy::detail::mouse_from_winapi(input_message& mouse, const uint32_t msg, const size_t wParam, const ptrdiff_t lParam, const uint8_t(&buffer)[256]) noexcept
 {
 	const auto word = LOWORD(wParam);
 	auto mods = key_mod::none;
@@ -197,11 +197,6 @@ void icy::detail::from_winapi(input_message& mouse, const uint32_t offset_x, con
     if (word & MK_XBUTTON2) mods = mods | key_mod::x2mb;
     
 	auto point = POINT{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-    if (msg == WM_MOUSEWHEEL)
-    {
-        point.x -= offset_x;
-        point.y -= offset_y;
-    }
     auto type = input_type::none;
     auto wheel = 0u;
     auto key = key::none;
@@ -260,9 +255,9 @@ void icy::detail::from_winapi(input_message& mouse, const uint32_t offset_x, con
     mouse.point_x = point.x;
     mouse.point_y = point.y;
 }
-void icy::detail::from_winapi(input_message& mouse, const uint32_t offset_x, const uint32_t offset_y, const MSG& msg, const std::bitset<256> & buffer) noexcept
+void icy::detail::mouse_from_winapi(input_message& mouse, const MSG& msg, const uint8_t(&buffer)[256]) noexcept
 {
-	return from_winapi(mouse, offset_x, offset_y, msg.message, msg.wParam, msg.lParam, buffer);
+	return mouse_from_winapi(mouse, msg.message, msg.wParam, msg.lParam, buffer);
 }
 tagMSG icy::detail::to_winapi(const input_message& input) noexcept
 {

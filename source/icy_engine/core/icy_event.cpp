@@ -107,6 +107,11 @@ event event_system::pop() noexcept
     }
     return value;
 }
+error_type event_system::post_quit_event() noexcept
+{
+    m_quit.store(true, std::memory_order_release);
+    return signal(nullptr);    
+}
 error_type event_system::post(event_system* const source, const event_type type) noexcept
 {
     event_data* new_event = nullptr;
@@ -181,9 +186,7 @@ error_type icy::post_quit_event() noexcept
     error_type error;
     while (next)
     {
-        next->m_quit.store(true, std::memory_order_release);
-        auto next_error = next->signal(nullptr);
-
+        auto next_error = next->post_quit_event();
         if (!error && next_error)
             error = next_error;
         next = next->m_prev;

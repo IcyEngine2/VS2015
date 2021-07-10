@@ -4,36 +4,27 @@
 #include <icy_engine/core/icy_string.hpp>
 #include <icy_engine/core/icy_array.hpp>
 #include <icy_engine/core/icy_memory.hpp>
+#include <icy_engine/core/icy_input.hpp>
+#include <icy_engine/core/icy_json.hpp>
+#include <icy_engine/network/icy_http.hpp>
 #include <icy_gui/icy_gui.hpp>
-
-#define MBOX_VERSION_MAJOR  3
-#define MBOX_VERSION_MINOR  0
-#define MBOX_MULTICAST_ADDR "236.22.83.171"_s
-#define MBOX_MULTICAST_PORT "7608"_s
 
 
 enum class mbox_type : uint32_t
 {
     none,
-    device_folder,
+    folder,
     device,
-    application_folder,
     application,
-    character_group,
+    group,          //  characters
     account,
     server,
     character,
-    tag_folder,
     tag,
-    action_folder,
     action,
-    script_folder,
     script,
-    macro_folder,
     macro,
-    timer_folder,
     timer,
-    event_folder,
     event_key_press,
     event_key_release,
     _total,
@@ -52,12 +43,6 @@ enum class mbox_operation_type : uint32_t
     add_event,
     del_event,
     _total,
-};
-struct mbox_character_config
-{
-    uint32_t index = 0;
-    uint32_t device = 0;
-    uint32_t character = 0;
 };
 struct mbox_operation
 {
@@ -89,14 +74,14 @@ public:
     uint32_t index = 0;
     uint32_t parent = 0;
     icy::string name;
-    node_map tree_nodes;
     icy::map<uint32_t, mbox_base*> children;
-    icy::string device_uid;
-    icy::string app_launch_path;
-    icy::string app_process_path;
-    icy::array<mbox_character_config> character_group;
-    icy::array<mbox_operation> operations;
     icy::string text;
+    node_map tree;
+    icy::array<mbox_operation> operations;
+    /*icy::string device_ip;
+    icy::array<mbox_device_app_config> device_app_config;
+    icy::array<mbox_character_config> character_group;
+    icy::string text;*/
 };
 
 extern const icy::error_source error_source_mbox;
@@ -123,5 +108,4 @@ private:
         uint32_t index;
     } m_info;
 };
-
 icy::error_type mbox_try_create(const mbox_base& pval, const mbox_type type) noexcept;

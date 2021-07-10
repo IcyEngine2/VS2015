@@ -92,11 +92,38 @@ network_system_http_client::~network_system_http_client() noexcept
 }
 error_type network_system_http_client::exec() noexcept
 {
-    return m_data->loop_tcp(*this);
+    while (*this)
+    {
+        if (auto event = pop())
+        {
+
+        }
+        if (const auto error = m_data->loop_tcp(*this))
+            ICY_ERROR(error);
+    }
+    return error_type();
 }
 error_type network_system_http_client::signal(const event_data* event) noexcept
 {
     return m_data->cancel();
+}
+error_type network_system_http_client::send(const http_response& response) noexcept
+{
+    unique_ptr<http_response> new_response;
+    ICY_ERROR(make_unique(response, new_response));
+    return m_data->post(0, std::move(new_response));
+}
+error_type network_system_http_client::send(const http_request& request) noexcept
+{
+    unique_ptr<http_request> new_request;
+    ICY_ERROR(make_unique(request, new_request));
+    return m_data->post(0, std::move(new_request));
+}
+error_type network_system_http_client::recv() noexcept
+{
+    array<uint8_t> bytes;
+    ICY_ERROR(bytes.resize(m_data->config().buffer));
+    return m_data->post(0, event_type::network_recv, std::move(bytes));
 }
 
 network_system_tcp_server::~network_system_tcp_server() noexcept
@@ -175,11 +202,23 @@ network_system_http_server::~network_system_http_server() noexcept
     filter(0);
     detail::network_system_data::destroy(m_data);
 }
-error_type network_system_http_server::reply(const network_tcp_connection conn, const http_response& response) noexcept
+error_type network_system_http_server::send(const network_tcp_connection conn, const http_response& response) noexcept
 {
     unique_ptr<http_response> new_response;
     ICY_ERROR(make_unique(response, new_response));
     return m_data->post(conn.index, std::move(new_response));
+}
+error_type network_system_http_server::send(const network_tcp_connection conn, const http_request& request) noexcept
+{
+    unique_ptr<http_request> new_request;
+    ICY_ERROR(make_unique(request, new_request));
+    return m_data->post(conn.index, std::move(new_request));
+}
+error_type network_system_http_server::recv(const network_tcp_connection conn) noexcept
+{
+    array<uint8_t> bytes;
+    ICY_ERROR(bytes.resize(m_data->config().buffer));
+    return m_data->post(conn.index, event_type::network_recv, std::move(bytes));
 }
 error_type network_system_http_server::exec() noexcept
 {
@@ -556,7 +595,7 @@ error_type network_tcp_request::recv(const size_t max) noexcept
     auto flags = 0ul;
     if (network_func_recv(connection.m_socket, &buf, 1, &bytes, &flags, &overlapped, nullptr) == SOCKET_ERROR)
     {
-        const auto error = GetLastError();
+        const auto error = WSAGetLastError();
         if (error != WSA_IO_PENDING)
             return make_system_error(make_system_error_code(uint32_t(error)));
     }
@@ -572,7 +611,7 @@ error_type network_tcp_request::send() noexcept
     auto bytes = 0ul;
     if (network_func_send(connection.m_socket, &buf, 1, &bytes, 0, &overlapped, nullptr) == SOCKET_ERROR)
     {
-        const auto error = GetLastError();
+        const auto error = WSAGetLastError();
         if (error != WSA_IO_PENDING)
             return make_system_error(make_system_error_code(uint32_t(error)));
     }
@@ -648,7 +687,7 @@ error_type network_udp_request_ex::recv(const SOCKET sock) noexcept
     auto flags = 0ul;
     if (network_func_recv_from(sock, &buf, 1, &recv_bytes, &flags, address.data(), &address_size, &overlapped, nullptr) == SOCKET_ERROR)
     {
-        const auto error = GetLastError();
+        const auto error = WSAGetLastError();
         if (error != WSA_IO_PENDING)
             return make_system_error(make_system_error_code(uint32_t(error)));
     }
@@ -667,7 +706,7 @@ error_type network_udp_request_ex::send(const SOCKET sock) noexcept
     auto send_bytes = 0ul;
     if (network_func_send_to(sock, &buf, 1, &send_bytes, 0, address.data(), address.size(), &overlapped, nullptr) == SOCKET_ERROR)
     {
-        const auto error = GetLastError();
+        const auto error = WSAGetLastError();
         if (error != WSA_IO_PENDING)
             return make_system_error(make_system_error_code(uint32_t(error)));
     }
@@ -792,7 +831,7 @@ error_type network_system_tcp::connect(network_tcp_connection& conn, const netwo
     if (!network_func_connect(conn.m_socket, address.data(), address.size(),
         ref->capacity ? ref->buffer : nullptr, uint32_t(ref->capacity), &bytes, &ref->overlapped))
     {
-        const auto error = GetLastError();
+        const auto error = WSAGetLastError();
         if (error != WSA_IO_PENDING)
             return make_system_error(make_system_error_code(uint32_t(error)));
     }
@@ -824,7 +863,7 @@ error_type network_system_tcp::accept(network_tcp_connection& conn) noexcept
     if (!network_func_accept(m_socket, conn.m_socket, ref->buffer, 0,
         uint32_t(size / 2), uint32_t(size / 2), &bytes, &ref->overlapped))
     {
-        const auto error = GetLastError();
+        const auto error = WSAGetLastError();
         if (error != WSA_IO_PENDING)
             return make_system_error(make_system_error_code(uint32_t(error)));
     }
@@ -855,7 +894,7 @@ error_type network_system_tcp::disconnect(network_tcp_connection& conn) noexcept
     ICY_ERROR(network_tcp_request::create(network_request_type::disconnect, 0, conn, ref));
     if (!network_func_disconnect(conn.m_socket, &ref->overlapped, TF_REUSE_SOCKET, 0))
     {
-        const auto error = GetLastError();
+        const auto error = WSAGetLastError();
         if (error != WSA_IO_PENDING)
             return make_system_error(make_system_error_code(uint32_t(error)));
     }

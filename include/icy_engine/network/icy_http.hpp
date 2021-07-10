@@ -58,7 +58,7 @@ namespace icy
 	};
 	struct http_request
 	{	
-		http_request_type type = http_request_type::none;
+		http_request_type type = http_request_type::get;
 		http_content_type content = http_content_type::none;
 		string url_path;
 		array<string> url_sub;

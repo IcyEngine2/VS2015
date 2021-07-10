@@ -365,7 +365,6 @@ error_type icy::enum_files_rec(const string_view path, array<string>& files) noe
 {
 	return ::enum_files(path, {}, true, files);
 }
-
 static error_type file_dialog(string& str, const const_array_view<dialog_filter> filters, const FILEOPENDIALOGOPTIONS options)
 {
     library lib("ole32.dll");

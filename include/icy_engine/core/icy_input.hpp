@@ -117,22 +117,23 @@ namespace icy
             int64_t wheel   : 0x10;
         };
 	};
-    inline void key_mod_set(key_mod& mod, const std::bitset<256>& buffer) noexcept
+    inline void key_mod_set(key_mod& mod, const uint8_t(&buffer)[256]) noexcept
     {
-        if (buffer[size_t(key::left_ctrl)]) mod = mod | key_mod::lctrl;
-        if (buffer[size_t(key::left_alt)]) mod = mod | key_mod::lalt;
-        if (buffer[size_t(key::left_shift)]) mod = mod | key_mod::lshift;
-        if (buffer[size_t(key::right_ctrl)]) mod = mod | key_mod::rctrl;
-        if (buffer[size_t(key::right_alt)]) mod = mod | key_mod::ralt;
-        if (buffer[size_t(key::right_shift)]) mod = mod | key_mod::rshift;
+        const auto mask = 0x80;
+        if (buffer[size_t(key::left_ctrl)] & mask) mod = mod | key_mod::lctrl;
+        if (buffer[size_t(key::left_alt)] & mask) mod = mod | key_mod::lalt;
+        if (buffer[size_t(key::left_shift)] & mask) mod = mod | key_mod::lshift;
+        if (buffer[size_t(key::right_ctrl)] & mask) mod = mod | key_mod::rctrl;
+        if (buffer[size_t(key::right_alt)] & mask) mod = mod | key_mod::ralt;
+        if (buffer[size_t(key::right_shift)] & mask) mod = mod | key_mod::rshift;
     }
     namespace detail
     {       
 		key scan_vk_to_key(uint16_t vkey, uint16_t scan, const bool isE0) noexcept;
-		uint16_t from_winapi(input_message& msg, const size_t wParam, const ptrdiff_t lParam, const std::bitset<256>& buffer) noexcept;
-		uint16_t from_winapi(input_message& key, const tagMSG& msg, const std::bitset<256> & buffer) noexcept;
-		void from_winapi(input_message& mouse, const uint32_t offset_x, const uint32_t offset_y, const uint32_t msg, const size_t wParam, const ptrdiff_t lParam, const std::bitset<256> & buffer) noexcept;
-		void from_winapi(input_message& mouse, const uint32_t offset_x, const uint32_t offset_y, const tagMSG& msg, const std::bitset<256>& buffer) noexcept;
+		uint16_t key_from_winapi(input_message& msg, const size_t wParam, const ptrdiff_t lParam, const uint8_t(&buffer)[256]) noexcept;
+		uint16_t key_from_winapi(input_message& key, const tagMSG& msg, const uint8_t(&buffer)[256]) noexcept;
+		void mouse_from_winapi(input_message& mouse, const uint32_t msg, const size_t wParam, const ptrdiff_t lParam, const uint8_t(&buffer)[256]) noexcept;
+		void mouse_from_winapi(input_message& mouse, const tagMSG& msg, const uint8_t(&buffer)[256]) noexcept;
 		tagMSG to_winapi(const input_message& input) noexcept;
         void to_winapi(const input_message& input, uint32_t& msg, size_t& wParam, ptrdiff_t& lParam) noexcept;
     }

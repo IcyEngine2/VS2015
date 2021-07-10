@@ -137,6 +137,7 @@ namespace icy
             return m_quit.load(std::memory_order_acquire) == false;
         }
         virtual error_type exec() noexcept = 0;
+        error_type post_quit_event() noexcept;
         error_type post(event_system* const source, const event_type type) noexcept;
         template<typename T> error_type post(event_system* const source, const event_type type, T&& arg) noexcept;
     protected:
@@ -364,7 +365,7 @@ namespace icy
         event_system* system = nullptr;
         void cancel() noexcept override
         {
-            post_quit_event();
+            system->post_quit_event();
         }
         error_type run() noexcept override
         {

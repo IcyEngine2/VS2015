@@ -9,10 +9,10 @@ struct icy::detail::network_connection
     network_connection() noexcept = default;
     ~network_connection() noexcept
     {
-        shutdown();
+        shutdown(std::chrono::seconds(0));
     }
     network_connection(network_connection&&) noexcept = default;
-    error_type shutdown() noexcept;
+    error_type shutdown(const icy::duration_type timeout) noexcept;
     error_type accept(network_system_data& system) noexcept;
     error_type recv() noexcept;
     error_type recv(array<uint8_t>&& bytes) noexcept;
@@ -67,9 +67,14 @@ public:
     error_type cancel() noexcept;
     error_type post(const uint32_t conn, const event_type type, array<uint8_t>&& bytes, const network_address* addr = nullptr) noexcept;
     error_type post(const uint32_t conn, unique_ptr<http_response>&& response) noexcept;
+    error_type post(const uint32_t conn, unique_ptr<http_request>&& request) noexcept;
     error_type loop_tcp(event_system& system) noexcept;
     error_type loop_udp(event_system& system) noexcept;
     error_type join(const network_address& addr, bool join) noexcept;
+    const network_server_config& config() const noexcept
+    {
+        return m_config;
+    }
 private:
     uint32_t addr_size() const noexcept
     {

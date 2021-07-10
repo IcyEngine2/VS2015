@@ -185,6 +185,9 @@ namespace icy
             return *m_thread;
         }
         error_type signal(const event_data* event) noexcept override;
+        error_type send(const http_response& response) noexcept;
+        error_type send(const http_request& request) noexcept;
+        error_type recv() noexcept;
     private:
         error_type exec() noexcept override;
     private:
@@ -214,6 +217,7 @@ namespace icy
     public:
         ~network_system_udp_server() noexcept;
         error_type send(const network_address& addr, const const_array_view<uint8_t> buffer) noexcept;
+    private:
         error_type exec() noexcept override;
         error_type signal(const event_data* event) noexcept override;
     private:
@@ -227,7 +231,10 @@ namespace icy
         friend error_type create_network_http_server(shared_ptr<network_system_http_server>& system, const network_server_config& args) noexcept;
     public:
         ~network_system_http_server() noexcept;
-        error_type reply(const network_tcp_connection conn, const http_response& response) noexcept;
+        error_type send(const network_tcp_connection conn, const http_response& response) noexcept;
+        error_type send(const network_tcp_connection conn, const http_request& request) noexcept;
+        error_type recv(const network_tcp_connection conn) noexcept;
+    private:
         error_type exec() noexcept override;
         error_type signal(const event_data* event) noexcept override;
     private:

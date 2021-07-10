@@ -80,9 +80,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\..\source\icy_engine\utility\icy_process.cpp" />
     <ClCompile Include="..\..\..\source\mbox\mbox_server_launch.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\..\source\mbox\mbox_network.hpp" />
     <ClInclude Include="..\..\..\source\mbox\mbox_server.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

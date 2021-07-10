@@ -10,8 +10,8 @@
 
 using namespace icy;
 
-static detail::rw_spin_lock g_hook_lock;
-static uint32_t g_hook_count = 0;
+static std::atomic<uint32_t> g_hook_count = 0;
+
 static error_type make_minhook_error(const MH_STATUS code) noexcept
 {
     return error_type(code, error_source_minhook);
@@ -24,9 +24,7 @@ void hook_base::shutdown() noexcept
 
     MH_RemoveHook(m_new_func);
     m_new_func = nullptr;
-    ICY_LOCK_GUARD_WRITE(g_hook_lock);
-    --g_hook_count;
-    if (g_hook_count == 0)
+    if (g_hook_count.fetch_sub(1) == 1)
         MH_Uninitialize();
 }
 error_type hook_base::initialize(void* const old_func, void* const new_func) noexcept
@@ -36,13 +34,11 @@ error_type hook_base::initialize(void* const old_func, void* const new_func) noe
 
     shutdown();
     {
-        ICY_LOCK_GUARD_WRITE(g_hook_lock);
-        if (g_hook_count == 0)
+        if (g_hook_count.fetch_add(1) == 0)
         {
             if (const auto error = MH_Initialize())
                 return make_minhook_error(error);
         }
-        ++g_hook_count;
     }
     auto error = MH_OK;
     if (!error) error = MH_CreateHook(old_func, m_new_func = new_func, &m_old_func);
@@ -52,7 +48,7 @@ error_type hook_base::initialize(void* const old_func, void* const new_func) noe
         shutdown();
         return make_minhook_error(error);
     }
-    return {};
+    return error_type();
 }
 
 static error_type minhook_error_to_string(const unsigned code, const string_view locale, string& str) noexcept

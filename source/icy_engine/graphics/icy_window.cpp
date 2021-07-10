@@ -11,6 +11,7 @@
 
 #if _WIN32
 #include <Windows.h>
+#include <windowsx.h>
 #include <d2d1.h>
 #endif
 
@@ -152,6 +153,7 @@ static decltype(&::ReleaseCapture) win32_release_capture;
 static decltype(&::OpenClipboard) win32_open_clipboard;
 static decltype(&::CloseClipboard) win32_close_clipboard;
 static decltype(&::GetClipboardData) win32_get_clipboard_data;
+static decltype(&::ScreenToClient) win32_screen_to_client;
 #endif
 class window_system_data;
 class window_data_usr : public window
@@ -408,24 +410,6 @@ private:
 };
 ICY_STATIC_NAMESPACE_END
 
-static std::bitset<256> key_state() noexcept
-{
-    std::bitset<256> keys;
-#if X11_GUI
-
-#elif _WIN32
-    uint8_t keyboard[0x100];
-    const auto mask = 0x80;
-    win32_get_keyboard_state(keyboard);
-    keys[uint32_t(key::left_ctrl)] = (keyboard[VK_LCONTROL] & mask) != 0;
-    keys[uint32_t(key::left_alt)] = (keyboard[VK_LMENU] & mask) != 0;
-    keys[uint32_t(key::left_shift)] = (keyboard[VK_LSHIFT] & mask) != 0;
-    keys[uint32_t(key::right_ctrl)] = (keyboard[VK_RCONTROL] & mask) != 0;
-    keys[uint32_t(key::right_alt)] = (keyboard[VK_RMENU] & mask) != 0;
-    keys[uint32_t(key::right_shift)] = (keyboard[VK_RSHIFT] & mask) != 0;
-#endif
-    return keys;
-}
 #if X11_GUI
 
 #elif _WIN32
@@ -986,7 +970,6 @@ LRESULT window_data_sys::proc(uint32_t msg, WPARAM wparam, LPARAM lparam) noexce
         return error_type();
     };
 
-
     switch (msg)
     {
     //case WM_CLIPBOARDUPDATE:
@@ -1132,8 +1115,12 @@ LRESULT window_data_sys::proc(uint32_t msg, WPARAM wparam, LPARAM lparam) noexce
     case WM_SYSKEYDOWN:
     case WM_SYSKEYUP:
     {
+        uint8_t keyboard[0x100];
+        if (!win32_get_keyboard_state(keyboard))
+            memset(keyboard, 0, sizeof(keyboard));
+
         input_message key_input;
-        auto count = detail::from_winapi(key_input, wparam, lparam, key_state());
+        auto count = detail::key_from_winapi(key_input, wparam, lparam, keyboard);
         for (auto k = 0u; k < count; ++k)
         {
             window_message message;
@@ -1143,6 +1130,7 @@ LRESULT window_data_sys::proc(uint32_t msg, WPARAM wparam, LPARAM lparam) noexce
         }
         break;
     }
+    case WM_MOUSEWHEEL:
     case WM_MOUSEMOVE:
     case WM_LBUTTONDOWN:
     case WM_RBUTTONDOWN:
@@ -1157,9 +1145,22 @@ LRESULT window_data_sys::proc(uint32_t msg, WPARAM wparam, LPARAM lparam) noexce
     case WM_MBUTTONDBLCLK:
     case WM_XBUTTONDBLCLK:
     {
+        uint8_t keyboard[0x100];
+        if (!win32_get_keyboard_state(keyboard))
+            memset(keyboard, 0, sizeof(keyboard));
+
         window_message message;
-        detail::from_winapi(message.input, 0, 0, msg, wparam, lparam, key_state());
+        detail::mouse_from_winapi(message.input, msg, wparam, lparam, keyboard);
         post_message(message, event_type::window_input);
+        if (msg == WM_MOUSEWHEEL)
+        {
+            auto point = POINT{ GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };
+            if (win32_screen_to_client(m_hwnd, &point))
+            {
+                message.input.point_x = point.x;
+                message.input.point_y = point.y;
+            }
+        }
         if (message.input.type == input_type::mouse_press || message.input.type == input_type::mouse_double)
         {
             if (++m_capture == 1)
@@ -1170,6 +1171,7 @@ LRESULT window_data_sys::proc(uint32_t msg, WPARAM wparam, LPARAM lparam) noexce
             if (--m_capture == 0)
                 win32_release_capture();
         }
+
         break;
     }
     }
@@ -1377,6 +1379,7 @@ error_type window_system_data::initialize() noexcept
     ICY_USER32_FUNC(win32_open_clipboard, OpenClipboard);
     ICY_USER32_FUNC(win32_close_clipboard, CloseClipboard);
     ICY_USER32_FUNC(win32_get_clipboard_data, GetClipboardData);
+    ICY_USER32_FUNC(win32_screen_to_client, ScreenToClient);
 
     m_cursor = static_cast<HCURSOR>(win32_load_cursor(nullptr, IDC_ARROW));
     if (!m_cursor)

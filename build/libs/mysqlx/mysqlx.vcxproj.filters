@@ -1,0 +1,130 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="Header Files\common">
+      <UniqueIdentifier>{d975d8e5-58d1-4394-868a-8a07241276b3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\cdk">
+      <UniqueIdentifier>{f971072e-bc50-4df2-98ed-0b6c4ccd1914}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\cdk\mysqlx">
+      <UniqueIdentifier>{1ac62dab-4004-4879-9dc2-453370c5d763}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\zlib">
+      <UniqueIdentifier>{ca0f7d92-20b8-47de-a596-207a85e5e99b}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\cdk\mysqlx\cdk_session.cc">
+      <Filter>Source Files\cdk\mysqlx</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\cdk\mysqlx\cdk_result.cc">
+      <Filter>Source Files\cdk\mysqlx</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\devapi\devapi_session.cc">
+      <Filter>Source Files\cdk\mysqlx</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\devapi\devapi_result.cc">
+      <Filter>Source Files\cdk\mysqlx</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\cdk\parser\json_parser.cc">
+      <Filter>Source Files\cdk\mysqlx</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\cdk\parser\tokenizer.cc">
+      <Filter>Source Files\cdk\mysqlx</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\cdk\parser\uri_parser.cc">
+      <Filter>Source Files\cdk\mysqlx</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\cdk\parser\expr_parser.cc">
+      <Filter>Source Files\cdk\mysqlx</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\common\common_collection.cc">
+      <Filter>Source Files\cdk\mysqlx</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\common\common_result.cc">
+      <Filter>Source Files\cdk\mysqlx</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\common\common_session.cc">
+      <Filter>Source Files\cdk\mysqlx</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\common\common_value.cc">
+      <Filter>Source Files\cdk\mysqlx</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\cdk\protocol\rset.cc">
+      <Filter>Source Files\cdk\mysqlx</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\cdk\protocol\stmt.cc">
+      <Filter>Source Files\cdk\mysqlx</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\cdk\protocol\crud.cc">
+      <Filter>Source Files\cdk\mysqlx</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\cdk\protocol\protocol.cc">
+      <Filter>Source Files\cdk\mysqlx</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\cdk\protocol\protocol_compression.cc">
+      <Filter>Source Files\cdk\mysqlx</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\cdk\protocol\protocol_session.cc">
+      <Filter>Source Files\cdk\mysqlx</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\cdk\extra\zlib\gzclose.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\cdk\extra\zlib\gzlib.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\cdk\extra\zlib\gzread.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\cdk\extra\zlib\gzwrite.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\cdk\extra\zlib\infback.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\cdk\extra\zlib\inffast.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\cdk\extra\zlib\inflate.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\cdk\extra\zlib\inftrees.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\cdk\extra\zlib\trees.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\cdk\extra\zlib\uncompr.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\cdk\extra\zlib\zutil.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\cdk\extra\zlib\adler32.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\cdk\extra\zlib\compress.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\cdk\extra\zlib\crc32.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\source\libs\mysqlx\cdk\extra\zlib\deflate.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>

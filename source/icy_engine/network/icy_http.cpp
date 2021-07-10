@@ -270,12 +270,18 @@ error_type icy::to_value(const string_view buffer, http_request& request) noexce
 					return make_stdlib_error(std::errc::illegal_byte_sequence);
 				state = parse_header_key;
 				beg = ptr + k + 2;
-				k += 1;		
+				k += 1;
 			}
 			break;
 		}
 		case parse_header_key:
 		{
+			if (ptr[k] == '\r')
+			{
+				state = none;
+				beg = ptr + len;
+				break;
+			}
 			if (ptr[k] == ':')
 			{
 				if (k + 1 >= len || ptr[k + 1] != ' ')
@@ -682,11 +688,13 @@ error_type icy::to_string(const http_request& request, string& str) noexcept
 		ICY_ERROR(str.append(content_size));
 	}
 	
-
-	ICY_ERROR(str.append("\r\n"_s));
-	ICY_ERROR(str.append(http_key_content_type));
-	ICY_ERROR(str.append(": "_s));
-	ICY_ERROR(str.append(::to_string(request.content)));
+	if (request.type == http_request_type::post)
+	{
+		ICY_ERROR(str.append("\r\n"_s));
+		ICY_ERROR(str.append(http_key_content_type));
+		ICY_ERROR(str.append(": "_s));
+		ICY_ERROR(str.append(::to_string(request.content)));
+	}
 
 	if (!request.host.empty())
 	{

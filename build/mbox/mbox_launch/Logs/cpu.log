@@ -1,0 +1,6 @@
+6/2 21:50:19.887  vendor: GenuineIntel
+6/2 21:50:19.887  branding: Intel(R) Core(TM) i5-7400 CPU @ 3.00GHz
+6/2 21:50:19.887  features: lahf64 cmpxchg16b sse sse2 sse3 ssse3 sse41 sse42 avx avx2 aesni clmul rdrand 
+6/2 21:50:19.887  sockets: 1
+6/2 21:50:19.887  cores: 4
+6/2 21:50:19.887  threads: 4

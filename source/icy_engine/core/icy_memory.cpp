@@ -509,6 +509,10 @@ void* heap_base::raw_alloc(size_t size) noexcept
                 }
                 m_tlocs.count += 1;
             }
+            else
+            {
+                tloc = static_cast<heap_node_tloc*>(next);
+            }
             //tloc = static_cast<heap_node_tloc*>(next);
         }
         auto& node = tloc->sizes[size_class].current;

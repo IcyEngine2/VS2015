@@ -34,11 +34,8 @@ string_view to_string(const mbox_type type) noexcept
     case mbox_type::device:
         return "Device"_s;
 
-    case mbox_type::application_folder:
-        return "Applications"_s;
-
-    case mbox_type::application:
-        return "Application"_s;
+    case mbox_type::game:
+        return "Game"_s;
 
     case mbox_type::character_group:
         return "Character Group"_s;
@@ -134,9 +131,11 @@ const auto mbox_key_index = "index"_s;
 const auto mbox_key_type = "type"_s;
 const auto mbox_key_parent = "parent"_s;
 const auto mbox_key_name = "name"_s;
-const auto mbox_key_device_uid = "deviceUid"_s;
-const auto mbox_key_app_launch_path = "appLaunchPath"_s;
-const auto mbox_key_app_process_path = "appProcessPath"_s;
+const auto mbox_key_device_ip = "deviceIp"_s;
+const auto mbox_key_device_config = "config"_s;
+const auto mbox_key_device_app_index = "index"_s;
+const auto mbox_key_device_app_launch_path = "launchPath"_s;
+const auto mbox_key_device_app_process_path = "processPath"_s;
 const auto mbox_key_character_group = "characterGroup"_s;
 const auto mbox_key_character_config_device = "device"_s;
 const auto mbox_key_character_config_index = "index"_s;
@@ -159,18 +158,31 @@ error_type to_value(const mbox_base& base, json& array) noexcept
 
     if (base.type == mbox_type::device)
     {
-        if (!base.device_uid.empty())
-            ICY_ERROR(output.insert(mbox_key_device_uid, base.device_uid));
-    }
-    if (base.type == mbox_type::application)
-    {
-        if (!base.app_launch_path.empty())
+        if (!base.device_ip.empty())
+            ICY_ERROR(output.insert(mbox_key_device_ip, base.device_ip));
+    
+        json jgroup = json_type::array;
+        for (auto&& config : base.device_app_config)
         {
-            ICY_ERROR(output.insert(mbox_key_app_launch_path, base.app_launch_path));
+            json jconfig = json_type::object;
+            if (config.index)
+            {
+                ICY_ERROR(jconfig.insert(mbox_key_device_app_index, config.index));
+            }
+            if (!config.launch_path.empty())
+            {
+                ICY_ERROR(jconfig.insert(mbox_key_device_app_launch_path, config.launch_path));
+            }
+            if (!config.process_path.empty())
+            {
+                ICY_ERROR(jconfig.insert(mbox_key_device_app_process_path, config.process_path));
+            }
+            if (jconfig.size())
+                ICY_ERROR(jgroup.push_back(std::move(jconfig)));
         }
-        if (!base.app_process_path.empty())
+        if (jgroup.size())
         {
-            ICY_ERROR(output.insert(mbox_key_app_process_path, base.app_process_path));
+            ICY_ERROR(output.insert(mbox_key_device_config, std::move(jgroup)));
         }
     }
     if (base.type == mbox_type::character_group)
@@ -308,9 +320,28 @@ error_type mbox_server_database::load(const string_view path) noexcept
 
             if (base.type == mbox_type::device)
             {
-                if (auto uid = val.find(mbox_key_device_uid))
+                if (auto ip = val.find(mbox_key_device_ip))
                 {
-                    ICY_ERROR(copy(uid->get(), it->value->device_uid));
+                    ICY_ERROR(copy(ip->get(), it->value->device_ip));
+                }
+
+                if (auto jgroup = val.find(mbox_key_device_config))
+                {
+                    if (jgroup->type() != json_type::array)
+                        return mbox_error_corrupted_data;
+
+                    for (auto k = 0u; k < jgroup->size(); ++k)
+                    {
+                        const auto jconfig = jgroup->at(k);
+                        if (!jconfig || jconfig->type() != json_type::object)
+                            return mbox_error_corrupted_data;
+
+                        mbox_device_app_config config;
+                        jconfig->get(mbox_key_device_app_index, config.index);
+                        jconfig->get(mbox_key_device_app_launch_path, config.launch_path);
+                        jconfig->get(mbox_key_device_app_process_path, config.process_path);
+                        ICY_ERROR(it->value->device_app_config.push_back(std::move(config)));
+                    }
                 }
             }
 
@@ -335,18 +366,6 @@ error_type mbox_server_database::load(const string_view path) noexcept
                     }
                 }
             }
-            if (base.type == mbox_type::application)
-            {
-                if (auto launch = val.find(mbox_key_app_launch_path))
-                {
-                    ICY_ERROR(copy(launch->get(), it->value->app_launch_path));
-                }
-                if (auto process = val.find(mbox_key_app_process_path))
-                {
-                    ICY_ERROR(copy(process->get(), it->value->app_process_path));
-                }
-            }
-
             if (auto opers = val.find(mbox_key_operations))
             {
                 if (opers->type() != json_type::array)
@@ -408,7 +427,7 @@ error_type mbox_server_database::load(const string_view path) noexcept
                     while (it != m_data.end())
                     {
                         it = m_data.find(it->value->parent);
-                        if (it->value->type == mbox_type::application)
+                        if (it->value->type == mbox_type::game)
                         {
                             if (it->value->index != base.parent)
                                 return mbox_error_invalid_parent;
@@ -416,6 +435,15 @@ error_type mbox_server_database::load(const string_view path) noexcept
                         }
                     }
                 }
+                ICY_ERROR(indices.insert(config.index));
+            }
+            for (auto&& config : base.device_app_config)
+            {
+                auto it = m_data.find(config.index);
+                if (it == m_data.end())
+                    return mbox_error_invalid_index;
+                if (it->value->type != mbox_type::game)
+                    return mbox_error_invalid_type;
             }
             for (auto&& oper : base.operations)
             {
@@ -536,8 +564,7 @@ error_type mbox_server_database::tree_view(const uint32_t index, gui_data_write_
     switch (val.type)
     {
     case mbox_type::device_folder:
-    case mbox_type::application_folder:
-    case mbox_type::application:
+    case mbox_type::game:
     case mbox_type::account:
     case mbox_type::server:
     case mbox_type::tag_folder:
@@ -624,8 +651,13 @@ error_type mbox_try_create(const mbox_base& pval, const mbox_type type) noexcept
 {
     switch (type)
     {
+    case mbox_type::game:
+    {
+        if (pval.index != 0)
+            return mbox_error_invalid_parent;
+        break;
+    }
     case mbox_type::device_folder:
-    case mbox_type::application_folder:
     case mbox_type::tag_folder:
     case mbox_type::action_folder:
     case mbox_type::script_folder:
@@ -643,16 +675,10 @@ error_type mbox_try_create(const mbox_base& pval, const mbox_type type) noexcept
             return mbox_error_invalid_parent;
         break;
     }
-    case mbox_type::application:
-    {
-        if (pval.type != mbox_type::application_folder)
-            return mbox_error_invalid_parent;
-        break;
-    }
     case mbox_type::character_group:
     case mbox_type::account:
     {
-        if (pval.type != mbox_type::application)
+        if (pval.type != mbox_type::game)
             return mbox_error_invalid_parent;
         break;
     }

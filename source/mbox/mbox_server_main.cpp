@@ -119,23 +119,43 @@ error_type main_ex(heap& heap)
     ICY_ERROR(mbox.tree_view(0u, *tree_model, root_node));
 
 
-    array<network_address> addr_list;
-    ICY_ERROR(network_address::query(addr_list, MBOX_MULTICAST_ADDR, MBOX_MULTICAST_PORT));
-    if (addr_list.empty())
-        return error_type();
+    network_address udp_launch_addr;
+    {
+        array<network_address> addr_list;
+        ICY_ERROR(network_address::query(addr_list, MBOX_MULTICAST_ADDR, MBOX_MULTICAST_LAUNCH_PORT));
+        if (addr_list.empty())
+            return error_type();
+        udp_launch_addr = std::move(addr_list[0]);
+        addr_list.clear();
+    }
 
-    network_server_config config;
-    config.capacity = 40;
-    config.port = addr_list[0].port();
-    shared_ptr<network_system_http_server> http_server;
-    ICY_ERROR(create_network_http_server(http_server, config));
-    
+
+    map<uint32_t, uint32_t> client_connections;
+    map<uint32_t, uint32_t> launch_connections;
+    shared_ptr<network_system_http_server> http_server;    
     shared_ptr<event_thread> http_thread;
-    ICY_ERROR(make_shared(http_thread, event_thread()));
-    http_thread->system = http_server.get();
-    ICY_SCOPE_EXIT{ http_thread->wait(); };
-    ICY_ERROR(http_thread->launch());
-    ICY_ERROR(http_thread->rename("Http Thread"_s));
+
+    const auto launch_http = [&udp_launch_addr, &http_server, &http_thread, &connections]
+    {
+        if (http_thread)
+            http_thread->wait();
+        http_thread = nullptr;
+        http_server = nullptr;
+        connections.clear();
+
+        network_server_config config;
+        config.capacity = 40;
+        config.port = udp_launch_addr.port();
+        config.timeout = max_timeout;
+        ICY_ERROR(create_network_http_server(http_server, config));
+        ICY_ERROR(make_shared(http_thread, event_thread()));
+        http_thread->system = http_server.get();
+        ICY_ERROR(http_thread->launch());
+        ICY_ERROR(http_thread->rename("Http Thread"_s));
+        return error_type();
+    };
+    ICY_SCOPE_EXIT{ if (http_thread) http_thread->wait(); };
+
 
     while (*loop)
     {
@@ -165,12 +185,55 @@ error_type main_ex(heap& heap)
                     {
                         network_udp_socket udp;
                         ICY_ERROR(udp.initialize(0));
-                        const uint64_t version = (uint64_t(MBOX_VERSION_MAJOR) << 0x20) | MBOX_VERSION_MINOR;
-                        ICY_ERROR(udp.send(addr_list[0], { reinterpret_cast<const uint8_t*>(&version), sizeof(version) }));
+                        mbox_udp_request udp_request;
+                        udp_request.type = mbox_request_type::ping;
+                        ICY_ERROR(udp.send(udp_launch_addr, { reinterpret_cast<const uint8_t*>(&udp_request), sizeof(udp_request) }));
+                    }
+                    else if (value == 2)
+                    {
+                        mbox_http_request request;
+                        request.type = mbox_request_type::set_config;
+                        //copy("D:\\Games\\World of Warcraft\\_classic_\\WowClassic.exe"_s, request.process_path);
+                        copy("D:\\VS2015\\bin\\Release\\icy_mbox_test.exe"_s, request.process_path);
+
+                        for (auto&& pair : connections)
+                        {
+                            http_request hrequest;
+                            ICY_ERROR(mbox_send_request(request, hrequest));
+                            ICY_ERROR(http_server->send(network_tcp_connection(pair.key), hrequest));
+                        }
+                    }
+                    else if (value == 3)
+                    {
+                        ICY_ERROR(launch_http());
+                    }
+                    else if (value == 4)
+                    {
+                        mbox_http_request request;
+                        request.type = mbox_request_type::launch_app;
+                        request.character = 13;
+                        for (auto&& pair : connections)
+                        {
+                            http_request hrequest;
+                            ICY_ERROR(mbox_send_request(request, hrequest));
+                            ICY_ERROR(http_server->send(network_tcp_connection(pair.key), hrequest));
+                        }
+                    }
+                    else if (value == 5)
+                    {
+                        mbox_http_request request;
+                        request.type = mbox_request_type::send_input;
+                        request.character = 13;
+                        request.msg.push_back(input_message(input_type::key_press, key::w, key_mod::none));
+                        for (auto&& pair : connections)
+                        {
+                            http_request hrequest;
+                            ICY_ERROR(mbox_send_request(request, hrequest));
+                            ICY_ERROR(http_server->send(network_tcp_connection(pair.key), hrequest));
+                        }
                     }
                 }
             }
-
         }
         else if (event->type == event_type::gui_context)
         {
@@ -179,13 +242,22 @@ error_type main_ex(heap& heap)
             if (event_data.data.get(index))
             {
                 menu_model->destroy(gui_node());
-                gui_node node1, node2;
+                gui_node node1, node2, node3, node4, node5;
                 menu_model->insert(gui_node(), 0, 0, node1);
                 menu_model->insert(gui_node(), 0, 0, node2);
+                menu_model->insert(gui_node(), 0, 0, node3);
+                menu_model->insert(gui_node(), 0, 0, node4);
+                menu_model->insert(gui_node(), 0, 0, node5);
                 menu_model->modify(node1, gui_node_prop::data, "Send Ping"_s);
-                menu_model->modify(node2, gui_node_prop::data, "456"_s);
+                menu_model->modify(node2, gui_node_prop::data, "Send Config"_s);
+                menu_model->modify(node3, gui_node_prop::data, "Restart HTTP"_s);
+                menu_model->modify(node4, gui_node_prop::data, "Launch character"_s);
+                menu_model->modify(node5, gui_node_prop::data, "Send 'W'"_s);
                 menu_model->modify(node1, gui_node_prop::user, 1);
                 menu_model->modify(node2, gui_node_prop::user, 2);
+                menu_model->modify(node3, gui_node_prop::user, 3);
+                menu_model->modify(node4, gui_node_prop::user, 4);
+                menu_model->modify(node5, gui_node_prop::user, 5);
                 gui_node node21;
                 menu_model->insert(node2, 0, 0, node21);
                 menu_model->modify(node21, gui_node_prop::data, "678"_s);
@@ -210,14 +282,32 @@ error_type main_ex(heap& heap)
             ICY_ERROR(gui_window->resize(event_data.size));
             ICY_ERROR(gui_window->render(gui_widget(), query));
         }
-        else if (
-            event->type == event_type::network_connect ||
-            event->type == event_type::network_recv)
+        else if (event->type == event_type::network_connect)
         {
             const auto& event_data = event->data<network_event>();
-            http_response response;
-            response.type = http_content_type::application_json;
-            ICY_ERROR(http_server->reply(event_data.conn, response));
+            ICY_ERROR(http_server->send(event_data.conn, http_response()));
+            ICY_ERROR(connections.insert(event_data.conn.index, 1u));
+            ICY_ERROR(http_server->recv(event_data.conn));
+        }
+        else if (event->type == event_type::network_disconnect)
+        {
+            const auto& event_data = event->data<network_event>();
+            const auto it = connections.find(event_data.conn.index);
+            if (it != connections.end())
+                connections.erase(it);
+        }
+        else if (event->type == event_type::network_recv)
+        {
+            const auto& event_data = event->data<network_event>();
+            if (event_data.http.request)
+            {
+                mbox_http_request request;
+                if (mbox_recv_request(*event_data.http.request, request) == error_type())
+                {
+                    request.msg.clear();
+                }
+            }
+            ICY_ERROR(http_server->recv(event_data.conn));
         }
     }
 
