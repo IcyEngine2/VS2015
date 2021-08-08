@@ -7,7 +7,8 @@
 #include <icy_engine/core/icy_map.hpp>
 #include <icy_engine/core/icy_blob.hpp>
 #include <icy_engine/utility/icy_com.hpp>
-#include <icy_engine/image/icy_image.hpp>
+#include <icy_engine/graphics/icy_image.hpp>
+#include <icy_engine/graphics/icy_render.hpp>
 
 #if _WIN32
 #include <Windows.h>
@@ -88,6 +89,7 @@ struct internal_message
     cursor_type cursor;
     shared_ptr<query_type> query;
     array<window_render_item> repaint;
+    shared_ptr<render_surface> surface;
 };
 struct win32_flag_enum
 {
@@ -216,7 +218,7 @@ public:
         }
         return 96;
     }
-    error_type repaint(array<window_render_item>& items) noexcept override;
+    error_type repaint(const string_view tag, array<window_render_item>& items) noexcept override;
     error_type win_handle(void*& handle) const noexcept override;
 private:
     weak_ptr<window_system_data> m_system;
@@ -245,7 +247,8 @@ public:
     error_type rename(const string_view name) noexcept;
     error_type show(const bool value) noexcept;
     error_type cursor(const uint32_t priority, shared_ptr<window_cursor> cursor) noexcept;
-    error_type repaint(array<window_render_item>&& items) noexcept;
+    error_type repaint(string&& tag, array<window_render_item>&& items) noexcept;
+    error_type repaint(string&& tag, shared_ptr<render_surface> surface) noexcept;
     error_type resize(bool& changed) noexcept;
 #if X11_GUI
     error_type start_timer(const duration_type timeout) noexcept
@@ -297,7 +300,7 @@ private:
     } m_cursor;
     wchar_t m_chr = 0;
     uint32_t m_capture = 0;
-    array<window_render_item> m_repaint;
+    map<string, array<window_render_item>> m_repaint;
 };
 class window_thread_data : public thread
 {
@@ -661,25 +664,14 @@ error_type window_data_sys::cursor(const uint32_t priority, shared_ptr<window_cu
     }
     return error_type();
 }
-error_type window_data_sys::repaint(array<window_render_item>&& repaint) noexcept
+error_type window_data_sys::repaint(string&& tag, array<window_render_item>&& items) noexcept
 {
-/*#if X11_GUI
-    if (colors)
+    auto it = m_repaint.find(tag);
+    if (it == m_repaint.end())
     {
-        for (auto row = 0; row < std::min(int(colors->rows()), m_image->height); ++row)
-        {
-            for (auto col = 0; col < std::min(int(colors->cols()), m_image->width); ++col)
-            {
-                const auto pixel = colors->at(row, col).to_rgb();
-                XPutPixel(m_image, col, row, pixel);
-            }
-        }
+        ICY_ERROR(m_repaint.insert(std::move(tag), array<window_render_item>(), &it));
     }
-    auto display = &system.display();
-    if (XPutImage(display, m_hwnd, m_gc, m_image, 0, 0, 0, 0, m_image->width, m_image->height))
-        return system.error();
-#endif*/
-    m_repaint = std::move(repaint);
+    it->value = std::move(items);
     if (!win32_invalidate_rect(m_hwnd, nullptr, TRUE))
         return last_system_error();
     return error_type();
@@ -908,6 +900,7 @@ LRESULT window_data_sys::proc(uint32_t msg, WPARAM wparam, LPARAM lparam) noexce
 
          auto end_draw_done = false;
          ICY_SCOPE_EXIT{ if (!end_draw_done) render.EndDraw(); };
+       
 
          const auto to_color = [](const color color)
          {
@@ -917,47 +910,50 @@ LRESULT window_data_sys::proc(uint32_t msg, WPARAM wparam, LPARAM lparam) noexce
          {
              return D2D1::RectF(item.min_x, item.min_y, item.max_x, item.max_y);
          };
-         for (auto&& item : m_repaint)
+         for (auto&& pair : m_repaint)
          {
-             switch (item.type)
+             for (auto&& item : pair.value)
              {
-             case window_render_item_type::clear: 
-             {
-                 render.Clear(to_color(item.color));
-                 break;
-             }
-             case window_render_item_type::clip_push:
-             {
-                 render.PushAxisAlignedClip(to_rect(item), D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
-                 break;
-             }
-             case window_render_item_type::clip_pop:
-             {
-                 render.PopAxisAlignedClip();
-                 break;
-             }
-             case window_render_item_type::rect:
-             {
-                 brush->SetColor(to_color(item.color));
-                 render.FillRectangle(to_rect(item), brush);
-                 break;
-             }
-             case window_render_item_type::text:
-             {
-                 brush->SetColor(to_color(item.color));
-                 render.DrawTextLayout({ item.min_x, item.min_y }, static_cast<IDWriteTextLayout*>(item.handle), brush);
-                 break;
-             }
-             case window_render_item_type::image:
-             {
-                 if (auto image = m_system.image(item.blob))
-                     render.DrawBitmap(image, to_rect(item));
-                 //brush->SetColor(to_color(item.color));
-                 //render.DrawTextLayout({ item.min_x, item.min_y }, static_cast<IDWriteTextLayout*>(item.handle), brush);
-                 break;
-             }
-             default:
-                 break;
+                 switch (item.type)
+                 {
+                 case window_render_item_type::clear:
+                 {
+                     render.Clear(to_color(item.color));
+                     break;
+                 }
+                 case window_render_item_type::clip_push:
+                 {
+                     render.PushAxisAlignedClip(to_rect(item), D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+                     break;
+                 }
+                 case window_render_item_type::clip_pop:
+                 {
+                     render.PopAxisAlignedClip();
+                     break;
+                 }
+                 case window_render_item_type::rect:
+                 {
+                     brush->SetColor(to_color(item.color));
+                     render.FillRectangle(to_rect(item), brush);
+                     break;
+                 }
+                 case window_render_item_type::text:
+                 {
+                     brush->SetColor(to_color(item.color));
+                     render.DrawTextLayout({ item.min_x, item.min_y }, static_cast<IDWriteTextLayout*>(item.handle), brush);
+                     break;
+                 }
+                 case window_render_item_type::image:
+                 {
+                     if (auto image = m_system.image(item.blob))
+                         render.DrawBitmap(image, to_rect(item));
+                     //brush->SetColor(to_color(item.color));
+                     //render.DrawTextLayout({ item.min_x, item.min_y }, static_cast<IDWriteTextLayout*>(item.handle), brush);
+                     break;
+                 }
+                 default:
+                     break;
+                 }
              }
          }
          end_draw_done = true;
@@ -1088,6 +1084,9 @@ LRESULT window_data_sys::proc(uint32_t msg, WPARAM wparam, LPARAM lparam) noexce
         if (wparam < HIGH_SURROGATE_START)
         {
             auto wchr = wchar_t(wparam);
+            if (wchr == '\b')
+                break;
+
             string str;
             to_string(const_array_view<wchar_t>(&wchr, 1), str);
             window_message message;
@@ -1227,7 +1226,7 @@ error_type window_data_usr::cursor(const uint32_t priority, const shared_ptr<win
     msg.cursor = { cursor, priority };
     return system->post(std::move(msg));
 }
-error_type window_data_usr::repaint(array<window_render_item>& items) noexcept
+error_type window_data_usr::repaint(const string_view tag, array<window_render_item>& items) noexcept
 {
     auto system = shared_ptr<window_system_data>(m_system);
     if (!system)
@@ -1236,6 +1235,7 @@ error_type window_data_usr::repaint(array<window_render_item>& items) noexcept
     internal_message msg;
     msg.type = internal_message_type::repaint;
     msg.index = m_index;
+    ICY_ERROR(copy(tag, msg.name));
     msg.repaint = std::move(items);
     return system->post(std::move(msg));
 }
@@ -1410,9 +1410,8 @@ error_type window_system_data::initialize() noexcept
         ICY_COM_ERROR(func(D2D1_FACTORY_TYPE_MULTI_THREADED, 
             __uuidof(ID2D1Factory), &options, reinterpret_cast<void**>(&m_factory)));
         const auto pixel = D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED);
-
-        ICY_COM_ERROR(m_factory->CreateDCRenderTarget(&D2D1::RenderTargetProperties(
-            D2D1_RENDER_TARGET_TYPE::D2D1_RENDER_TARGET_TYPE_DEFAULT, pixel), &m_render));
+        const auto desc = D2D1::RenderTargetProperties(D2D1_RENDER_TARGET_TYPE::D2D1_RENDER_TARGET_TYPE_DEFAULT, pixel);
+        ICY_COM_ERROR(m_factory->CreateDCRenderTarget(&desc, &m_render));
     }
     else
     {
@@ -1550,7 +1549,7 @@ error_type window_system_data::exec() noexcept
                         }
                     }
                 }
-                ICY_ERROR(it->value.repaint(std::move(event_data.repaint)));
+                ICY_ERROR(it->value.repaint(std::move(event_data.name), std::move(event_data.repaint)));
             }
             else if (event_data.type == internal_message_type::query)
             {

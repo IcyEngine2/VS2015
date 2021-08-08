@@ -68,7 +68,7 @@ error_type gui_system_data::initialize() noexcept
     m_hscroll.size_x = 17;
     m_hscroll.size_y = 21;
     
-    const auto type = "image"_s;
+    const auto type = "image.png"_s;
     ICY_ERROR(blob_add(icon_vscroll_background, type, m_vscroll.background));
     ICY_ERROR(blob_add(icon_vscroll_max_default, type, m_vscroll.max_default));
     ICY_ERROR(blob_add(icon_vscroll_max_hovered, type, m_vscroll.max_hovered));

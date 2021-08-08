@@ -1,13 +1,16 @@
 #include <icy_engine/core/icy_queue.hpp>
 #include <icy_engine/core/icy_thread.hpp>
+#include <icy_engine/core/icy_map.hpp>
 #include <icy_engine/utility/icy_com.hpp>
 #include <icy_engine/graphics/icy_display.hpp>
 #include <icy_engine/graphics/icy_window.hpp>
-#include <icy_engine/graphics/icy_render.hpp>
+#include <icy_engine/graphics/icy_image.hpp>
 #include <dxgi1_6.h>
 #include <d3d11_4.h>
 #include "shaders/screen_vs.hpp"
 #include "shaders/draw_texture_ps.hpp"
+#include "shaders/gui_vs.hpp"
+#include "shaders/gui_ps.hpp"
 
 using namespace icy;
 
@@ -17,13 +20,14 @@ struct internal_event
     duration_type frame = duration_type(-1);
     window_size size;
 };
-struct display_texture
+struct display_texture_3d
 {
     window_size offset;
     window_size size;
     com_ptr<ID3D11Texture2D> buffer;
     com_ptr<ID3D11ShaderResourceView> srv;
 };
+using display_texture_2d = render_gui_frame;
 class display_system_data : public display_system
 {
 public:
@@ -34,7 +38,7 @@ public:
     ~display_system_data() noexcept;
     error_type initialize() noexcept;
     error_type do_resize(const window_size size) noexcept;
-    error_type do_repaint(const bool vsync, const display_texture& texture) noexcept;
+    error_type do_repaint(const bool vsync) noexcept;
 private:
     error_type exec() noexcept override;
     error_type signal(const event_data* event) noexcept override;
@@ -48,6 +52,7 @@ private:
     }
     error_type repaint(const texture& texture, const window_size offset, const window_size size) noexcept override;
     */
+    error_type repaint(const string_view tag, render_gui_frame& frame) noexcept override;
     error_type resize(const window_size size) noexcept override
     {
         if (size.x == 0 || size.y == 0)
@@ -73,7 +78,10 @@ private:
         size_t index = 0;
         duration_type delta = display_frame_vsync;
         clock_type::time_point next = {};
-        mpsc_queue<display_texture> queue;
+        mpsc_queue<std::pair<string, display_texture_2d>> queue2d;
+        mpsc_queue<std::pair<string, display_texture_3d>> queue3d;
+        map<string, display_texture_2d> map2d;
+        map<string, display_texture_3d> map3d;
     };
 private:
     const adapter m_adapter;
@@ -81,17 +89,25 @@ private:
     library m_lib = "d3d11"_lib;
     com_ptr<ID3D11Device> m_device;
     com_ptr<IDXGISwapChain> m_chain;
-    com_ptr<ID3D11VertexShader> m_vertex;
-    com_ptr<ID3D11PixelShader> m_pixel;
+    com_ptr<ID3D11VertexShader> m_vshader2d;
+    com_ptr<ID3D11VertexShader> m_vshader3d;
+    com_ptr<ID3D11PixelShader> m_pshader2d;
+    com_ptr<ID3D11PixelShader> m_pshader3d;
+    com_ptr<ID3D11InputLayout> m_layout2d;
+    com_ptr<ID3D11BlendState> m_blend2d;
+    com_ptr<ID3D11RasterizerState> m_raster2d;
     com_ptr<ID3D11SamplerState> m_sampler;
     void* m_gpu_event = nullptr;
     void* m_cpu_timer = nullptr;
-    icy::sync_handle m_update;
+    sync_handle m_update;
     bool m_gpu_ready = true;
     bool m_cpu_ready = true;
     shared_ptr<event_thread> m_thread;
     frame_type m_frame;
     com_ptr<ID3D11RenderTargetView> m_rtv;
+    com_ptr<ID3D11Buffer> m_vbuffer2d;
+    com_ptr<ID3D11Buffer> m_ibuffer2d;
+    map<uint32_t, com_ptr<ID3D11ShaderResourceView>> m_tex2d;
 };
 ICY_STATIC_NAMESPACE_END
 
@@ -138,20 +154,42 @@ error_type display_system_data::initialize() noexcept
         ICY_COM_ERROR(factory->MakeWindowAssociation(static_cast<HWND__*>(hwnd),
             DXGI_MWA_NO_ALT_ENTER | DXGI_MWA_NO_WINDOW_CHANGES | DXGI_MWA_NO_PRINT_SCREEN));
     }
-
     context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-    ICY_COM_ERROR(m_device->CreateVertexShader(g_shader_bytes_screen_vs, sizeof(g_shader_bytes_screen_vs), nullptr, &m_vertex));
-    context->VSSetShader(m_vertex, nullptr, 0);
+    ICY_COM_ERROR(m_device->CreateVertexShader(g_shader_bytes_screen_vs, sizeof(g_shader_bytes_screen_vs), nullptr, &m_vshader3d));
+    ICY_COM_ERROR(m_device->CreatePixelShader(g_shader_bytes_draw_texture_ps, sizeof(g_shader_bytes_draw_texture_ps), nullptr, &m_pshader3d));
+    ICY_COM_ERROR(m_device->CreateVertexShader(g_shader_bytes_gui_vs, sizeof(g_shader_bytes_gui_vs), nullptr, &m_vshader2d));
+    ICY_COM_ERROR(m_device->CreatePixelShader(g_shader_bytes_gui_ps, sizeof(g_shader_bytes_gui_ps), nullptr, &m_pshader2d));
 
-    ICY_COM_ERROR(m_device->CreatePixelShader(g_shader_bytes_draw_texture_ps, sizeof(g_shader_bytes_draw_texture_ps), nullptr, &m_pixel));
-    context->PSSetShader(m_pixel, nullptr, 0);
+    const D3D11_INPUT_ELEMENT_DESC layout[] =
+    {
+        { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT,   0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,   0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "COLOR",    0, DXGI_FORMAT_B8G8R8A8_UNORM, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    };
+    ICY_COM_ERROR(m_device->CreateInputLayout(layout, _countof(layout), g_shader_bytes_gui_vs, sizeof(g_shader_bytes_gui_vs), &m_layout2d));
 
-    ICY_COM_ERROR(m_device->CreateSamplerState(&CD3D11_SAMPLER_DESC(D3D11_DEFAULT), &m_sampler));
-    context->PSSetSamplers(0, 1, &m_sampler);
+    auto blend_desc = CD3D11_BLEND_DESC(D3D11_DEFAULT);
+    auto& blend_render = blend_desc.RenderTarget[0];
+    blend_render = D3D11_RENDER_TARGET_BLEND_DESC
+    {
+        true, 
+        D3D11_BLEND_SRC_ALPHA, D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_OP_ADD,
+        D3D11_BLEND_ONE, D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_OP_ADD,
+        D3D11_COLOR_WRITE_ENABLE_ALL
+    };
+    ICY_COM_ERROR(m_device->CreateBlendState(&blend_desc, &m_blend2d));
 
-    //DXGI_SWAP_CHAIN_DESC desc;
-    //ICY_COM_ERROR(m_chain->GetDesc(&desc));
+    auto rasterizer_desc = CD3D11_RASTERIZER_DESC(D3D11_DEFAULT);
+    rasterizer_desc.ScissorEnable = true;
+    rasterizer_desc.AntialiasedLineEnable = true;
+    rasterizer_desc.CullMode = D3D11_CULL_NONE;
+    rasterizer_desc.DepthClipEnable = false;
+    ICY_COM_ERROR(m_device->CreateRasterizerState(&rasterizer_desc, &m_raster2d));
+
+    auto desc = CD3D11_SAMPLER_DESC(D3D11_DEFAULT);
+    ICY_COM_ERROR(m_device->CreateSamplerState(&desc, &m_sampler));
+  
     ICY_ERROR(do_resize(window->size()));
 
     m_cpu_timer = CreateWaitableTimerW(nullptr, FALSE, nullptr);
@@ -225,8 +263,8 @@ error_type display_system_data::do_resize(const window_size size) noexcept
     }
     com_ptr<ID3D11Texture2D> buffer;
     ICY_COM_ERROR(m_chain->GetBuffer(0, IID_PPV_ARGS(&buffer)));
-    ICY_COM_ERROR(m_device->CreateRenderTargetView(buffer, &CD3D11_RENDER_TARGET_VIEW_DESC(
-        D3D11_RTV_DIMENSION_TEXTURE2D, DXGI_FORMAT_R8G8B8A8_UNORM), &m_rtv));
+    auto desc = CD3D11_RENDER_TARGET_VIEW_DESC(D3D11_RTV_DIMENSION_TEXTURE2D, DXGI_FORMAT_R8G8B8A8_UNORM);
+    ICY_COM_ERROR(m_device->CreateRenderTargetView(buffer, &desc, &m_rtv));
 #endif
 
     /* com_ptr<ID3D11Device> device;
@@ -244,10 +282,13 @@ error_type display_system_data::do_resize(const window_size size) noexcept
     
     return error_type();
 }
-error_type display_system_data::do_repaint(const bool vsync, const display_texture& texture) noexcept
+error_type display_system_data::do_repaint(const bool vsync) noexcept
 {
     com_ptr<ID3D11DeviceContext> context;
     m_device->GetImmediateContext(&context);
+
+    float clear[4] = { 0, 0, 0, 1 };
+    context->ClearRenderTargetView(m_rtv, clear);
 
     D3D11_TEXTURE2D_DESC desc;
     com_ptr<ID3D11Resource> resource;
@@ -256,20 +297,170 @@ error_type display_system_data::do_repaint(const bool vsync, const display_textu
     ICY_COM_ERROR(resource->QueryInterface(&buffer));
     buffer->GetDesc(&desc);
 
-    auto viewport = D3D11_VIEWPORT
-    { 
-        float(texture.offset.x), float(texture.offset.y), 
-        float(texture.size.x), float(texture.size.y), 0, 1 
-    };
-    if (!viewport.Width) viewport.Width = float(desc.Width);
-    if (!viewport.Height) viewport.Height = float(desc.Height);
-
-
-    ID3D11ShaderResourceView* srv[] = { texture.srv };
-    context->PSSetShaderResources(0, 1, srv);
-    context->RSSetViewports(1, &viewport);
     context->OMSetRenderTargets(1, &m_rtv, nullptr);
-    context->Draw(3, 0);
+    context->PSSetSamplers(0, 1, &m_sampler);
+
+
+    if (!m_frame.map3d.empty())
+    {
+        context->PSSetShader(m_pshader3d, nullptr, 0);
+        context->VSSetShader(m_vshader3d, nullptr, 0);
+        context->IASetInputLayout(nullptr);
+        context->IASetIndexBuffer(nullptr, DXGI_FORMAT_UNKNOWN, 0);
+        context->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
+        context->OMSetBlendState(nullptr, nullptr, 0xFFFFFFFF);
+        context->RSSetState(nullptr);
+    }
+
+    for (auto&& pair : m_frame.map3d)
+    {
+        const auto& texture = pair.value;
+        auto viewport = D3D11_VIEWPORT
+        {
+            float(texture.offset.x), float(texture.offset.y),
+            float(texture.size.x), float(texture.size.y), 0, 1
+        };
+        if (!viewport.Width) viewport.Width = float(desc.Width);
+        if (!viewport.Height) viewport.Height = float(desc.Height);
+
+        ID3D11ShaderResourceView* srv[] = { texture.srv };
+
+        context->PSSetShaderResources(0, 1, srv);    
+        context->RSSetViewports(1, &viewport);
+
+        D3D11_RECT rect = { 0, 0, LONG(desc.Width), LONG(desc.Height) };
+        context->RSSetScissorRects(1, &rect);
+        context->Draw(3, 0);
+    }
+
+    if (!m_frame.map2d.empty())
+    {
+        const float blend_factor[4] = { 0, 0, 0, 0 };
+        context->PSSetShader(m_pshader2d, nullptr, 0);
+        context->VSSetShader(m_vshader2d, nullptr, 0);
+        context->IASetInputLayout(m_layout2d);
+        context->OMSetBlendState(m_blend2d, blend_factor, 0xFFFFFFFF);
+        context->RSSetState(m_raster2d);
+    }
+
+    for (auto&& pair : m_frame.map2d)
+    {
+        const auto& texture = pair.value;
+        
+        if (!pair.value.ibuffer || !pair.value.vbuffer)
+            continue;
+
+        D3D11_BUFFER_DESC idesc = {};
+        D3D11_BUFFER_DESC vdesc = {};
+        if (m_ibuffer2d) m_ibuffer2d->GetDesc(&idesc);
+        if (m_vbuffer2d) m_vbuffer2d->GetDesc(&vdesc);
+
+        const uint32_t ibytes = pair.value.ibuffer * sizeof(uint32_t);
+        const uint32_t vbytes = pair.value.vbuffer * sizeof(render_gui_vtx);
+        if (idesc.ByteWidth < ibytes)
+        {
+            idesc = CD3D11_BUFFER_DESC(ibytes, D3D11_BIND_INDEX_BUFFER, D3D11_USAGE_DYNAMIC, D3D11_CPU_ACCESS_WRITE);
+            ICY_COM_ERROR(m_device->CreateBuffer(&idesc, nullptr, &(m_ibuffer2d = nullptr)));
+        }
+        if (vdesc.ByteWidth < vbytes)
+        {
+            vdesc = CD3D11_BUFFER_DESC(vbytes, D3D11_BIND_VERTEX_BUFFER, D3D11_USAGE_DYNAMIC, D3D11_CPU_ACCESS_WRITE);
+            ICY_COM_ERROR(m_device->CreateBuffer(&vdesc, nullptr, &(m_vbuffer2d = nullptr)));
+        }
+
+        auto viewport = D3D11_VIEWPORT
+        {
+            float(texture.viewport.vec[0]), float(texture.viewport.vec[1]),
+            float(texture.viewport.vec[2]), float(texture.viewport.vec[3]), 0, 1
+        };
+        context->RSSetViewports(1, &viewport);
+
+        D3D11_MAPPED_SUBRESOURCE imap;
+        ICY_COM_ERROR(context->Map(m_ibuffer2d, 0, D3D11_MAP_WRITE_DISCARD, 0, &imap));
+        auto iptr = static_cast<uint32_t*>(imap.pData);
+        for (auto&& list : texture.data)
+        {
+            memcpy(iptr, list.idx.data(), list.idx.size() * sizeof(list.idx[0]));
+            iptr += list.idx.size();
+        }
+        context->Unmap(m_ibuffer2d, 0);
+
+        D3D11_MAPPED_SUBRESOURCE vmap;
+        ICY_COM_ERROR(context->Map(m_vbuffer2d, 0, D3D11_MAP_WRITE_DISCARD, 0, &vmap));
+        auto vptr = static_cast<render_gui_vtx*>(vmap.pData);
+        for (auto&& list : texture.data)
+        {
+            memcpy(vptr, list.vtx.data(), list.vtx.size() * sizeof(list.vtx[0]));
+            vptr += list.vtx.size();
+        }
+        context->Unmap(m_vbuffer2d, 0);
+
+        for (auto&& list : texture.data)
+        {
+            for (auto&& cmd : list.cmd)
+            {
+                const auto it = m_tex2d.find(cmd.tex.index);
+                if (it != m_tex2d.end())
+                    continue;
+
+                const auto buffer = blob_data(cmd.tex);
+                image image;
+                ICY_ERROR(image.load(global_realloc, nullptr, buffer, image_type::png));
+
+                matrix<color> colors(image.size().y, image.size().x);
+                if (colors.empty())
+                    return make_stdlib_error(std::errc::not_enough_memory);
+
+                ICY_ERROR(image.view(image_size(), colors));
+
+                const auto desc = CD3D11_TEXTURE2D_DESC(DXGI_FORMAT_B8G8R8A8_UNORM, 
+                    image.size().x, image.size().y, 1, 1, D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_IMMUTABLE);
+                
+                D3D11_SUBRESOURCE_DATA init = {};
+                init.pSysMem = colors.data();
+                init.SysMemPitch = image.size().x * sizeof(color);
+
+                com_ptr<ID3D11Texture2D> texture;
+                ICY_COM_ERROR(m_device->CreateTexture2D(&desc, &init, &texture));
+
+                auto srv_desc = CD3D11_SHADER_RESOURCE_VIEW_DESC(texture, D3D11_SRV_DIMENSION_TEXTURE2D);
+                com_ptr<ID3D11ShaderResourceView> srv;
+                ICY_COM_ERROR(m_device->CreateShaderResourceView(texture, &srv_desc, &srv));
+                ICY_ERROR(m_tex2d.insert(cmd.tex.index, std::move(srv)));
+            }
+        }
+
+        context->IASetIndexBuffer(m_ibuffer2d, DXGI_FORMAT_R32_UINT, 0);
+        const uint32_t strides[] = { sizeof(render_gui_vtx) };
+        const uint32_t offsets[] = { 0 };
+        context->IASetVertexBuffers(0, 1, &m_vbuffer2d, strides, offsets);
+
+        auto ioffset = 0u;
+        auto voffset = 0u;        
+        for (auto&& list : texture.data)
+        {
+            for (auto&& cmd : list.cmd)
+            {
+                const auto it = m_tex2d.find(cmd.tex.index);
+                if (it == m_tex2d.end())
+                    return make_unexpected_error();
+
+                D3D11_RECT rect =
+                {
+                    lround(cmd.clip.x - texture.viewport.x),
+                    lround(cmd.clip.y - texture.viewport.y),
+                    lround(cmd.clip.z - texture.viewport.x),
+                    lround(cmd.clip.w - texture.viewport.y)
+                };
+                context->RSSetScissorRects(1, &rect);
+                ID3D11ShaderResourceView* srv[1] = { it->value };
+                context->PSSetShaderResources(0, 1, srv);
+                context->DrawIndexed(cmd.size, cmd.idx + ioffset, cmd.vtx + voffset);
+            }
+            ioffset += uint32_t(list.idx.size());
+            voffset += uint32_t(list.vtx.size());
+        }
+    }
 
 #if X11_GUI
     context->Flush();
@@ -377,28 +568,51 @@ error_type display_system_data::exec() noexcept
 
         if (m_cpu_ready && m_gpu_ready)
         {
-            display_texture texture;
-            if (m_frame.queue.pop(texture))
+            std::pair<string, display_texture_2d> pair2d;
+            if (m_frame.queue2d.pop(pair2d))
             {
-                while (m_frame.queue.pop(texture))
+                while (m_frame.queue2d.pop(pair2d))
+                    ;
+                m_cpu_ready = false;        
+                auto it = m_frame.map2d.find(pair2d.first);
+                if (it == m_frame.map2d.end())
+                {
+                    ICY_ERROR(m_frame.map2d.insert(std::move(pair2d.first), display_texture_2d(), &it));
+                }
+                it->value = std::move(pair2d.second);
+            }
+            std::pair<string, display_texture_3d> pair3d;
+            if (m_frame.queue3d.pop(pair3d))
+            {
+                while (m_frame.queue3d.pop(pair3d))
                     ;
                 m_cpu_ready = false;
+                auto it = m_frame.map3d.find(pair3d.first);
+                if (it == m_frame.map3d.end())
+                {
+                    ICY_ERROR(m_frame.map3d.insert(std::move(pair3d.first), display_texture_3d(), &it));
+                }
+                it->value = std::move(pair3d.second);
+            }
+
+            if (m_cpu_ready == false)
+            {
                 m_gpu_ready = m_chain ? false : true;
-                
+
                 display_message msg;
                 const auto now = clock_type::now();
-                ICY_ERROR(do_repaint(m_frame.delta == display_frame_vsync, texture));
+                ICY_ERROR(do_repaint(m_frame.delta == display_frame_vsync));
                 msg.frame = clock_type::now() - now;
                 msg.index = m_frame.index++;
                 ICY_ERROR(event::post(this, event_type::display_update, std::move(msg)));
                 reset();
-                
-                /*auto success = false;
-                ICY_ERROR(m_frame.queue.push_if_empty(texture, success));
-                if (success && !SetEvent(m_update))
-                    return last_system_error();*/
             }
         }
+
+        /*auto success = false;
+        ICY_ERROR(m_frame.queue.push_if_empty(texture, success));
+        if (success && !SetEvent(m_update))
+            return last_system_error();*/
 
         HANDLE handles[3] = {};
         auto count = 0u;
@@ -429,6 +643,16 @@ error_type display_system_data::exec() noexcept
 error_type display_system_data::signal(const event_data* event) noexcept
 {
     return m_update.wake();
+}
+error_type display_system_data::repaint(const string_view tag, render_gui_frame& frame) noexcept
+{
+    display_texture_2d new_texture;
+    new_texture = std::move(frame);
+    string str;
+    ICY_ERROR(copy(tag, str));
+    ICY_ERROR(m_frame.queue2d.push(std::make_pair(std::move(str), std::move(new_texture))));
+    ICY_ERROR(m_update.wake());
+    return error_type();
 }
 /*error_type display_system_data::repaint(const texture& texture, const window_size offset, const window_size size) noexcept
 {

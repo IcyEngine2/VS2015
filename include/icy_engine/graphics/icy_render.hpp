@@ -1,38 +1,43 @@
 #pragma once
 
 #include <icy_engine/core/icy_event.hpp>
-#include <icy_engine/core/icy_matrix.hpp>
-#include <icy_engine/core/icy_color.hpp>
-#include <icy_engine/core/icy_array.hpp>
+#include "icy_render_core.hpp"
 #include "icy_adapter.hpp"
-
 
 namespace icy
 {
-    namespace render_vertex
+    struct render_surface
     {
-        using index = uint32_t;
-        union vec4
+        virtual ~render_surface() noexcept = 0
         {
-            struct
-            {
-                float x;
-                float y;
-                float z; 
-                float w;
-            };
-            float vec[4];
-        };
-        union vec2
+
+        }
+        virtual error_type resize(const window_size size) noexcept = 0;
+    };
+    struct render_event
+    {
+        weak_ptr<render_surface> surface;
+    };
+    struct render_lock
+    {
+        render_lock(render_surface& surface) noexcept;
+        render_lock(const render_lock&) = delete;
+        ~render_lock() noexcept;
+        void* handle() noexcept;
+        render_surface& surface;
+    };
+    struct render_system : public event_system
+    {
+        virtual const icy::thread& thread() const noexcept = 0;
+        icy::thread& thread() noexcept
         {
-            struct
-            {
-                float u;
-                float v;
-            };
-            float vec[2];
-        };
-    }
+            return const_cast<icy::thread&>(static_cast<const render_system*>(this)->thread());
+        }
+        virtual adapter adapter() const noexcept = 0;
+        virtual error_type create(shared_ptr<render_surface>& surface, const window_size size) noexcept = 0;
+    };
+
+    error_type create_render_system(shared_ptr<render_system>& system, const adapter adapter) noexcept;
 
    /* struct render_system;
     struct render_query
@@ -91,18 +96,5 @@ namespace icy
         matrix<color> colors;
     };
     class thread;
-    struct render_system : public event_system
-    {
-        virtual const icy::thread& thread() const noexcept = 0;
-        icy::thread& thread() noexcept
-        {
-            return const_cast<icy::thread&>(static_cast<const render_system*>(this)->thread());
-        }
-        virtual adapter adapter() const noexcept = 0;
-        virtual error_type create(const window_size size, const render_flags flags, shared_ptr<render_texture>& texture) noexcept = 0;
-        virtual error_type create(const const_matrix_view<color> data, shared_ptr<texture>& texture) noexcept = 0;
-    };
-
-    error_type create_render_system(shared_ptr<render_system>& system, const adapter adapter) noexcept;
     */
 }

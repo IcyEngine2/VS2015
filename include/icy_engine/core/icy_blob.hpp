@@ -7,6 +7,7 @@ namespace icy
 {
     struct blob
     {
+        blob() noexcept = default;
         uint32_t index = 0;
     };
 

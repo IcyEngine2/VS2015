@@ -19,9 +19,9 @@ namespace icy
             bitcnt_network  =   0x04,
             bitcnt_console  =   0x03,
             bitcnt_window   =   0x05,
-            bitcnt_gui      =   0x04,
+            bitcnt_gui      =   0x01,
             bitcnt_display  =   0x01,
-            bitcnt_render   =   0x02,
+            bitcnt_render   =   0x01,
 
             bitcnt_user     =   0x20,
         };
@@ -89,16 +89,15 @@ namespace icy
             window_any              =   mask_window,
 
             gui_update              =   1ui64   <<  (offset_gui + 0x00),
-            gui_render              =   1ui64   <<  (offset_gui + 0x01),
-            gui_context             =   1ui64   <<  (offset_gui + 0x02),
-            gui_select              =   1ui64   <<  (offset_gui + 0x03),
+            //gui_render              =   1ui64   <<  (offset_gui + 0x01),
+            //gui_context             =   1ui64   <<  (offset_gui + 0x02),
+            //gui_select              =   1ui64   <<  (offset_gui + 0x03),
             gui_any                 =   mask_gui,
 
             display_update          =   1ui64   <<  (offset_display + 0x00),
             display_any             =   mask_display,
 
-            render_update           =   1ui64   <<  (offset_render + 0x00),
-            render_save             =   1ui64   <<  (offset_render + 0x01),
+            render_event            =   1ui64   <<  (offset_render + 0x00),
             render_any              =   mask_render,
 
             user                    =   1ui64   <<  (offset_user + 0x00),

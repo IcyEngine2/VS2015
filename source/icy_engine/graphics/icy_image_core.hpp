@@ -1,6 +1,6 @@
 #pragma once
 
-#include <icy_engine/image/icy_image.hpp>
+#include <icy_engine/graphics/icy_image.hpp>
 
 struct icy::image::data_type
 {

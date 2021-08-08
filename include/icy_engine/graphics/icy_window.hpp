@@ -14,6 +14,7 @@ namespace icy
     struct window_system;
     struct window_cursor;
     struct window_render_item;
+    struct render_surface;
     class thread;
 
     enum class window_style : uint32_t
@@ -60,7 +61,6 @@ namespace icy
         return window_style(uint32_t(lhs) | uint32_t(rhs));
     }
 
-    
     struct window
     {
         virtual ~window() noexcept = 0
@@ -77,7 +77,7 @@ namespace icy
         virtual window_flags flags() const noexcept = 0;
         virtual window_size size() const noexcept = 0;
         virtual uint32_t dpi() const noexcept = 0;
-        virtual error_type repaint(array<window_render_item>& items) noexcept = 0;
+        virtual error_type repaint(const string_view tag, array<window_render_item>& items) noexcept = 0;
     };
 
 
@@ -176,7 +176,7 @@ namespace icy
         {
             return const_cast<icy::thread&>(static_cast<const window_system*>(this)->thread());
         }
-        virtual error_type create(shared_ptr<window>& window, const window_flags flags = default_window_flags) noexcept = 0;                
+        virtual error_type create(shared_ptr<window>& window, const window_flags flags = default_window_flags) noexcept = 0;
     };
 
     error_type create_window_cursor(shared_ptr<window_cursor>& cursor, const window_cursor::type type) noexcept;

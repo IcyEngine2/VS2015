@@ -49,12 +49,12 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <TargetName>$(ProjectName)d</TargetName>
-    <IncludePath>$(ProjectDir)..\..\..\include\libs;$(IncludePath)</IncludePath>
+    <IncludePath>$(ProjectDir)..\..\..\include\libs;$(ProjectDir)..\..\..\source\libs;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <TargetName>$(ProjectName)</TargetName>
-    <IncludePath>$(ProjectDir)..\..\..\include\libs;$(IncludePath)</IncludePath>
+    <IncludePath>$(ProjectDir)..\..\..\include\libs;$(ProjectDir)..\..\..\source\libs;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -101,14 +101,22 @@
   <ItemGroup>
     <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_adapter.cpp" />
     <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_display.cpp" />
+    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_image_bmp.cpp" />
+    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_image.cpp" />
+    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_image_jpg.cpp" />
+    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_image_png.cpp" />
+    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_image_tif.cpp" />
     <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_window.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\include\icy_engine\graphics\icy_adapter.hpp" />
     <ClInclude Include="..\..\..\include\icy_engine\graphics\icy_display.hpp" />
     <ClInclude Include="..\..\..\include\icy_engine\graphics\icy_remote_window.hpp" />
+    <ClInclude Include="..\..\..\include\icy_engine\graphics\icy_render.hpp" />
+    <ClInclude Include="..\..\..\include\icy_engine\graphics\icy_render_core.hpp" />
     <ClInclude Include="..\..\..\include\icy_engine\graphics\icy_window.hpp" />
     <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_adapter.hpp" />
+    <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_image_core.hpp" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="..\..\..\source\icy_engine\graphics\shaders\draw_simple_ps.hlsl">
@@ -116,6 +124,14 @@
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
     </FxCompile>
     <FxCompile Include="..\..\..\source\icy_engine\graphics\shaders\draw_simple_vs.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
+    </FxCompile>
+    <FxCompile Include="..\..\..\source\icy_engine\graphics\shaders\gui_ps.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="..\..\..\source\icy_engine\graphics\shaders\gui_vs.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
     </FxCompile>
