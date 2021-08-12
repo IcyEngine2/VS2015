@@ -9,8 +9,13 @@
 #include <icy_engine/graphics/icy_image.hpp>
 #include "../../libs/imgui/imgui.h"
 
+#if _DEBUG
 #pragma comment(lib, "imguid")
 #pragma comment(lib, "icy_engine_graphicsd")
+#else
+#pragma comment(lib, "imgui")
+#pragma comment(lib, "icy_engine_graphics")
+#endif
 
 using namespace icy;
 

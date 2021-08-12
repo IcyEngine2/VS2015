@@ -220,13 +220,20 @@ error_type icy::to_string(const network_address& address, string& str) noexcept
     library lib = "ws2_32"_lib;
     ICY_ERROR(lib.initialize());
 
-    const auto func = ICY_FIND_FUNC(lib, WSAAddressToStringW);
-    if (!func)
+    const auto func_to_string = ICY_FIND_FUNC(lib, WSAAddressToStringW);
+    const auto func_wsa_startup = ICY_FIND_FUNC(lib, WSAStartup);
+    const auto func_wsa_cleanup = ICY_FIND_FUNC(lib, WSACleanup);
+    if (!func_to_string || !func_wsa_startup || !func_wsa_cleanup)
         return make_stdlib_error(std::errc::function_not_supported);
 
-    wchar_t buffer[64] = {};
+    WSADATA wsaData;
+    if (func_wsa_startup(MAKEWORD(2, 2), &wsaData) == SOCKET_ERROR)
+        return last_system_error();
+    ICY_SCOPE_EXIT{ func_wsa_cleanup(); };
+
+    wchar_t buffer[128] = {};
     auto size = DWORD(sizeof(buffer) / sizeof(*buffer));
-    if (func(address.data(), uint32_t(address.size()), nullptr, buffer, &size) == SOCKET_ERROR)
+    if (func_to_string(address.data(), uint32_t(address.size()), nullptr, buffer, &size) == SOCKET_ERROR)
         return last_system_error();
     return to_string(const_array_view<wchar_t>(buffer, size), str);
 }

@@ -9,10 +9,10 @@ error_type auth_config_dbase::from_json(const json& input) noexcept
     file_size *= 1_mb;
     ICY_ERROR(input.get(key::clients, clients));
     ICY_ERROR(input.get(key::modules, modules));
-    auto timeout_ms = 0u;    
-    ICY_ERROR(input.get(key::timeout, timeout_ms));
-    timeout = std::chrono::milliseconds(timeout_ms);
-    return {};
+    auto timeout_sec = 0u;    
+    ICY_ERROR(input.get(key::timeout, timeout_sec));
+    timeout = std::chrono::seconds(timeout_sec);
+    return error_type();
 }
 error_type auth_config_dbase::to_json(json& output) const noexcept
 {
@@ -21,8 +21,8 @@ error_type auth_config_dbase::to_json(json& output) const noexcept
     ICY_ERROR(output.insert(key::file_path, file_path));
     ICY_ERROR(output.insert(key::clients, json_type_integer(clients)));
     ICY_ERROR(output.insert(key::modules, json_type_integer(modules)));
-    ICY_ERROR(output.insert(key::timeout, std::chrono::duration_cast<std::chrono::milliseconds>(timeout).count()));
-    return {};
+    ICY_ERROR(output.insert(key::timeout, std::chrono::duration_cast<std::chrono::seconds>(timeout).count()));
+    return error_type();
 }
 error_type auth_config_dbase::copy(const auth_config_dbase& src, auth_config_dbase& dst) noexcept
 {
@@ -31,7 +31,7 @@ error_type auth_config_dbase::copy(const auth_config_dbase& src, auth_config_dba
     dst.timeout = src.timeout;
     dst.clients = src.clients;
     dst.modules = src.modules;
-    return {};
+    return error_type();
 }
 
 error_type auth_config_network::from_json(const json& input) noexcept
@@ -42,7 +42,7 @@ error_type auth_config_network::from_json(const json& input) noexcept
 
     if (const auto json_http = input.find(key::http))
     {
-        ICY_ERROR(http.from_json(*json_http));
+        ICY_ERROR(to_value(*json_http, http));
     }
     else
     {
@@ -75,7 +75,7 @@ error_type auth_config_network::from_json(const json& input) noexcept
             }
         }
     }
-    return {};
+    return error_type();
 }
 error_type auth_config_network::to_json(json& output) const noexcept
 {
@@ -87,7 +87,7 @@ error_type auth_config_network::to_json(json& output) const noexcept
     ICY_ERROR(output.insert(key::file_path, std::move(str_file_path)));
 
     json json_http;
-    ICY_ERROR(http.to_json(json_http));
+    ICY_ERROR(icy::to_json(http, json_http));
     ICY_ERROR(output.insert(key::http, std::move(json_http)));
 
     json json_errors = json_type::array;
@@ -98,16 +98,16 @@ error_type auth_config_network::to_json(json& output) const noexcept
     {
         ICY_ERROR(output.insert(key::errors, std::move(json_errors)));
     }
-    return {};
+    return error_type();
 }
 error_type auth_config_network::copy(const auth_config_network& src, auth_config_network& dst) noexcept
 {
     dst.file_size = src.file_size;
     ICY_ERROR(to_string(src.file_path, dst.file_path));
     ICY_ERROR(dst.errors.assign(src.errors));
-    ICY_ERROR(http_config::copy(src.http, dst.http));
+    ICY_ERROR(icy::copy(src.http, dst.http));
     dst.any_error = src.any_error;
-    return {};
+    return error_type();
 }
 
 error_type auth_config::from_json(const json& input) noexcept
@@ -127,7 +127,7 @@ error_type auth_config::from_json(const json& input) noexcept
     input.get(key::gheap_size, gheap_size);
     if (!gheap_size) gheap_size = default_values::gheap_size;
 
-    return {};
+    return error_type();
 }
 error_type auth_config::to_json(json& output) const noexcept
 {
@@ -145,7 +145,7 @@ error_type auth_config::to_json(json& output) const noexcept
     ICY_ERROR(output.insert(key::module, std::move(json_module)));
     ICY_ERROR(output.insert(key::admin, std::move(json_admin)));
     ICY_ERROR(output.insert(key::gheap_size, gheap_size));
-    return {};
+    return error_type();
 }
 error_type auth_config::copy(const auth_config& src, auth_config& dst) noexcept
 {
@@ -154,5 +154,5 @@ error_type auth_config::copy(const auth_config& src, auth_config& dst) noexcept
     ICY_ERROR(auth_config_network::copy(src.client, dst.client));
     ICY_ERROR(auth_config_network::copy(src.module, dst.module));
     ICY_ERROR(auth_config_network::copy(src.admin, dst.admin));
-    return {};
+    return error_type();
 }

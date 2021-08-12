@@ -132,11 +132,11 @@ namespace icy
 		using reverse_iterator = std::reverse_iterator<iterator>;
 	public:
         rel_ops(string_view);
-		string_view() noexcept : m_ptr{}, m_size{}
+		constexpr string_view() noexcept : m_ptr{}, m_size{}
 		{
 
 		}
-        string_view(const string_view& rhs) noexcept : m_ptr(rhs.m_ptr), m_size(rhs.m_size)
+        constexpr string_view(const string_view& rhs) noexcept : m_ptr(rhs.m_ptr), m_size(rhs.m_size)
         {
 
         }

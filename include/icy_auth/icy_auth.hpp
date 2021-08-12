@@ -40,7 +40,7 @@ namespace icy
     };
     constexpr inline auth_error_code auth_error_category(const auth_error_code code) noexcept
     {
-        return auth_error_code(uint32_t(code) / 100);
+        return auth_error_code(uint32_t(code) / 100 * 100);
     }
     using auth_clock = std::chrono::system_clock;
     using auth_time = auth_clock::time_point;

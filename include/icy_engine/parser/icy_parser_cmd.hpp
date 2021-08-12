@@ -45,15 +45,20 @@ namespace icy
             string val;
             ICY_ERROR(to_string(string_view(m_buffer.data(), m_buffer.size()), val));
             m_buffer.clear();
-            ICY_ERROR(m_args.find_or_insert(std::move(m_key), std::move(val)));
-            return {};
+            auto it = m_args.find(m_key);
+            if (it == m_args.end())
+            {
+                ICY_ERROR(m_args.insert(std::move(m_key), string(), &it));
+            }
+            it->value = std::move(val);
+            return error_type();
         };
         const auto save_cmd = [this]() -> error_type
         {
             m_state = state::find_key;
             ICY_ERROR(to_string(string_view(m_buffer.data(), m_buffer.size()), m_cmd));
             m_buffer.clear();
-            return {};
+            return error_type();
         };
 
         for (auto&& chr : buffer)
@@ -158,6 +163,6 @@ namespace icy
             }
             m_stop = true;
         }
-        return {};
+        return error_type();
     }
 }

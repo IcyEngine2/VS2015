@@ -16,7 +16,7 @@ static error_type save_date_time(char (&str)[auth_date_length]) noexcept
     if (const auto error = gmtime_s(&time, &now))
         return make_stdlib_error(std::errc(error));
     strftime(str, _countof(str), "%F %T", &time);
-    return {};
+    return error_type();
 }
 
 error_type auth_database::initialize(const auth_config_dbase& config) noexcept
@@ -61,9 +61,9 @@ error_type auth_database::query(const auth_query_flag flags, auth_query_callback
             if (flags & auth_query_flag::client_guid) query.guid = saved.guid;
             if (flags & auth_query_flag::client_date)
             {
-                ICY_ERROR(string_view(saved.date, _countof(saved.date)).to_value(query.date));
+                ICY_ERROR(to_value(string_view(saved.date, _countof(saved.date)), query.date));
             }
-            return {};
+            return error_type();
         };
 
         auto error = func(database_oper_read::first);
@@ -98,7 +98,7 @@ error_type auth_database::query(const auth_query_flag flags, auth_query_callback
             if (flags & auth_query_flag::module_guid) query.guid = saved.guid;
             if (flags & auth_query_flag::module_date)
             {
-                ICY_ERROR(string_view(saved.date, _countof(saved.date)).to_value(query.date));
+                ICY_ERROR(to_value(string_view(saved.date, _countof(saved.date)), query.date));
             }
             if (flags & auth_query_flag::module_addr)
             {
@@ -109,7 +109,7 @@ error_type auth_database::query(const auth_query_flag flags, auth_query_callback
             {
                 query.timeout = std::chrono::milliseconds(saved.timeout);
             }
-            return {};
+            return error_type();
         };
 
         auto error = func(database_oper_read::first);
@@ -123,7 +123,7 @@ error_type auth_database::query(const auth_query_flag flags, auth_query_callback
         else
             ICY_ERROR(error);
     }
-    return {};
+    return error_type();
 }
 error_type auth_database::exec(const auth_request& request, auth_response& response) noexcept
 {
@@ -175,12 +175,12 @@ error_type auth_database::exec(const auth_request& request, auth_response& respo
     default:
         return make_auth_error(auth_error_code::invalid_json_type);
     }
-    return {};
+    return error_type();
 }
 error_type auth_database::exec(const auth_request& request, const auth_request_msg_client_create& input, auth_response_msg_client_create&) noexcept
 {
     auth_client_data new_client;
-    ICY_ERROR(create_guid(new_client.guid));
+    ICY_ERROR(guid::create(new_client.guid));
     ICY_ERROR(save_date_time(new_client.date));
     new_client.password = input.password;
     auto key = request.username;
@@ -222,7 +222,7 @@ error_type auth_database::exec(const auth_request& request, const auth_request_m
         }
     }
     ICY_ERROR(txn.commit());
-    return {};
+    return error_type();
 }
 error_type auth_database::exec(const auth_request& request, const auth_request_msg_client_ticket& input, auth_response_msg_client_ticket& output) noexcept
 {
@@ -253,7 +253,7 @@ error_type auth_database::exec(const auth_request& request, const auth_request_m
     ticket_server.expire = now + m_timeout;
     output.encrypted_client_ticket = crypto_msg<auth_client_ticket_client>(val.password, ticket_client);
     output.encrypted_server_ticket = crypto_msg<auth_client_ticket_server>(m_password, ticket_server);
-    return {};
+    return error_type();
 }
 error_type auth_database::exec(const auth_request& request, const auth_request_msg_client_connect& input, auth_response_msg_client_connect& output) noexcept
 {
@@ -292,12 +292,12 @@ error_type auth_database::exec(const auth_request& request, const auth_request_m
     connect_module.userguid = client.guid;
     output.encrypted_client_connect = crypto_msg<auth_client_connect_client>(client.password, connect_client);
     output.encrypted_module_connect = crypto_msg<auth_client_connect_module>(module.password, connect_module);
-    return {};
+    return error_type();
 }
 error_type auth_database::exec(const auth_request&, const auth_request_msg_module_create& input, auth_response_msg_module_create&) noexcept
 {
     auth_module_data new_module;
-    ICY_ERROR(create_guid(new_module.guid));
+    ICY_ERROR(guid::create(new_module.guid));
     ICY_ERROR(save_date_time(new_module.date));
     auto key = input.module;
 
@@ -318,7 +318,7 @@ error_type auth_database::exec(const auth_request&, const auth_request_msg_modul
         }
     }
     ICY_ERROR(txn.commit());
-    return {};
+    return error_type();
 }
 error_type auth_database::exec(const auth_request&, const auth_request_msg_module_update& input, auth_response_msg_module_update&) noexcept
 {
@@ -338,11 +338,11 @@ error_type auth_database::exec(const auth_request&, const auth_request_msg_modul
         }
         edit_module.password = input.password;
         edit_module.timeout = ms_timeout(input.timeout);
-        copy(input.address, edit_module.addr);
+        snprintf(edit_module.addr, _countof(edit_module.addr), "%s", input.address.bytes().data());
         ICY_ERROR(cur.put_type_by_type(key, database_oper_write::none, edit_module));
     }
     ICY_ERROR(txn.commit());
-    return {};
+    return error_type();
 }
 error_type auth_database::clear_clients() noexcept
 {
@@ -350,7 +350,7 @@ error_type auth_database::clear_clients() noexcept
     ICY_ERROR(txn.initialize(m_data));
     ICY_ERROR(m_dbi_usr.clear(txn));
     ICY_ERROR(txn.commit());
-    return {};
+    return error_type();
 }
 error_type auth_database::clear_modules() noexcept
 {
@@ -358,5 +358,5 @@ error_type auth_database::clear_modules() noexcept
     ICY_ERROR(txn.initialize(m_data));
     ICY_ERROR(m_dbi_mod.clear(txn));
     ICY_ERROR(txn.commit());
-    return {};
+    return error_type();
 }

@@ -1,28 +1,28 @@
 #pragma once
 
 #include <icy_engine/core/icy_event.hpp>
-#include <icy_engine/network/icy_network_http.hpp>
+#include <icy_engine/network/icy_network.hpp>
+#include <icy_engine/network/icy_http.hpp>
 #include <icy_auth/icy_auth.hpp>
 
 using icy::operator""_s;
-
 
 class auth_config_network
 {
 public:
     struct key
     {
-        static constexpr icy::string_view http = "HTTP"_s;
-        static constexpr icy::string_view file_path = icy::http_config::key::file_path;
-        static constexpr icy::string_view file_size = icy::http_config::key::file_size;
-        static constexpr icy::string_view errors = "Errors"_s;
+        static constexpr icy::string_view http = "http"_s;
+        static constexpr icy::string_view file_path = "logPath"_s;
+        static constexpr icy::string_view file_size = "logSize"_s;
+        static constexpr icy::string_view errors = "errors"_s;
     };
 public:
     icy::error_type from_json(const icy::json& input) noexcept;
     icy::error_type to_json(icy::json& output) const noexcept;
     static icy::error_type copy(const auth_config_network& src, auth_config_network& dst) noexcept;
 public:
-    icy::http_config http;
+    icy::network_server_config http;
     icy::string file_path;
     size_t file_size = 0;
     icy::array<uint32_t> errors;  //  error codes
@@ -33,11 +33,11 @@ class auth_config_dbase
 public:
     struct key
     {
-        static constexpr icy::string_view file_path = icy::http_config::key::file_path;
-        static constexpr icy::string_view file_size = icy::http_config::key::file_size;  //  integer (mb)
-        static constexpr icy::string_view timeout = "Timeout"_s;
-        static constexpr icy::string_view clients = "Clients"_s;
-        static constexpr icy::string_view modules = "Modules"_s;
+        static constexpr icy::string_view file_path = "filePath"_s;
+        static constexpr icy::string_view file_size = "fileSize"_s;  //  integer (mb)
+        static constexpr icy::string_view timeout = "timeout"_s;
+        static constexpr icy::string_view clients = "clients"_s;
+        static constexpr icy::string_view modules = "modules"_s;
     };
 public:
     icy::error_type from_json(const icy::json& input) noexcept;
@@ -61,11 +61,11 @@ public:
     };
     struct key
     {
-        static constexpr icy::string_view gheap_size = "Heap Size"_s;
-        static constexpr icy::string_view dbase = "Database"_s;
-        static constexpr icy::string_view client = "Client"_s;
-        static constexpr icy::string_view module = "Module"_s;
-        static constexpr icy::string_view admin = "Admin"_s;
+        static constexpr icy::string_view gheap_size = "heapSize"_s;
+        static constexpr icy::string_view dbase = "database"_s;
+        static constexpr icy::string_view client = "client"_s;
+        static constexpr icy::string_view module = "module"_s;
+        static constexpr icy::string_view admin = "admin"_s;
     };
 public:
     icy::error_type from_json(const icy::json& input) noexcept;
@@ -95,4 +95,5 @@ namespace auth_event_type
     static constexpr auto console_error = icy::event_user(0x0B);
     static constexpr auto clear_clients = icy::event_user(0x0C);
     static constexpr auto clear_modules = icy::event_user(0x0D);
+    static constexpr auto global_exit = icy::event_user(0x0E);
 }

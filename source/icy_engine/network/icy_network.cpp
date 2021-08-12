@@ -1,6 +1,7 @@
 #include "icy_network_system.hpp"
 #include "icy_network_address.hpp"
 #include <icy_engine/core/icy_thread.hpp>
+#include <icy_engine/core/icy_json.hpp>
 
 using namespace icy;
 
@@ -14,13 +15,13 @@ error_type network_system_tcp_client::send(const const_array_view<uint8_t> buffe
 {
     array<uint8_t> bytes;
     ICY_ERROR(copy(buffer, bytes));
-    return m_data->post(0, event_type::network_send, std::move(bytes));
+    return m_data->post(network_tcp_connection(), event_type::network_send, std::move(bytes));
 }
 error_type network_system_tcp_client::recv(const size_t capacity) noexcept
 {
     array<uint8_t> bytes;
     ICY_ERROR(bytes.resize(capacity));
-    return m_data->post(0, event_type::network_recv, std::move(bytes));
+    return m_data->post(network_tcp_connection(), event_type::network_recv, std::move(bytes));
 }
 error_type network_system_tcp_client::exec() noexcept
 {
@@ -65,7 +66,7 @@ error_type network_system_udp_client::send(const network_address& address, const
 {
     array<uint8_t> bytes;
     ICY_ERROR(copy(buffer, bytes));
-    return m_data->post(0, event_type::network_send, std::move(bytes), &address);
+    return m_data->post(network_tcp_connection(), event_type::network_send, std::move(bytes), &address);
 }
 error_type network_system_udp_client::exec() noexcept
 {
@@ -111,19 +112,19 @@ error_type network_system_http_client::send(const http_response& response) noexc
 {
     unique_ptr<http_response> new_response;
     ICY_ERROR(make_unique(response, new_response));
-    return m_data->post(0, std::move(new_response));
+    return m_data->post(network_tcp_connection(), std::move(new_response));
 }
 error_type network_system_http_client::send(const http_request& request) noexcept
 {
     unique_ptr<http_request> new_request;
     ICY_ERROR(make_unique(request, new_request));
-    return m_data->post(0, std::move(new_request));
+    return m_data->post(network_tcp_connection(), std::move(new_request));
 }
 error_type network_system_http_client::recv() noexcept
 {
     array<uint8_t> bytes;
     ICY_ERROR(bytes.resize(m_data->config().buffer));
-    return m_data->post(0, event_type::network_recv, std::move(bytes));
+    return m_data->post(network_tcp_connection(), event_type::network_recv, std::move(bytes));
 }
 
 network_system_tcp_server::~network_system_tcp_server() noexcept
@@ -133,24 +134,24 @@ network_system_tcp_server::~network_system_tcp_server() noexcept
 }
 error_type network_system_tcp_server::open(const network_tcp_connection conn) noexcept
 {
-    return m_data->post(conn.index, event_type::network_connect, array<uint8_t>());
+    return m_data->post(conn, event_type::network_connect, array<uint8_t>());
 }
 error_type network_system_tcp_server::close(const network_tcp_connection conn) noexcept
 {
     array<uint8_t> bytes;
-    return m_data->post(conn.index, event_type::network_disconnect, array<uint8_t>());
+    return m_data->post(conn, event_type::network_disconnect, array<uint8_t>());
 }
 error_type network_system_tcp_server::send(const network_tcp_connection conn, const const_array_view<uint8_t> buffer) noexcept
 {
     array<uint8_t> bytes;
     ICY_ERROR(copy(buffer, bytes));
-    return m_data->post(conn.index, event_type::network_send, std::move(bytes));
+    return m_data->post(conn, event_type::network_send, std::move(bytes));
 }
 error_type network_system_tcp_server::recv(const network_tcp_connection conn, const size_t capacity) noexcept
 {
     array<uint8_t> bytes;
     ICY_ERROR(bytes.resize(capacity));
-    return m_data->post(conn.index, event_type::network_recv, std::move(bytes));
+    return m_data->post(conn, event_type::network_recv, std::move(bytes));
 }
 error_type network_system_tcp_server::exec() noexcept
 {
@@ -178,7 +179,7 @@ error_type network_system_udp_server::send(const network_address& addr, const co
 {
     array<uint8_t> bytes;
     ICY_ERROR(copy(buffer, bytes));
-    return m_data->post(0u, event_type::network_send, std::move(bytes), &addr);
+    return m_data->post(network_tcp_connection(), event_type::network_send, std::move(bytes), &addr);
 }
 error_type network_system_udp_server::exec() noexcept
 {
@@ -206,19 +207,23 @@ error_type network_system_http_server::send(const network_tcp_connection conn, c
 {
     unique_ptr<http_response> new_response;
     ICY_ERROR(make_unique(response, new_response));
-    return m_data->post(conn.index, std::move(new_response));
+    return m_data->post(conn, std::move(new_response));
 }
 error_type network_system_http_server::send(const network_tcp_connection conn, const http_request& request) noexcept
 {
     unique_ptr<http_request> new_request;
     ICY_ERROR(make_unique(request, new_request));
-    return m_data->post(conn.index, std::move(new_request));
+    return m_data->post(conn, std::move(new_request));
 }
 error_type network_system_http_server::recv(const network_tcp_connection conn) noexcept
 {
     array<uint8_t> bytes;
     ICY_ERROR(bytes.resize(m_data->config().buffer));
-    return m_data->post(conn.index, event_type::network_recv, std::move(bytes));
+    return m_data->post(conn, event_type::network_recv, std::move(bytes));
+}
+error_type network_system_http_server::disc(const network_tcp_connection conn) noexcept
+{
+    return m_data->post(conn, event_type::network_disconnect, array<uint8_t>());
 }
 error_type network_system_http_server::exec() noexcept
 {
@@ -485,6 +490,36 @@ network_udp_socket::~network_udp_socket() noexcept
     }
 }
 
+error_type icy::to_json(const network_server_config& src, json& dst) noexcept
+{
+    dst = json_type::object;
+    ICY_ERROR(dst.insert("port"_s, json_type_integer(src.port)));
+    ICY_ERROR(dst.insert("capacity"_s, json_type_integer(src.capacity)));
+    ICY_ERROR(dst.insert("queue"_s, json_type_integer(src.queue)));
+    ICY_ERROR(dst.insert("buffer"_s, json_type_integer(src.buffer)));
+    ICY_ERROR(dst.insert("timeout"_s, std::chrono::duration_cast<std::chrono::milliseconds>(src.timeout).count()));
+    ICY_ERROR(dst.insert("addrType"_s, src.addr_type == network_address_type::ip_v4 ? "ip4"_s : "ip6"_s));
+    return error_type();
+}
+error_type icy::to_value(const json& src, network_server_config& dst) noexcept
+{
+    src.get("port"_s, dst.port);
+    src.get("capacity"_s, dst.capacity);
+    if (!dst.port || !dst.capacity)
+        return make_stdlib_error(std::errc::invalid_argument);
+
+    src.get("queue"_s, dst.queue);
+    src.get("buffer"_s, dst.buffer);
+    auto timeout = 0u;
+    if (src.get("timeout"_s, timeout) == error_type())
+        dst.timeout = std::chrono::milliseconds(timeout);
+    const auto addrType = src.get("addrType"_s);
+    if (addrType == "ip4"_s)
+        dst.addr_type = network_address_type::ip_v4;
+    else if (addrType == "ip6"_s)
+        dst.addr_type = network_address_type::ip_v6;
+    return error_type();
+}
 
 /*
 class network_tcp_request

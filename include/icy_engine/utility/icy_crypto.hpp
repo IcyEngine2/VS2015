@@ -4,7 +4,8 @@
 
 namespace icy
 {
-    static constexpr struct{ } crypto_random;
+    struct crypto_random_type { };
+    extern const crypto_random_type crypto_random;
     class crypto_nonce
     {
     public:
@@ -64,14 +65,15 @@ namespace icy
     private:
         uint8_t m_array[32];
     };
-    class crypto_login : public detail::rel_ops<crypto_login>
+    class crypto_login
     {
     public:
+        rel_ops(crypto_login);
         crypto_login() noexcept = default;
         crypto_login(const string_view login) noexcept;
-        int compare(const crypto_login& rhs) const noexcept
+        static int compare(const crypto_login& lhs, const crypto_login& rhs) noexcept
         {
-            return memcmp(m_array, rhs.m_array, sizeof(*this));
+            return memcmp(lhs.m_array, rhs.m_array, sizeof(crypto_login));
         }
         const uint8_t* data() const noexcept
         {

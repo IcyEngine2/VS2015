@@ -48,7 +48,8 @@ error_type detail::network_func_init(library& lib) noexcept
 
 error_type detail::network_connection::accept(network_system_data& system) noexcept
 {
-    ICY_ERROR(shutdown(std::chrono::seconds(0)));
+    shutdown();
+    version += 1;
 
     ICY_ERROR(ovl_recv.bytes.resize(system.addr_size() * 2));
     ICY_ERROR(socket.initialize(network_socket::type::tcp, system.m_config.addr_type));
@@ -68,7 +69,7 @@ error_type detail::network_connection::accept(network_system_data& system) noexc
     }
     return error_type();
 }
-error_type detail::network_connection::recv() noexcept
+error_type detail::network_connection::do_recv() noexcept
 {
     ICY_ASSERT(ovl_recv.offset < ovl_recv.bytes.size(), "TCP CONNECTION CORRUPTED");
     auto flags = 0ul;
@@ -85,7 +86,7 @@ error_type detail::network_connection::recv() noexcept
     }
     return error_type();
 };
-error_type detail::network_connection::recv(array<uint8_t>&& bytes) noexcept
+error_type detail::network_connection::next_recv(array<uint8_t>&& bytes) noexcept
 {
     if (bytes.empty())
         return make_stdlib_error(std::errc::invalid_argument);
@@ -102,7 +103,7 @@ error_type detail::network_connection::recv(array<uint8_t>&& bytes) noexcept
 
     if (ptr != &new_ovl)
     {
-        ICY_ERROR(recv());
+        ICY_ERROR(do_recv());
     }
     else
     {
@@ -110,7 +111,7 @@ error_type detail::network_connection::recv(array<uint8_t>&& bytes) noexcept
     }
     return error_type();
 }
-error_type detail::network_connection::send() noexcept
+error_type detail::network_connection::do_send() noexcept
 {
     ICY_ASSERT(ovl_send.offset < ovl_send.bytes.size(), "TCP CONNECTION CORRUPTED");
     auto flags = 0ul;
@@ -127,7 +128,7 @@ error_type detail::network_connection::send() noexcept
     }
     return error_type();
 };
-error_type detail::network_connection::send(array<uint8_t>&& bytes) noexcept
+error_type detail::network_connection::next_send(array<uint8_t>&& bytes) noexcept
 {
     if (bytes.empty())
         return make_stdlib_error(std::errc::invalid_argument);
@@ -144,7 +145,7 @@ error_type detail::network_connection::send(array<uint8_t>&& bytes) noexcept
 
     if (ptr != &new_ovl)
     {
-        ICY_ERROR(send());
+        ICY_ERROR(do_send());
     }
     else
     {
@@ -152,7 +153,19 @@ error_type detail::network_connection::send(array<uint8_t>&& bytes) noexcept
     }
     return error_type();
 }
-error_type detail::network_connection::disc() noexcept
+error_type detail::network_connection::do_disc() noexcept
+{
+    const auto ret = network_func_disconnect_ex(socket, &ovl_send.overlapped, 0, 0);
+    if (ret == -1)
+    {
+        const auto error = network_get_last_error();
+        if (error != WSA_IO_PENDING)
+            return make_system_error(make_system_error_code(error));
+    }
+    return error_type();
+};
+
+error_type detail::network_connection::next_disc() noexcept
 {
     network_tcp_overlapped new_ovl;
     network_tcp_overlapped* ptr = &new_ovl;
@@ -163,12 +176,7 @@ error_type detail::network_connection::disc() noexcept
     ptr->conn = this;
     if (ptr != &new_ovl)
     {
-        if (!network_func_disconnect_ex(socket, &ovl_send.overlapped, 0, 0))
-        {
-            const auto error = network_get_last_error();
-            if (error != WSA_IO_PENDING)
-                return make_system_error(make_system_error_code(error));
-        }
+        ICY_ERROR(do_disc());
     }
     else
     {
@@ -176,44 +184,43 @@ error_type detail::network_connection::disc() noexcept
     }
     return error_type();
 };
-error_type detail::network_connection::shutdown(const duration_type timeout) noexcept
+void detail::network_connection::shutdown() noexcept
 {
+    if (socket == INVALID_SOCKET)
+        return;
+
     rqueue.clear();
     squeue.clear();
+    ovl_send = {};
+    ovl_recv = {};
+    http = {};
+    addr = {};
+    socket.shutdown();
 
-    if (socket == INVALID_SOCKET)
-        return {};
 
-    const auto handle = HANDLE(SOCKET(socket));
-    auto error_send = error_type();
-    auto error_recv = error_type();
+    /*const auto handle = HANDLE(SOCKET(socket));
     if (ovl_send.type)
     {
+        auto code = 0;
         if (!CancelIoEx(handle, &ovl_send.overlapped))
-            error_send = last_system_error();
-        if (error_send.code == 0 || error_send.code == ERROR_NOT_FOUND)
+            code = GetLastError();
+        if (code == 0 || code == ERROR_NOT_FOUND)
         {
             auto bytes = 0ul;
-            if (!GetOverlappedResultEx(handle, &ovl_send.overlapped, &bytes, ms_timeout(timeout), TRUE))
-                error_send = last_system_error();
+            //GetOverlappedResultEx(handle, &ovl_send.overlapped, &bytes, 0, TRUE);
         }
-        ovl_send = {};
     }
     if (ovl_recv.type)
     {
+        auto code = 0;
         if (!CancelIoEx(handle, &ovl_recv.overlapped))
-            error_recv = last_system_error();
-        if (error_recv.code == 0 || error_recv.code == ERROR_NOT_FOUND)
+            code = GetLastError();
+        if (code == 0 || code == ERROR_NOT_FOUND)
         {
             auto bytes = 0ul;
-            if (!GetOverlappedResultEx(handle, &ovl_recv.overlapped, &bytes, ms_timeout(timeout), TRUE))
-                error_recv = last_system_error();
+            //GetOverlappedResultEx(handle, &ovl_recv.overlapped, &bytes, 0, TRUE);
         }
-        ovl_recv = {};
-    }
-    ICY_ERROR(error_send);
-    ICY_ERROR(error_recv);
-    return error_type();
+    }*/
 }
 
 void network_system_data::destroy(network_system_data*& ptr) noexcept
@@ -403,7 +410,7 @@ error_type detail::network_system_data::connect(const network_address& address,
         ICY_ERROR(m_conn.resize(1));
         m_conn[0].socket = std::move(m_socket);
         if (m_http)
-            ICY_ERROR(m_conn[0].recv(std::move(recv_buffer)));
+            ICY_ERROR(m_conn[0].next_recv(std::move(recv_buffer)));
         return {};
     }
     return make_stdlib_error(std::errc::not_connected);
@@ -414,19 +421,19 @@ error_type detail::network_system_data::cancel() noexcept
         return last_system_error();
     return {};
 }
-error_type detail::network_system_data::post(const uint32_t conn, const event_type type, array<uint8_t>&& bytes, const network_address* const addr) noexcept
+error_type detail::network_system_data::post(const network_tcp_connection conn, const event_type type, array<uint8_t>&& bytes, const network_address* const addr) noexcept
 {
     if (m_config.port) // is server
     {
         if (m_socket.get_type() == network_socket::type::tcp)
         {
-            if (conn == 0 || conn > m_conn.size())
+            if (conn.index() == 0 || conn.index() > m_conn.size())
                 return make_stdlib_error(std::errc::invalid_argument);
         }
     }
     else
     {
-        if (conn != 0)
+        if (conn.index() != 0)
             return make_stdlib_error(std::errc::invalid_argument);
     }
     if (type == event_type::network_connect || type == event_type::network_disconnect)
@@ -445,7 +452,7 @@ error_type detail::network_system_data::post(const uint32_t conn, const event_ty
     }
 
     network_command cmd;
-    cmd.conn = m_config.port ? conn : 1;
+    cmd.conn = m_config.port ? conn : network_tcp_connection(1, 0);
     cmd.bytes = std::move(bytes);
     cmd.type = type;
     if (addr)
@@ -457,17 +464,17 @@ error_type detail::network_system_data::post(const uint32_t conn, const event_ty
 
     return error_type();
 }
-error_type detail::network_system_data::post(const uint32_t conn, unique_ptr<http_response>&& response) noexcept
+error_type detail::network_system_data::post(const network_tcp_connection conn, unique_ptr<http_response>&& response) noexcept
 {
     if (!response)
         return make_stdlib_error(std::errc::invalid_argument);
 
     if (m_config.port)
     {
-        if (conn == 0 || conn > m_conn.size())
+        if (conn.index() == 0 || conn.index() > m_conn.size())
             return make_stdlib_error(std::errc::invalid_argument);
     }
-    else if (conn)
+    else if (conn.index())
     {
         return make_stdlib_error(std::errc::invalid_argument);
     }
@@ -476,7 +483,7 @@ error_type detail::network_system_data::post(const uint32_t conn, unique_ptr<htt
     ICY_ERROR(to_string(*response, str));
 
     network_command cmd;
-    cmd.conn = m_config.port ? conn : 1;
+    cmd.conn = m_config.port ? conn : network_tcp_connection(1, 0);
     cmd.type = event_type::network_send;
     ICY_ERROR(cmd.bytes.append(str.ubytes()));
     ICY_ERROR(cmd.bytes.append(response->body));
@@ -488,16 +495,16 @@ error_type detail::network_system_data::post(const uint32_t conn, unique_ptr<htt
 
     return error_type();
 }
-error_type detail::network_system_data::post(const uint32_t conn, unique_ptr<http_request>&& request) noexcept
+error_type detail::network_system_data::post(const network_tcp_connection conn, unique_ptr<http_request>&& request) noexcept
 {
-    if (!request || (m_config.port == 0 && conn == 0 || conn > m_conn.size()))
+    if (!request || (m_config.port == 0 && conn.index() == 0 || conn.index() > m_conn.size()))
         return make_stdlib_error(std::errc::invalid_argument);
 
     string str;
     ICY_ERROR(to_string(*request, str));
 
     network_command cmd;
-    cmd.conn = m_config.port ? conn : 1;
+    cmd.conn = m_config.port ? conn : network_tcp_connection(1, 0);
     cmd.type = event_type::network_send;
     ICY_ERROR(cmd.bytes.append(str.ubytes()));
     ICY_ERROR(cmd.bytes.append(request->body));
@@ -514,7 +521,10 @@ error_type detail::network_system_data::loop_tcp(event_system& system) noexcept
     network_command cmd;
     while (m_cmds.pop(cmd))
     {
-        auto conn = &m_conn[cmd.conn - 1];
+        auto conn = &m_conn[cmd.conn.index() - 1];
+        if (cmd.conn.version() != conn->version)
+            continue;
+
         network_event event;
         switch (cmd.type)
         {
@@ -525,17 +535,17 @@ error_type detail::network_system_data::loop_tcp(event_system& system) noexcept
         }
         case event_type::network_disconnect:
         {
-            event.error = conn->disc();
+            event.error = conn->next_disc();
             break;
         }
         case event_type::network_recv:
         {
-            event.error = conn->recv(std::move(cmd.bytes));
+            event.error = conn->next_recv(std::move(cmd.bytes));
             break;
         }
         case event_type::network_send:
         {
-            event.error = conn->send(std::move(cmd.bytes));
+            event.error = conn->next_send(std::move(cmd.bytes));
             conn->http.request = std::move(cmd.http.request);
             conn->http.response = std::move(cmd.http.response);
             break;
@@ -548,7 +558,8 @@ error_type detail::network_system_data::loop_tcp(event_system& system) noexcept
         if (event.error)
         {
             ICY_ERROR(event::post(&system, cmd.type, std::move(event)));
-            event.error = conn->shutdown(m_config.timeout);
+            event.error = error_type();
+            conn->shutdown();
             ICY_ERROR(event::post(&system, event_type::network_disconnect, std::move(event)));
             if (m_http && m_config.port)
                 ICY_ERROR(conn->accept(*this));
@@ -571,8 +582,11 @@ error_type detail::network_system_data::loop_tcp(event_system& system) noexcept
     network_event event;
 
     if (m_config.port)
-        event.conn = uint32_t(std::distance(m_conn.data(), &conn)) + 1;
-    
+    {
+        const auto idx = uint32_t(std::distance(m_conn.data(), &conn)) + 1;
+        event.conn = network_tcp_connection(idx, conn.version);
+    }
+
     if (const auto error = last_system_error())
     {
         if (error == make_system_error(make_system_error_code(ERROR_IO_PENDING)))
@@ -709,7 +723,7 @@ error_type detail::network_system_data::loop_tcp(event_system& system) noexcept
             }            
             if (!event.error)
             {
-                if (update || (event.error = conn.recv()))
+                if (update || (event.error = conn.do_recv()))
                 {
                     event.bytes = std::move(ovl->bytes);
                     event.bytes.resize(ovl->offset);
@@ -720,7 +734,7 @@ error_type detail::network_system_data::loop_tcp(event_system& system) noexcept
         }
         case event_type::network_send:
         {
-            if (update || (event.error = conn.send()))
+            if (update || (event.error = conn.do_send()))
             {
                 event.bytes = std::move(ovl->bytes);
                 event.bytes.resize(ovl->offset);
@@ -740,9 +754,7 @@ error_type detail::network_system_data::loop_tcp(event_system& system) noexcept
 
     if (event.error || is_disconnected)
     {
-        const auto new_error = conn.shutdown(m_config.timeout);
-        if (!event.error)
-            event.error = new_error;
+        conn.shutdown();
         ICY_ERROR(event::post(&system, event_type::network_disconnect, std::move(event)));
         if (m_http && m_config.port)
             ICY_ERROR(conn.accept(*this));
@@ -772,7 +784,7 @@ error_type detail::network_system_data::loop_tcp(event_system& system) noexcept
             {
                 next_type = next.type;
                 conn.ovl_recv = std::move(next);
-                event.error = conn.recv();
+                event.error = conn.do_recv();
             }
         }
         if (!conn.ovl_send.type)
@@ -782,16 +794,17 @@ error_type detail::network_system_data::loop_tcp(event_system& system) noexcept
             {
                 next_type = next.type;
                 conn.ovl_send = std::move(next);
-                if (next.type == event_type::network_send)
-                    event.error = conn.send();
-                else
-                    event.error = conn.disc();
+                if (next_type == event_type::network_send)
+                    event.error = conn.do_send();
+                else if (next_type == event_type::network_disconnect)
+                    event.error = conn.do_disc();
             }
         }
         if (event.error)
         {
             ICY_ERROR(event::post(&system, next_type, std::move(event)));
-            event.error = conn.shutdown(m_config.timeout);
+            event.error = error_type();
+            conn.shutdown();
             ICY_ERROR(event::post(&system, event_type::network_disconnect, std::move(event)));
             if (m_http && m_config.port)
                 ICY_ERROR(conn.accept(*this));

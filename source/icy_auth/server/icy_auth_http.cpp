@@ -4,88 +4,41 @@
 
 using namespace icy;
 
-error_type auth_network_thread::run() noexcept
-{
-    http_thread http(m_system.m_http);
-    auto exit = false;
-    while (!exit)
-    {
-        http_event event;
-        ICY_ERROR(http.loop(event, exit));
-        if (event.type == network_request_type::recv)
-        {
-            http_response http_response;
-            string output;
-            http_response.herror = http_error::bad_request;
-
-            if (!event.error
-                && event.request.type == http_request_type::post
-                && event.request.content == http_content_type::application_json)
-            {
-                json response;
-                const auto error = m_system.process(event.request.body, event.address(), response);
-                if (response.type() != json_type::none)
-                {
-                    if (!response.find("Error"))
-                        http_response.herror = http_error::success;
-                    http_response.type = http_content_type::application_json;
-                }
-                if (error.source == error_source_auth)
-                    ;
-                else
-                    ICY_ERROR(error);
-
-                ICY_ERROR(to_string(response, output));
-            }
-            ICY_ERROR(http.reply(event, http_response, output.ubytes()));
-        }
-    }
-    return {};
-}
-
 error_type auth_network_system::initialize(const auth_config_network& config, const size_t cores, const const_array_view<auth_request_type> types) noexcept
 {
-    ICY_ERROR(wait());
-    m_threads.clear();
-
     ICY_ERROR(auth_config_network::copy(config, m_config));
-    ICY_ERROR(m_threads.reserve(cores));
-    for (auto k = 0; k < cores; ++k)
-    {
-        ICY_ERROR(m_threads.emplace_back(*this));
-    }
     ICY_ERROR(m_types.assign(types));
-    return {};
-}
-error_type auth_network_system::wait() noexcept
-{
-    m_http.shutdown();
-    for (auto&& thread : m_threads)
-        ICY_ERROR(thread.wait());
-    m_network.shutdown();
-    return {};
-}
-error_type auth_network_system::launch() noexcept
-{
-    ICY_ERROR(wait());
-    ICY_ERROR(m_network.initialize());
-    ICY_ERROR(m_http.launch(m_network, m_config.http));
-    for (auto&& thread : m_threads)
-        ICY_ERROR(thread.launch());
-    return {};
+    ICY_ERROR(create_network_http_server(m_network, m_config.http));
+    ICY_ERROR(make_shared(m_thread));
+    m_thread->system = m_network.get();
+    return error_type();
 }
 error_type auth_network_system::status(string& msg) const noexcept
 {
-    for (auto&& thread : m_threads)
+    auto& thread = *m_thread;
+    string_view status;
+    if (thread.state() == thread_state::done)
     {
-        ICY_ERROR(msg.appendf("\r\nThread [%1]: %2"_s, thread.index(), thread.running() ? "Running" : "Error: "_s));
-        if (!thread.running())
-        {
-            const auto error = thread.error();
-            ICY_ERROR(msg.appendf("\"%1\" (code %2) - %3"_s, error.source, error.code, error));
-        }
+        if (thread.error())
+            status = "Error: "_s;
+        else
+            status = "Done"_s;
     }
-    return {};
+    else if (thread.state() == thread_state::run)
+    {
+        status = "Running"_s;
+    }
+    else
+    {
+        status = "-"_s;
+    }
+
+    ICY_ERROR(msg.appendf("Thread [%1]: %2"_s, thread.index(), status));
+    if (const auto error = thread.error())
+    {
+        ICY_ERROR(msg.appendf("\"%1\" (code %2) - %3"_s, error.source, error.code, error));
+    }
+    return error_type();
 }
 error_type auth_network_system::process(const string_view str_request, const network_address& address, json& json_output) noexcept
 {
@@ -95,7 +48,7 @@ error_type auth_network_system::process(const string_view str_request, const net
     auth_request auth_request;
 
     if (!error)
-        error = json::create(str_request, json_request);
+        error = to_value(str_request, json_request);
     if (error == make_stdlib_error(std::errc::illegal_byte_sequence))
         error = make_auth_error(auth_error_code::invalid_json);
 
@@ -174,8 +127,8 @@ error_type auth_network_system::process(const string_view str_request, const net
                 ICY_ERROR(to_string("Sucess"_s, error_str));
             }
             string msg;
-            to_string("%1%2\t[%3]\t%4\t%5\t%6"_s, msg, log_entry == log_entry_first ? ""_s : "\r\n"_s,
-                string_view(time_str), string_view(addr_str), string_view(user_str), string_view(type_str), string_view(error_str));
+            ICY_ERROR(to_string("%1%2\t[%3]\t%4\t%5\t%6"_s, msg, log_entry == log_entry_first ? ""_s : "\r\n"_s,
+                string_view(time_str), string_view(addr_str), string_view(user_str), string_view(type_str), string_view(error_str)));
             
             file log;
             ICY_ERROR(log.open(m_config.file_path, file_access::app, file_open::open_always, file_share::read | file_share::write));

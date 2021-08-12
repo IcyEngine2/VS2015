@@ -89,11 +89,25 @@ namespace icy
 
     struct network_tcp_connection
     {
-        network_tcp_connection(const uint32_t index = 0) noexcept : index(index)
+        network_tcp_connection() noexcept : m_index(0), m_version(0)
         {
 
         }
-        uint32_t index;
+        network_tcp_connection(const uint32_t index, const uint32_t version) noexcept : m_index(index), m_version(version)
+        {
+
+        }
+        uint32_t index() const noexcept
+        {
+            return m_index;
+        }
+        uint32_t version() const noexcept
+        {
+            return m_version;
+        }
+    private:
+        uint32_t m_index;
+        uint32_t m_version;
     };
     struct network_event
     {
@@ -234,6 +248,7 @@ namespace icy
         error_type send(const network_tcp_connection conn, const http_response& response) noexcept;
         error_type send(const network_tcp_connection conn, const http_request& request) noexcept;
         error_type recv(const network_tcp_connection conn) noexcept;
+        error_type disc(const network_tcp_connection conn) noexcept;
     private:
         error_type exec() noexcept override;
         error_type signal(const event_data* event) noexcept override;

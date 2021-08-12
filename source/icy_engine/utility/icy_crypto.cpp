@@ -202,3 +202,5 @@ error_type crypto_msg_base::decode(const crypto_key& public_key, const crypto_ke
         return make_stdlib_error(std::errc::illegal_byte_sequence);
     return {};
 }
+
+const crypto_random_type icy::crypto_random;

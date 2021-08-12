@@ -9,18 +9,20 @@ struct icy::detail::network_connection
     network_connection() noexcept = default;
     ~network_connection() noexcept
     {
-        shutdown(std::chrono::seconds(0));
+        shutdown();
     }
     network_connection(network_connection&&) noexcept = default;
-    error_type shutdown(const icy::duration_type timeout) noexcept;
+    void shutdown() noexcept;
     error_type accept(network_system_data& system) noexcept;
-    error_type recv() noexcept;
-    error_type recv(array<uint8_t>&& bytes) noexcept;
-    error_type send() noexcept;
-    error_type send(array<uint8_t>&& bytes) noexcept;
-    error_type disc() noexcept;
-
+    error_type do_recv() noexcept;
+    error_type next_recv(array<uint8_t>&& bytes) noexcept;
+    error_type do_send() noexcept;
+    error_type next_send(array<uint8_t>&& bytes) noexcept;
+    error_type do_disc() noexcept;
+    error_type next_disc() noexcept;
+    
     network_socket socket;
+    uint32_t version = 0;
     detail::network_tcp_overlapped ovl_recv;
     detail::network_tcp_overlapped ovl_send;
     mpsc_queue<detail::network_tcp_overlapped> rqueue;
@@ -42,7 +44,7 @@ class icy::detail::network_system_data
 
     struct network_command
     {
-        uint32_t conn = 0;
+        network_tcp_connection conn;
         event_type type = event_type::none;
         array<uint8_t> bytes;
         network_address address;
@@ -65,9 +67,9 @@ public:
     error_type connect(const network_address& address, const_array_view<uint8_t> bytes,
         const duration_type timeout, array<uint8_t>&& recv_buffer = {}) noexcept;
     error_type cancel() noexcept;
-    error_type post(const uint32_t conn, const event_type type, array<uint8_t>&& bytes, const network_address* addr = nullptr) noexcept;
-    error_type post(const uint32_t conn, unique_ptr<http_response>&& response) noexcept;
-    error_type post(const uint32_t conn, unique_ptr<http_request>&& request) noexcept;
+    error_type post(const network_tcp_connection conn, const event_type type, array<uint8_t>&& bytes, const network_address* addr = nullptr) noexcept;
+    error_type post(const network_tcp_connection conn, unique_ptr<http_response>&& response) noexcept;
+    error_type post(const network_tcp_connection conn, unique_ptr<http_request>&& request) noexcept;
     error_type loop_tcp(event_system& system) noexcept;
     error_type loop_udp(event_system& system) noexcept;
     error_type join(const network_address& addr, bool join) noexcept;
