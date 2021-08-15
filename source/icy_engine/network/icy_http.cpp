@@ -57,60 +57,57 @@ static string_view to_string(const http_error error) noexcept
 }
 static error_type decode(const string_view input, string& output) noexcept
 {
-	const auto len = input.bytes().size();
-	const auto ptr = input.bytes().data();
+	//const auto len = input.bytes().size();
+	//const auto ptr = input.bytes().data();
 
-	if (const auto error = output.reserve(len))
-		return error;
-
+	ICY_ERROR(output.reserve(input.bytes().size()));
 	const auto hex = "0123456789ABCDEF"_s;
 
-	for (auto k = 0_z; k < len; )
+	for (auto it = input.begin(); it != input.end(); ++it)
 	{
-		if (ptr[k] == '%')
+		char32_t chr = 0;
+		ICY_ERROR(it.to_char(chr));
+		if (chr == '%')
 		{
-			if (k + 2 >= len)
+			if (it + 2 >= input.end())
 				return make_stdlib_error(std::errc::illegal_byte_sequence);
-			const auto it = hex.find(string_view{ &ptr[k + 1], 1 });
-			const auto jt = hex.find(string_view{ &ptr[k + 2], 1 });
-			if (it == hex.end() || jt == hex.end())
+			const auto jt = hex.find(string_view(it + 1, it + 2));
+			const auto kt = hex.find(string_view(it + 2, it + 3));
+			if (jt == hex.end() || kt == hex.end())
 				return make_stdlib_error(std::errc::illegal_byte_sequence);
 
 			const auto h0 = static_cast<const char*>(it) - hex.bytes().data();
 			const auto h1 = static_cast<const char*>(jt) - hex.bytes().data();
-			const auto chr = char(h0 * 0x10 + h1);
-			if (const auto error = output.append(string_view{ &chr, 1 }))
-				return error;
-			k += 3;
+			char buffer[] = { char(h0 * 0x10 + h1), 0 };
+			string tmp;
+			ICY_ERROR(to_string(const_array_view<char>(buffer, 1), tmp));
+			ICY_ERROR(output.append(tmp));
+			it += 2;
 		}
 		else
 		{
-			if (const auto error = output.append(string_view{ &ptr[k], 1 }))
-				return error;
-			++k;
+			ICY_ERROR(output.append(string_view(it, it + 1)));
 		}
 	}
-	return {};
+	return error_type();
 }
-static error_type parse(const string_view input, const char delim, map<string, string>& output) noexcept
+static error_type parse(const string_view input, const char32_t delim, map<string, string>& output) noexcept
 {
-	const auto ptr = input.bytes().data();
-	const auto len = input.bytes().size();
-	auto str_key = string_view{};
-	auto beg = ptr;
+	string_view str_key;
+	auto beg = input.begin();
 	enum
 	{
 		parse_key,
 		parse_val,
 	} state = parse_key;
 
-	const auto next = [&str_key, &beg, ptr, &output](const size_t k)
+	const auto func_next = [&str_key, &beg, &output](const string_view::iterator it)
 	{
 		string key;
 		string val;
 		if (const auto error = decode(str_key, key))
 			return error;
-		if (const auto error = decode(string_view{ beg, ptr + k }, val))
+		if (const auto error = decode(string_view{ beg, it }, val))
 			return error;
 		if (key.empty() || val.empty())
 			return make_stdlib_error(std::errc::illegal_byte_sequence);
@@ -121,45 +118,52 @@ static error_type parse(const string_view input, const char delim, map<string, s
 			else
 				return error;
 		}
-		return error_type{};
+		return error_type();
 	};
 
-	for (auto k = 0_z; k < len; ++k)
+	for (auto it = input.begin(); it != input.end(); ++it)
 	{
+		char32_t chr = 0;
+		ICY_ERROR(it.to_char(chr));
 		switch (state)
 		{
 		case parse_key:
 		{
-			if (ptr[k] == '=')
+			if (chr == '=')
 			{
 				state = parse_val;
-				str_key = string_view{ beg, ptr + k };
-				beg = ptr + k + 1;
+				str_key = string_view(beg, it);
+				beg = it + 1;
 			}
 			break;
 		}
 		case parse_val:
 		{
-			if (ptr[k] == delim)
+			if (chr == delim)
 				state = parse_key;
 			else
 				break;
-			if (k + 1 >= len || ptr[k + 1] != ' ')
+			if (it + 1 >= input.end())
 				return make_stdlib_error(std::errc::illegal_byte_sequence);
 
-			if (const auto error = next(k))
+			char32_t next = 0;
+			ICY_ERROR((it + 1).to_char(next));
+			if (next != ' ')
+				return make_stdlib_error(std::errc::illegal_byte_sequence);
+
+			if (const auto error = func_next(it))
 				return error;
-			beg = ptr + k + 2;
+			beg = it + 2;
 			break;
 		}
 		default:
 			return make_stdlib_error(std::errc::illegal_byte_sequence);
 		}
 	}
-	if (beg != ptr + len)
-		return next(len);
+	if (beg != input.end())
+		return func_next(input.end());
 	else
-		return {};
+		return error_type();
 }
 
 error_type icy::to_value(const string_view buffer, http_request& request) noexcept
@@ -176,22 +180,22 @@ error_type icy::to_value(const string_view buffer, http_request& request) noexce
 		parse_header_val,
 	} state = parse_type;
 
-	const auto len = buffer.bytes().size();
-	const auto ptr = buffer.bytes().data();
+	
+	auto beg = buffer.begin();
+	string_view url_arg_key;
+	string_view header_key;
 
-	auto beg = ptr;
-	auto url_arg_key = string_view{};
-	auto header_key = string_view{};
-
-	for (auto k = 0_z; k < len && state; ++k)
+	for (auto it = buffer.begin(); it != buffer.end() && state; ++it)
 	{
+		char32_t chr = 0;
+		ICY_ERROR(it.to_char(chr));
 		switch (state)
 		{
 		case parse_type:
 		{
-			if (ptr[k] == ' ')
+			if (chr == ' ')
 			{
-				switch (hash(string_view{ beg, ptr + k }))
+				switch (hash(string_view(beg, it)))
 				{
 				case "GET"_hash: 
                     request.type = http_request_type::get;
@@ -205,50 +209,58 @@ error_type icy::to_value(const string_view buffer, http_request& request) noexce
 				default:
 					return make_stdlib_error(std::errc::illegal_byte_sequence);
 				}
-				if (k + 1 >= len || ptr[k + 1] != '/')
-					return make_stdlib_error(std::errc::illegal_byte_sequence);
+				for (++it; it != buffer.end(); ++it)
+				{
+					char32_t next = 0;
+					ICY_ERROR(it.to_char(next));
+					if (next == ' ')
+						continue;
+					else if (next == '/')
+						break;
+					else
+						return make_stdlib_error(std::errc::illegal_byte_sequence);
+				}
 				state = parse_url_path;
-				beg = ptr + k + 2;
-				k += 1;
+				beg = it;
 			}
 			break;
 		}
 		case parse_url_path:
 		{
-			if (ptr[k] == '?')
+			if (chr == '?')
 			{
 				state = parse_url_arg_key;
-				beg = ptr + k + 1;
+				beg = it + 1;
 				break;
 			}
-			else if (ptr[k] == ' ')
+			else if (chr == ' ')
 				state = parse_http_version;
-			else if (ptr[k] == '/')
+			else if (chr == '/')
 				;
 			else
 				break;
 
 			string path;
-            ICY_ERROR(decode(string_view{ beg, ptr + k }, path));
+            ICY_ERROR(decode(string_view(beg, it), path));
             ICY_ERROR(request.url_sub.push_back(std::move(path)));
-			beg = ptr + k + 1;
+			beg = it + 1;
 			break;
 		}
 		case parse_url_arg_key:
 		{
-			if (ptr[k] == '=')
+			if (chr == '=')
 			{
 				state = parse_url_arg_val;
-				url_arg_key = string_view{ beg, ptr + k };
-				beg = ptr + k + 1;
+				url_arg_key = string_view{ beg, it };
+				beg = it + 1;
 			}
 			break;
 		}
 		case parse_url_arg_val:
 		{
-			if (ptr[k] == '&')
+			if (chr == '&')
 				state = parse_url_arg_key;
-			else if (ptr[k] == ' ')
+			else if (chr == ' ')
 				state = parse_http_version;
 			else
 				break;
@@ -256,56 +268,73 @@ error_type icy::to_value(const string_view buffer, http_request& request) noexce
 			string key;
 			string val;
             ICY_ERROR(decode(url_arg_key, key));
-            ICY_ERROR(decode(string_view{ beg, ptr + k }, val));
+            ICY_ERROR(decode(string_view(beg, it), val));
             ICY_ERROR(request.url_args.insert(std::move(key), std::move(val)));
-			beg = ptr + k + 1;
+			beg = it + 1;
 			break;
 		}
 
 		case parse_http_version:
 		{
-			if (ptr[k] == '\r')
+			if (chr == '\r')
 			{
-				if (string_view(beg, ptr + k) != "HTTP/1.1"_s || k + 1 >= len || ptr[k + 1] != '\n')
+				if (string_view(beg, it) != "HTTP/1.1"_s || it + 1 >= buffer.end())
 					return make_stdlib_error(std::errc::illegal_byte_sequence);
+
+				char32_t next = 0;
+				ICY_ERROR((it + 1).to_char(next));
+				if (next != '\n')
+					return make_stdlib_error(std::errc::illegal_byte_sequence);
+
 				state = parse_header_key;
-				beg = ptr + k + 2;
-				k += 1;
+				beg = it + 2;
+				it += 1;
 			}
 			break;
 		}
 		case parse_header_key:
 		{
-			if (ptr[k] == '\r')
+			if (chr == '\r')
 			{
 				state = none;
-				beg = ptr + len;
+				beg = buffer.end();
 				break;
 			}
-			if (ptr[k] == ':')
+			if (chr == ':')
 			{
-				if (k + 1 >= len || ptr[k + 1] != ' ')
+				if (it + 1 >= buffer.end())
 					return make_stdlib_error(std::errc::illegal_byte_sequence);
-				header_key = string_view(beg, ptr + k);
+
+				char32_t next = 0;
+				ICY_ERROR((it + 1).to_char(next));
+				if (next != ' ')
+					return make_stdlib_error(std::errc::illegal_byte_sequence);
+
+				header_key = string_view(beg, it);
 				state = parse_header_val;
-				beg = ptr + k + 2;
-				k += 1;
+				beg = it + 2;
+				it += 1;
 			}
 			break;
 		}
 		case parse_header_val:
 		{
-			if (ptr[k] == '\r')
+			if (chr == '\r')
 				;
 			else
 				break;
 
-			if (k + 3 >= len || ptr[k + 1] != '\n')
+			if (it + 3 >= buffer.end())
+				return make_stdlib_error(std::errc::illegal_byte_sequence);
+
+			char32_t next = 0;
+			ICY_ERROR((it + 1).to_char(next));
+			if (next != '\n')
 				return make_stdlib_error(std::errc::illegal_byte_sequence);
 
 			if (header_key == http_key_cookie_r)
 			{
-				ICY_ERROR(parse(string_view{ beg, ptr + k }, ';', request.cookies));
+				ICY_ERROR(parse(string_view(beg, it), ';', request.cookies));
 			}
 			else if (header_key == http_key_cookie_w)
 			{
@@ -316,20 +345,26 @@ error_type icy::to_value(const string_view buffer, http_request& request) noexce
 				string key;
 				string val;
 				ICY_ERROR(decode(header_key, key));
-				ICY_ERROR(decode(string_view{ beg, ptr + k }, val));
+				ICY_ERROR(decode(string_view(beg, it), val));
 				ICY_ERROR(request.headers.insert(std::move(key), std::move(val)));
 			}
 
-			if (ptr[k + 2] == '\r' && ptr[k + 3] == '\n')
+
+			char32_t next2 = 0;
+			char32_t next3 = 0;
+			ICY_ERROR((it + 2).to_char(next2));
+			ICY_ERROR((it + 3).to_char(next3));
+
+			if (next2 == '\r' && next3 == '\n')
 			{
-				beg = ptr + k + 4;
-				k += 3;
+				beg = it + 4;
+				it += 3;
 				state = none;
 			}
 			else
 			{
-				beg = ptr + k + 2;
-				k += 1;
+				beg = it + 2;
+				it += 1;
 				state = parse_header_key;
 			}
 			break;
@@ -343,26 +378,31 @@ error_type icy::to_value(const string_view buffer, http_request& request) noexce
 	const auto key_content_type = binary_search(keys.begin(), keys.end(), http_key_content_type);
 	const auto key_host = binary_search(keys.begin(), keys.end(), http_key_host);
 
-    string_view body_str;
-	if (key_content_size != keys.end())
-	{
-		const auto val_content_size = string_view{ request.headers.vals()[key_content_size - keys.begin()] };
-		auto size = 0u;
-		if (to_value(val_content_size, size) || beg + size != ptr + len)
-			return make_stdlib_error(std::errc::illegal_byte_sequence);
-
-        body_str = string_view(beg, size);
-        ICY_ERROR(request.body.append(body_str.ubytes()));
-	}
-	else if (beg != ptr + len)
-	{
-		return make_stdlib_error(std::errc::illegal_byte_sequence);
-	}
-
 	if (key_host != keys.end())
 	{
 		ICY_ERROR(copy(request.headers.vals()[key_host - keys.begin()], request.host));
 	}
+
+	string_view body_str;
+	if (key_content_size != keys.end())
+	{
+		const auto val_content_size = string_view(request.headers.vals()[key_content_size - keys.begin()]);
+		auto size = 0u;
+		if (to_value(val_content_size, size))
+			return make_stdlib_error(std::errc::illegal_byte_sequence);
+
+		const auto ptr = static_cast<const char*>(beg);
+		if (ptr + size != buffer.bytes().data() + buffer.bytes().size())
+			return make_stdlib_error(std::errc::illegal_byte_sequence);
+
+		body_str = string_view(beg, buffer.end());
+		ICY_ERROR(request.body.append(body_str.ubytes()));
+	}
+	else if (beg != buffer.end())
+	{
+		return make_stdlib_error(std::errc::illegal_byte_sequence);
+	}
+
 
 	if (key_content_type != keys.end())
 	{
@@ -379,7 +419,7 @@ error_type icy::to_value(const string_view buffer, http_request& request) noexce
 		if (request.content == http_content_type::application_x_www_form_urlencoded)
 			ICY_ERROR(parse(body_str, '&', request.body_args));
 	}
-	return {};
+	return error_type();
 }
 error_type icy::to_value(const string_view buffer, http_response& response) noexcept
 {
@@ -392,63 +432,86 @@ error_type icy::to_value(const string_view buffer, http_response& response) noex
 		parse_header_val,
 	} state = parse_http_version;
 
-	const auto len = buffer.bytes().size();
-	const auto ptr = buffer.bytes().data();
+	//const auto len = buffer.bytes().size();
+	//const auto ptr = buffer.bytes().data();
 
-	auto beg = ptr;
-	auto header_key = string_view{};
+	auto beg = buffer.begin();
+	string_view header_key;
 
-	for (auto k = 0_z; k < len && state; ++k)
+	for (auto it = buffer.begin(); it != buffer.end() && state; ++it)
 	{
+		char32_t chr = 0;
+		ICY_ERROR(it.to_char(chr));
+
 		switch (state)
 		{
 		case parse_http_version:
 		{
-			if (ptr[k] == ' ')
+			if (chr == ' ')
 			{
-				if (string_view(beg, ptr + k) != "HTTP/1.1"_s)
+				if (string_view(beg, it) != "HTTP/1.1"_s)
 					return make_stdlib_error(std::errc::illegal_byte_sequence);
 				state = parse_http_error;
-				beg = ptr + k + 1;
-				k += 1;
+				beg = it + 1;
+				it += 1;
 			}
 			break;
 		}
 		case parse_http_error:
 		{
-			if (ptr[k] == '\r')
+			if (chr == '\r')
 			{
-				if (to_value(string_view(beg, ptr + k), reinterpret_cast<uint32_t&>(response.herror)) != error_type{} || k + 1 >= len || ptr[k + 1] != '\n')
+				if (to_value(string_view(beg, it), reinterpret_cast<uint32_t&>(response.herror)) != error_type())
 					return make_stdlib_error(std::errc::illegal_byte_sequence);
+
+				if (it + 1 >= buffer.end())
+					return make_stdlib_error(std::errc::illegal_byte_sequence);
+
+				char32_t next = 0;
+				ICY_ERROR((it + 1).to_char(next));
+				if (next != '\n')
+					return make_stdlib_error(std::errc::illegal_byte_sequence);
+
 				state = parse_header_key;
-				beg = ptr + k + 2;
-				k += 1;
+				beg = it + 2;
+				it += 1;
 			}
 			break;
 		}
 		case parse_header_key:
 		{
-			if (ptr[k] == ':')
+			if (chr == ':')
 			{
-				if (k + 1 >= len || ptr[k + 1] != ' ')
+				if (it + 1 >= buffer.end())
 					return make_stdlib_error(std::errc::illegal_byte_sequence);
-				header_key = string_view(beg, ptr + k);
+
+				char32_t next = 0;
+				ICY_ERROR((it + 1).to_char(next));
+				if (next != ' ')
+					return make_stdlib_error(std::errc::illegal_byte_sequence);
+
+				header_key = string_view(beg, it);
 				state = parse_header_val;
-				beg = ptr + k + 2;
-				k += 1;
+				beg = it + 2;
+				it += 1;
 			}
 			break;
 		}
 		case parse_header_val:
 		{
-			if (ptr[k] == '\r')
+			if (chr == '\r')
 				;
 			else
 				break;
 
-			if (k + 3 >= len || ptr[k + 1] != '\n')
+			if (it + 3 >= buffer.end())
 				return make_stdlib_error(std::errc::illegal_byte_sequence);
 
+			char32_t next = 0;
+			ICY_ERROR((it + 1).to_char(next));
+			if (next != '\n')
+				return make_stdlib_error(std::errc::illegal_byte_sequence);
+			
 			if (header_key == http_key_cookie_r)
 			{
 				return make_stdlib_error(std::errc::illegal_byte_sequence);
@@ -456,23 +519,31 @@ error_type icy::to_value(const string_view buffer, http_response& response) noex
 			else if (header_key == http_key_cookie_w)
 			{
 				auto cookie_beg = beg;
-				for (; cookie_beg != ptr + k; ++cookie_beg)
+				for (; cookie_beg != it; ++cookie_beg)
 				{
-					if (*cookie_beg == '=')
+					char32_t tmp = 0;
+					ICY_ERROR(cookie_beg.to_char(tmp));
+					if (tmp == '=')
 						break;
 				}
-				const auto cookie_key = string_view{ beg, cookie_beg };
+				const auto cookie_key = string_view(beg, cookie_beg);
 
-				if (cookie_beg != ptr + k && *cookie_beg == '=')
-					++cookie_beg;
-
+				if (cookie_beg != it)
+				{
+					char32_t tmp = 0;
+					ICY_ERROR(cookie_beg.to_char(tmp));
+					if (tmp == '=')
+						++cookie_beg;
+				}
 				auto cookie_end = cookie_beg;
-				for (; cookie_end != ptr + k; ++cookie_end)
+				for (; cookie_end != it; ++cookie_end)
 				{
-					if (*cookie_end == ';')
+					char32_t tmp = 0;
+					ICY_ERROR(cookie_end.to_char(tmp));
+					if (tmp == ';')
 						break;
 				}
-				const auto cookie_val = string_view{ cookie_beg, cookie_end };
+				const auto cookie_val = string_view(cookie_beg, cookie_end);
 				string key;
 				string val;
 				ICY_ERROR(decode(cookie_key, key));
@@ -484,20 +555,24 @@ error_type icy::to_value(const string_view buffer, http_response& response) noex
 				string key;
 				string val;
 				ICY_ERROR(decode(header_key, key));
-				ICY_ERROR(decode(string_view{ beg, ptr + k }, val));
+				ICY_ERROR(decode(string_view(beg, it), val));
 				ICY_ERROR(response.headers.insert(std::move(key), std::move(val)));
 			}
 
-			if (ptr[k + 2] == '\r' && ptr[k + 3] == '\n')
+			char32_t next2 = 0;
+			char32_t next3 = 0;
+			ICY_ERROR((it + 2).to_char(next2));
+			ICY_ERROR((it + 3).to_char(next3));
+			if (next2 == '\r' && next3 == '\n')
 			{
-				beg = ptr + k + 4;
-				k += 3;
+				beg = it + 4;
+				it += 3;
 				state = none;
 			}
 			else
 			{
-				beg = ptr + k + 2;
-				k += 1;
+				beg = it + 2;
+				it += 1;
 				state = parse_header_key;
 			}
 			break;
@@ -512,26 +587,29 @@ error_type icy::to_value(const string_view buffer, http_response& response) noex
 
 	if (key_content_size != keys.end())
 	{
-		const auto val_content_size = string_view{ response.headers.vals()[key_content_size - keys.begin()] };
+		const auto val_content_size = string_view(response.headers.vals()[key_content_size - keys.begin()]);
 		auto size = 0u;
-		if (to_value(val_content_size, size) || beg + size != ptr + len)
+		if (to_value(val_content_size, size))
 			return make_stdlib_error(std::errc::illegal_byte_sequence);
 
-        ICY_ERROR(copy({ reinterpret_cast<const uint8_t*>(beg), size }, response.body));
+		const auto ptr = static_cast<const char*>(beg);
+		if (ptr + size != buffer.bytes().data() + buffer.bytes().size())
+			return make_stdlib_error(std::errc::illegal_byte_sequence);
+
+		auto body_str = string_view(beg, buffer.end());
+		ICY_ERROR(response.body.append(body_str.ubytes()));
 	}
-	else if (beg != ptr + len)
+	else if (beg != buffer.end())
 	{
 		return make_stdlib_error(std::errc::illegal_byte_sequence);
 	}
 
-	return {};
+	return error_type();
 }
 
 http_content_type icy::is_http_content_type(const string_view filename) noexcept
 {
-	auto ptr = filename.bytes().data();
-	auto len = filename.bytes().size();
-	const char* last_dot = nullptr;
+	/*const char* last_dot = nullptr;
 	for (auto k = len; k; --k)
 	{
 		const auto chr = ptr[k - 1];
@@ -539,8 +617,26 @@ http_content_type icy::is_http_content_type(const string_view filename) noexcept
 			last_dot = ptr + k - 1;
 		if (chr == '\\' || chr == '/')
 			break;
+	}*/
+	auto last_dot = filename.end();
+	for (auto it = filename.end(); it != filename.begin(); --it)
+	{
+		char32_t chr = 0;
+		if ((it - 1).to_char(chr))
+			return http_content_type::none;
+
+		if (chr == '.')
+		{
+			last_dot = it - 1;
+			break;
+		}
+		else if (chr == '\\' || chr == '/')
+		{
+			break;
+		}
 	}
-	const auto ext = last_dot ? string_view(last_dot, ptr + len) : string_view();
+
+	const auto ext = last_dot != filename.end() ? string_view(last_dot, filename.end()) : string_view();
 
 	if (ext.find(".js"_s) != ext.end())
 		return http_content_type::application_javascript;

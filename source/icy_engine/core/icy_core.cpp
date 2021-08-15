@@ -190,7 +190,9 @@ error_type icy::to_string(const error_source source, string& str) noexcept
         if (error_source_array()[k].hash != source.hash)
             continue;
 
-        return to_string(string_view(error_source_array()[k].name, strlen(error_source_array()[k].name)), str);
+        string_view tmp;
+        ICY_ERROR(to_string(const_array_view<char>(error_source_array()[k].name), tmp));
+        return copy(tmp, str);
     }
     return make_stdlib_error(std::errc::invalid_argument);
 }
@@ -534,7 +536,9 @@ error_type icy::win32_parse_cargs(array<string>& args) noexcept
         }
         else if (__argv)
         {
-            ICY_ERROR(to_string(__argv[k], str));
+            string_view tmp;
+            ICY_ERROR(to_string(const_array_view<char>(__argv[k], strlen(__argv[k])), tmp));
+            ICY_ERROR(copy(tmp, str));
         }
 
         ICY_ERROR(args.push_back(std::move(str)));

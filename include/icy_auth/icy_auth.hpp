@@ -2,6 +2,7 @@
 
 #include <icy_engine/core/icy_string.hpp>
 #include <icy_engine/core/icy_json.hpp>
+#include <icy_engine/core/icy_event.hpp>
 #include <icy_engine/utility/icy_crypto.hpp>
 #include <cstdint>
 
@@ -21,7 +22,7 @@ namespace icy
         invalid_json_username,
         invalid_json_password,
         invalid_json_error,
-        
+
         client_access = 200,
         client_max_capacity,
         client_already_exists,
@@ -177,11 +178,11 @@ namespace icy
     {
         error_type from_json(const json&) noexcept
         {
-            return {};
+            return error_type();
         }
         error_type to_json(json&) const noexcept
         {
-            return {};
+            return error_type();
         }
     };
     struct auth_response_msg_client_ticket
@@ -207,11 +208,11 @@ namespace icy
     public:
         error_type from_json(const json&) noexcept
         {
-            return {};
+            return error_type();
         }
         error_type to_json(json&) const noexcept
         {
-            return {};
+            return error_type();
         }
     };
     struct auth_response_msg_module_update
@@ -219,11 +220,39 @@ namespace icy
     public:
         error_type from_json(const json&) noexcept
         {
-            return {};
+            return error_type();
         }
         error_type to_json(json&) const noexcept
         {
-            return {};
+            return error_type();
         }
     };
+
+    struct auth_event
+    {
+        auth_request_type type = auth_request_type::none;
+        error_type error;
+        guid guid;
+        auth_client_ticket_client client_ticket;
+        auth_client_connect_client client_connect;
+        crypto_msg<auth_client_ticket_server> encrypted_server_ticket;     //  with server password
+        crypto_msg<auth_client_connect_module> encrypted_module_connect;   //  with module password
+    };
+
+    struct auth_system : public icy::event_system
+    {
+        virtual const icy::thread& thread() const noexcept = 0;
+        icy::thread& thread() noexcept
+        {
+            return const_cast<icy::thread&>(static_cast<const auth_system*>(this)->thread());
+        }
+        virtual error_type client_create(const guid guid, const uint64_t username, const crypto_key& password) noexcept = 0;
+        virtual error_type client_ticket(const guid guid, const uint64_t username, const crypto_key& password) noexcept = 0;
+        virtual error_type client_connect(const guid guid, const uint64_t username, const crypto_key& password, const uint64_t module, const crypto_msg<auth_client_ticket_server>& encrypted_server_ticket) noexcept = 0;
+        virtual error_type module_create(const guid guid, const uint64_t module) noexcept = 0;
+        virtual error_type module_update(const guid guid, const uint64_t module, const string_view address, const auth_clock::duration timeout, const crypto_key& password) noexcept = 0;
+    };
+    error_type create_auth_system(shared_ptr<auth_system>& system, const string_view hostname) noexcept;
+
+    extern const event_type auth_event_type;
 }

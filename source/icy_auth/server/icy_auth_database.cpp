@@ -61,7 +61,9 @@ error_type auth_database::query(const auth_query_flag flags, auth_query_callback
             if (flags & auth_query_flag::client_guid) query.guid = saved.guid;
             if (flags & auth_query_flag::client_date)
             {
-                ICY_ERROR(to_value(string_view(saved.date, _countof(saved.date)), query.date));
+                string_view str_date;
+                ICY_ERROR(to_string(const_array_view<char>(saved.date), str_date));
+                ICY_ERROR(to_value(str_date, query.date));
             }
             return error_type();
         };
@@ -98,7 +100,9 @@ error_type auth_database::query(const auth_query_flag flags, auth_query_callback
             if (flags & auth_query_flag::module_guid) query.guid = saved.guid;
             if (flags & auth_query_flag::module_date)
             {
-                ICY_ERROR(to_value(string_view(saved.date, _countof(saved.date)), query.date));
+                string_view str_date;
+                ICY_ERROR(to_string(const_array_view<char>(saved.date), str_date));
+                ICY_ERROR(to_value(str_date, query.date));
             }
             if (flags & auth_query_flag::module_addr)
             {

@@ -18,27 +18,27 @@ static error_type database_error_to_string(const unsigned code, const string_vie
 {
     switch (code)
     {
-    case MDB_KEYEXIST: return icy::to_string("Key/data pair already exists", str);
-    case MDB_NOTFOUND: return icy::to_string("No matching key/data pair found", str);
-    case MDB_PAGE_NOTFOUND: return icy::to_string("Requested page not found", str);
-    case MDB_CORRUPTED: return icy::to_string("Located page was wrong type", str);
-    case MDB_PANIC: return icy::to_string("Update of meta page failed or environment had fatal error", str);
-    case MDB_VERSION_MISMATCH: return icy::to_string("Database environment version mismatch", str);
-    case MDB_INVALID: return icy::to_string("File is not an LMDB file", str);
-    case MDB_MAP_FULL: return icy::to_string("Environment mapsize limit reached", str);
-    case MDB_DBS_FULL: return icy::to_string("Environment maxdbs limit reached", str);
-    case MDB_READERS_FULL: return icy::to_string("Environment maxreaders limit reached", str);
-    case MDB_TLS_FULL: return icy::to_string("Thread-local storage keys full - too many environments open", str);
-    case MDB_TXN_FULL: return icy::to_string("Transaction has too many dirty pages - transaction too big", str);
-    case MDB_CURSOR_FULL: return icy::to_string("Internal error - cursor stack limit reached", str);
-    case MDB_PAGE_FULL: return icy::to_string("Internal error - page has no more space", str);
-    case MDB_MAP_RESIZED: return icy::to_string("Database contents grew beyond environment mapsize", str);
-    case MDB_INCOMPATIBLE: return icy::to_string("Operation and DB incompatible, or DB flags changed", str);
-    case MDB_BAD_RSLOT: return icy::to_string("Invalid reuse of reader locktable slot", str);
-    case MDB_BAD_TXN: return icy::to_string("Transaction must abort, has a child, or is invalid", str);
-    case MDB_BAD_VALSIZE: return icy::to_string("Unsupported size of key/DB name/data, or wrong DUPFIXED size", str);
-    case MDB_BAD_DBI: return icy::to_string("The specified DBI handle was closed/changed unexpectedly", str);
-    case MDB_PROBLEM: return icy::to_string("Unexpected problem - txn should abort", str);
+    case MDB_KEYEXIST: return icy::to_string("Key/data pair already exists"_s, str);
+    case MDB_NOTFOUND: return icy::to_string("No matching key/data pair found"_s, str);
+    case MDB_PAGE_NOTFOUND: return icy::to_string("Requested page not found"_s, str);
+    case MDB_CORRUPTED: return icy::to_string("Located page was wrong type"_s, str);
+    case MDB_PANIC: return icy::to_string("Update of meta page failed or environment had fatal error"_s, str);
+    case MDB_VERSION_MISMATCH: return icy::to_string("Database environment version mismatch"_s, str);
+    case MDB_INVALID: return icy::to_string("File is not an LMDB file"_s, str);
+    case MDB_MAP_FULL: return icy::to_string("Environment mapsize limit reached"_s, str);
+    case MDB_DBS_FULL: return icy::to_string("Environment maxdbs limit reached"_s, str);
+    case MDB_READERS_FULL: return icy::to_string("Environment maxreaders limit reached"_s, str);
+    case MDB_TLS_FULL: return icy::to_string("Thread-local storage keys full - too many environments open"_s, str);
+    case MDB_TXN_FULL: return icy::to_string("Transaction has too many dirty pages - transaction too big"_s, str);
+    case MDB_CURSOR_FULL: return icy::to_string("Internal error - cursor stack limit reached"_s, str);
+    case MDB_PAGE_FULL: return icy::to_string("Internal error - page has no more space"_s, str);
+    case MDB_MAP_RESIZED: return icy::to_string("Database contents grew beyond environment mapsize"_s, str);
+    case MDB_INCOMPATIBLE: return icy::to_string("Operation and DB incompatible, or DB flags changed"_s, str);
+    case MDB_BAD_RSLOT: return icy::to_string("Invalid reuse of reader locktable slot"_s, str);
+    case MDB_BAD_TXN: return icy::to_string("Transaction must abort, has a child, or is invalid"_s, str);
+    case MDB_BAD_VALSIZE: return icy::to_string("Unsupported size of key/DB name/data, or wrong DUPFIXED size"_s, str);
+    case MDB_BAD_DBI: return icy::to_string("The specified DBI handle was closed/changed unexpectedly"_s, str);
+    case MDB_PROBLEM: return icy::to_string("Unexpected problem - txn should abort"_s, str);
     default:
         return make_stdlib_error(std::errc::invalid_argument);
     }
@@ -92,9 +92,9 @@ error_type database_system_read::path(string& str) const noexcept
     {
         const char* ptr = nullptr;
         ICY_ERROR(database_make_error(mdb_env_get_path(m_env, &ptr)));
-        ICY_ERROR(copy(string_view(ptr, strlen(ptr)), str));
+        ICY_ERROR(to_string(const_array_view<char>(ptr, strlen(ptr)), str));
     }
-    return {};
+    return error_type();
 }
 size_t database_system_read::size() const noexcept
 {

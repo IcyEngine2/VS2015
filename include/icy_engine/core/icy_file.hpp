@@ -168,7 +168,7 @@ namespace icy
 
     struct file_name
     {
-        file_name(const string_view file) noexcept;
+		error_type initialize(const string_view file) noexcept;
         string_view directory;
         string_view name;
         string_view extension;

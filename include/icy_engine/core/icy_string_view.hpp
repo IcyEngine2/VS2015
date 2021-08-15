@@ -118,6 +118,7 @@ namespace icy
 		friend constexpr string_view operator""_s(const char*, size_t) noexcept;
 		friend string;
 	public:
+		struct constexpr_tag { };
 		using type = string_view;
 		using value_type = char;
 		using pointer = value_type *;
@@ -131,7 +132,7 @@ namespace icy
 		using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 		using reverse_iterator = std::reverse_iterator<iterator>;
 	public:
-        rel_ops(string_view);
+		rel_ops(string_view);
 		constexpr string_view() noexcept : m_ptr{}, m_size{}
 		{
 
@@ -140,30 +141,22 @@ namespace icy
         {
 
         }
+		
+		constexpr string_view(const const_pointer ptr, const size_type size, constexpr_tag) noexcept :
+			m_ptr(const_cast<pointer>(ptr)), m_size(size)
+		{
+
+		}
 		string_view(const string_iterator first, const string_iterator last) noexcept :
-			string_view{ first.m_ptr, last.m_ptr }
+			m_ptr(const_cast<pointer>(first.m_ptr)), m_size(last.m_ptr - first.m_ptr)
 		{
 
 		}
-		constexpr string_view(const const_pointer ptr, const size_type size) noexcept :
-			m_ptr{ const_cast<pointer>(ptr) }, m_size{ size }
-		{
-
-		}
-		/*string_view(const_pointer ptr) noexcept :
-			m_ptr{ const_cast<pointer>(ptr) }, m_size{ 0 }
-		{
-			while (ptr && *ptr)
-			{
-				++ptr;
-				++m_size;
-			}
-		}*/
-		string_view(const const_pointer begin, const const_pointer end) noexcept :
+		/*string_view(const const_pointer begin, const const_pointer end) noexcept :
 			m_ptr{ const_cast<pointer>(begin) }, m_size{ size_type(end - begin) }
 		{
 			ICY_ASSERT(begin <= end, "INVALID ITERATOR RANGE (BEGIN > END)");
-		}
+		}*/
 		bool empty() const noexcept
 		{
 			return !m_size;
@@ -215,6 +208,12 @@ namespace icy
 		pointer m_ptr;
 		size_type m_size;
 	};
+	error_type to_string(const const_array_view<uint8_t> input, string_view& output) noexcept;
+	inline error_type to_string(const const_array_view<char> input, string_view& output) noexcept
+	{
+		return to_string(const_array_view<uint8_t>(reinterpret_cast<const uint8_t*>(input.data()), input.size()), output);
+	}
+
 
 	template<> inline int compare<string_iterator>(const string_iterator& lhs, const string_iterator& rhs) noexcept
 	{
@@ -227,7 +226,7 @@ namespace icy
 
 	inline constexpr string_view operator""_s(const char* const ptr, const size_t size) noexcept
 	{
-		return string_view(ptr, size);
+		return string_view(ptr, size, string_view::constexpr_tag());
 	}
     uint32_t hash(const string_view string) noexcept;
     uint64_t hash64(const string_view string) noexcept;
@@ -236,7 +235,9 @@ namespace icy
 	error_type split(const string_view str, array<string_view>& words, const string_view delims) noexcept;
 	inline error_type split(const string_view str, array<string_view>& words, const char delim) noexcept
 	{
-		return split(str, words, string_view(&delim, 1));
+		string_view delim_str;
+		ICY_ERROR(to_string(const_array_view<char>(&delim, 1), delim_str));
+		return split(str, words, delim_str);
 	}
 	//  split string by whitespace
 	error_type split(const string_view str, array<string_view>& words) noexcept;
@@ -346,5 +347,7 @@ namespace icy
     error_type to_value(const string_view str, std::chrono::system_clock::time_point& time, const bool local = true) noexcept;
     error_type to_value(const string_view str, clock_type::time_point& time, const bool local = true) noexcept;
     error_type to_value(const string_view str, guid& guid) noexcept;
+	error_type to_string(const const_array_view<char> input, string& output) noexcept;
+	error_type to_string(const const_array_view<uint8_t> input, string& output) noexcept;
 
 }

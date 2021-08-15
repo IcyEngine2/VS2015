@@ -105,6 +105,10 @@ namespace icy
         {
             return m_version;
         }
+        uint64_t hash() const noexcept
+        {
+            return (uint64_t(m_index) << 0x20) | m_version;
+        }
     private:
         uint32_t m_index;
         uint32_t m_version;

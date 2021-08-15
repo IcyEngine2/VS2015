@@ -292,11 +292,14 @@ error_type icy::create_network_udp_client(shared_ptr<network_system_udp_client>&
 }
 error_type icy::create_network_http_client(shared_ptr<network_system_http_client>& system, const network_address& address, const http_request& request, const duration_type timeout, const size_t buffer) noexcept
 {
-    string str;
-    ICY_ERROR(to_string(request, str));
     array<uint8_t> bytes;
-    ICY_ERROR(bytes.append(str.ubytes()));
-    ICY_ERROR(bytes.append(request.body));
+    if (request.type != http_request_type::none)
+    {
+        string str;
+        ICY_ERROR(to_string(request, str));
+        ICY_ERROR(bytes.append(str.ubytes()));
+        ICY_ERROR(bytes.append(request.body));
+    }
 
     array<uint8_t> recv_buffer;
     ICY_ERROR(recv_buffer.resize(buffer));

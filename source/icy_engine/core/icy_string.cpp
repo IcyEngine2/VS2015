@@ -409,7 +409,8 @@ error_type icy::to_string(const guid& value, string& str) noexcept
 		rguid.Data1, rguid.Data2, rguid.Data3,
         rguid.Data4[0], rguid.Data4[1], rguid.Data4[2], rguid.Data4[3],
         rguid.Data4[4], rguid.Data4[5], rguid.Data4[6], rguid.Data4[7]);
-	return to_string(string_view{ buffer, size_t(length) }, str);
+    ICY_ERROR(to_string(const_array_view<char>(buffer, length), str));
+    return error_type();
 }
 error_type icy::to_string(const double value, const float_type type, size_t precision, string& str) noexcept
 {
@@ -434,7 +435,10 @@ error_type icy::to_string(const double value, const float_type type, size_t prec
 	char buf[512] = {};
 	digits = size_t(snprintf(nullptr, 0, format, value));
 	snprintf(buf, digits + 2, format, value);
-	return to_string(string_view{ buf, digits }, str);
+    string_view tmp;
+    ICY_ERROR(to_string(const_array_view<char>(buf, digits), tmp));
+    ICY_ERROR(copy(tmp, str));
+    return error_type();
 }
 error_type icy::to_string(const std::chrono::steady_clock::time_point time, string& str, const bool local) noexcept
 {   
@@ -455,9 +459,12 @@ error_type icy::to_string(const std::chrono::system_clock::time_point time, stri
     {
         ICY_ERROR(make_stdlib_error(static_cast<std::errc>(gmtime_s(&tm, &time_t))));
     }
-    char buffer[64] = {};
+    char buffer[64];
     const auto length = strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &tm);
-    return to_string(string_view(buffer, buffer + length), str);
+    string_view tmp;
+    ICY_ERROR(to_string(const_array_view<char>(buffer, length), tmp));
+    ICY_ERROR(copy(tmp, str));
+    return error_type();
 }
 
 error_type string::reserve(const size_type capacity) noexcept
@@ -586,10 +593,10 @@ error_type string::insert(const iterator where, const string_view rhs) noexcept
 {
 	string str;
 	ICY_ERROR(str.reserve(capacity()));
-	ICY_ERROR(str.append(string_view{ m_ptr, where.m_ptr }));
+	ICY_ERROR(str.append(string_view(begin(), where)));
 	ICY_ERROR(str.append(rhs));
-	ICY_ERROR(str.append(string_view{ where.m_ptr, m_ptr + m_size }));
-	const auto index = where.m_ptr - m_ptr;
+	ICY_ERROR(str.append(string_view(where, end())));
+	//const auto index = where.m_ptr - m_ptr;
 	*this = std::move(str);
 	return error_type();
 }
@@ -622,11 +629,11 @@ error_type string::replace(const string_view find, const string_view replace) no
 			prev = ptr;
 		}
 	};
-	auto offset = m_ptr;
+	auto offset = begin();
 	auto count = 0u;
 	while (true)
 	{
-		const auto it = string_view{ offset, m_ptr + m_size }.find(find);
+		const auto it = string_view(offset, end()).find(find);
 		if (it != end())
 		{
 			auto next = node::create();
@@ -635,7 +642,7 @@ error_type string::replace(const string_view find, const string_view replace) no
 			next->prev = list;
 			next->offset = it.m_ptr - m_ptr;
 			list = next;
-			offset = const_cast<char*>(it.m_ptr + find.m_size);
+			offset.m_ptr = const_cast<char*>(it.m_ptr + find.m_size);
 			++count;
 		}
 		else break;
@@ -658,14 +665,16 @@ error_type string::replace(const string_view find, const string_view replace) no
 			prev = prev->prev;
 		}
 
-		offset = m_ptr;
+		offset = begin();
 		for (k = 0; k < count; ++k)
 		{
-			str.append(string_view{ offset, m_ptr + vec[k] });
-			offset = m_ptr + vec[k] + find.m_size;
+            auto tmp = begin();
+            tmp.m_ptr += vec[k];
+			str.append(string_view(offset, tmp));
+			offset.m_ptr = m_ptr + vec[k] + find.m_size;
 			str.append(replace);
 		}
-		str.append({ offset, m_ptr + m_size });
+		str.append(string_view(offset, end()));
 		*this = std::move(str);
 	}
 	return error_type();
@@ -878,6 +887,236 @@ error_type icy::locale::enumerate(array<locale>& vec) noexcept
         [](const locale& lhs, const locale& rhs) { return lhs.global_ctry == rhs.global_ctry && lhs.global_lang == rhs.global_lang; });
     vec.pop_back(std::distance(jt, vec.end()));
 
+    return error_type();
+}
+
+
+error_type icy::to_string(const const_array_view<char> input, string& output) noexcept
+{
+    string_view tmp;
+    ICY_ERROR(to_string(input, tmp));
+    ICY_ERROR(copy(tmp, output));
+    return error_type();
+}
+error_type icy::to_string(const const_array_view<uint8_t> input, string& output) noexcept
+{
+    string_view tmp;
+    ICY_ERROR(to_string(input, tmp));
+    ICY_ERROR(copy(tmp, output));
+    return error_type();
+}
+error_type icy::to_string(const const_array_view<uint8_t> input, string_view& output) noexcept
+{
+    auto i = 0_z;
+    const auto len = input.size();
+    while (i < len)
+    {
+        if (input[i] == 0)
+        {
+            break;
+        }
+        else if (input[i] <= 0x7F) /* 00..7F */
+        {
+            i += 1;
+        }
+        else if (input[i] >= 0xC2 && input[i] <= 0xDF) /* C2..DF 80..BF */
+        {
+            if (i + 1 < len) /* Expect a 2nd byte */
+            {
+                if (input[i + 1] < 0x80 || input[i + 1] > 0xBF)
+                {
+                    // "After a first byte between C2 and DF, expecting a 2nd byte between 80 and BF";
+                    break;
+                }
+            }
+            else
+            {
+                //  "After a first byte between C2 and DF, expecting a 2nd byte.";
+                break;
+            }
+            i += 2;
+        }
+        else if (input[i] == 0xE0) /* E0 A0..BF 80..BF */
+        {
+            if (i + 2 < len) /* Expect a 2nd and 3rd byte */
+            {
+                if (input[i + 1] < 0xA0 || input[i + 1] > 0xBF)
+                {
+                    // "After a first byte of E0, expecting a 2nd byte between A0 and BF.";
+                    break;
+                }
+                if (input[i + 2] < 0x80 || input[i + 2] > 0xBF)
+                {
+                    //"After a first byte of E0, expecting a 3nd byte between 80 and BF.";
+                    break;
+                }
+            }
+            else
+            {
+                //"After a first byte of E0, expecting two following bytes.";
+                break;
+            }
+            i += 3;
+        }
+        else if (input[i] >= 0xE1 && input[i] <= 0xEC) /* E1..EC 80..BF 80..BF */
+        {
+            if (i + 2 < len) /* Expect a 2nd and 3rd byte */
+            {
+                if (input[i + 1] < 0x80 || input[i + 1] > 0xBF)
+                {
+                    // "After a first byte between E1 and EC, expecting the 2nd byte between 80 and BF.";
+                    break;
+                }
+                if (input[i + 2] < 0x80 || input[i + 2] > 0xBF)
+                {
+                    // "After a first byte between E1 and EC, expecting the 3rd byte between 80 and BF.";
+                    break;
+                }
+            }
+            else
+            {
+                // "After a first byte between E1 and EC, expecting two following bytes.";
+                break;
+            }
+            i += 3;
+        }
+        else if (input[i] == 0xED) /* ED 80..9F 80..BF */
+        {
+            if (i + 2 < len) /* Expect a 2nd and 3rd byte */
+            {
+                if (input[i + 1] < 0x80 || input[i + 1] > 0x9F)
+                {
+                    // "After a first byte of ED, expecting 2nd byte between 80 and 9F.";
+                    break;
+                }
+                if (input[i + 2] < 0x80 || input[i + 2] > 0xBF)
+                {
+                    // "After a first byte of ED, expecting 3rd byte between 80 and BF.";
+                    break;
+                }
+            }
+            else
+            {
+                // "After a first byte of ED, expecting two following bytes.";
+                break;
+            }
+            i += 3;
+        }
+        else if (input[i] >= 0xEE && input[i] <= 0xEF) /* EE..EF 80..BF 80..BF */
+        {
+            if (i + 2 < len) /* Expect a 2nd and 3rd byte */
+            {
+                if (input[i + 1] < 0x80 || input[i + 1] > 0xBF)
+                {
+                    // "After a first byte between EE and EF, expecting 2nd byte between 80 and BF.";
+                    break;
+                }
+                if (input[i + 2] < 0x80 || input[i + 2] > 0xBF)
+                {
+                    // "After a first byte between EE and EF, expecting 3rd byte between 80 and BF.";
+                    break;
+                }
+            }
+            else
+            {
+                // "After a first byte between EE and EF, two following bytes.";
+                break;
+            }
+            i += 3;
+        }
+        else if (input[i] == 0xF0) /* F0 90..BF 80..BF 80..BF */
+        {
+            if (i + 3 < len) /* Expect a 2nd, 3rd 3th byte */
+            {
+                if (input[i + 1] < 0x90 || input[i + 1] > 0xBF)
+                {
+                    // "After a first byte of F0, expecting 2nd byte between 90 and BF.";
+                    break;
+                }
+                if (input[i + 2] < 0x80 || input[i + 2] > 0xBF)
+                {
+                    // "After a first byte of F0, expecting 3rd byte between 80 and BF.";
+                    break;
+                }
+                if (input[i + 3] < 0x80 || input[i + 3] > 0xBF)
+                {
+                    // "After a first byte of F0, expecting 4th byte between 80 and BF.";
+                    break;
+                }
+            }
+            else
+            {
+                // "After a first byte of F0, expecting three following bytes.";
+                break;
+            }
+            i += 4;
+        }
+        else if (input[i] >= 0xF1 && input[i] <= 0xF3) /* F1..F3 80..BF 80..BF 80..BF */
+        {
+            if (i + 3 < len) /* Expect a 2nd, 3rd 3th byte */
+            {
+                if (input[i + 1] < 0x80 || input[i + 1] > 0xBF)
+                {
+                    // "After a first byte of F1, F2, or F3, expecting a 2nd byte between 80 and BF.";
+                    break;
+                }
+                if (input[i + 2] < 0x80 || input[i + 2] > 0xBF)
+                {
+                    //*message = "After a first byte of F1, F2, or F3, expecting a 3rd byte between 80 and BF.";
+                    break;
+                }
+                if (input[i + 3] < 0x80 || input[i + 3] > 0xBF)
+                {
+                    //*message = "After a first byte of F1, F2, or F3, expecting a 4th byte between 80 and BF.";
+                    break;
+                }
+            }
+            else
+            {
+                // "After a first byte of F1, F2, or F3, expecting three following bytes.";
+                break;
+            }
+            i += 4;
+        }
+        else if (input[i] == 0xF4) /* F4 80..8F 80..BF 80..BF */
+        {
+            if (i + 3 < len) /* Expect a 2nd, 3rd 3th byte */
+            {
+                if (input[i + 1] < 0x80 || input[i + 1] > 0x8F)
+                {
+                    // "After a first byte of F4, expecting 2nd byte between 80 and 8F.";
+                    break;
+                }
+                if (input[i + 2] < 0x80 || input[i + 2] > 0xBF)
+                {
+                    // "After a first byte of F4, expecting 3rd byte between 80 and BF.";
+                    break;
+                }
+                if (input[i + 3] < 0x80 || input[i + 3] > 0xBF)
+                {
+                    // "After a first byte of F4, expecting 4th byte between 80 and BF.";
+                    break;
+                }
+            }
+            else
+            {
+                // "After a first byte of F4, expecting three following bytes.";
+                break;
+            }
+            i += 4;
+        }
+        else
+        {
+            // "Expecting bytes in the following ranges: 00..7F C2..F4.";
+            break;
+        }
+    }
+    if (i != len)
+    {
+        if (input[i] != 0)
+            return make_stdlib_error(std::errc::illegal_byte_sequence);
+    }
+    output = string_view(reinterpret_cast<const char*>(input.data()), i, string_view::constexpr_tag());
     return error_type();
 }
 

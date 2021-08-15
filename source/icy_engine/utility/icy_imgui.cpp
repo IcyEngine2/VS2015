@@ -46,7 +46,7 @@ struct internal_message
     uint32_t widget = 0;
     string label;
     imgui_widget_state state;
-    gui_variant value;
+    variant value;
 };
 struct imgui_widget
 {
@@ -54,8 +54,8 @@ struct imgui_widget
     imgui_widget_state state;
     string label;
     set<uint32_t> widgets;
-    gui_variant value;
-    gui_variant udata;
+    variant value;
+    variant udata;
     array<char> buffer;
 };
 class imgui_display_data_usr : public imgui_display
@@ -83,18 +83,18 @@ public:
             return window;
         return nullptr;
     }
-    error_type repaint(uint32_t& query) noexcept override;
-    error_type widget_create(const uint32_t parent, const imgui_widget_type type, uint32_t& widget) noexcept override;
-    error_type widget_delete(const uint32_t widget) noexcept override;
-    error_type widget_label(const uint32_t widget, const string_view text) noexcept override;
-    error_type widget_state(const uint32_t widget, const imgui_widget_state state) noexcept override;
-    error_type widget_value(const uint32_t widget, const gui_variant& value) noexcept override;
-    error_type widget_udata(const uint32_t widget, const gui_variant& value) noexcept override;
-    error_type clear() noexcept override;
+    error_type repaint(uint32_t& query) const noexcept override;
+    error_type widget_create(const uint32_t parent, const imgui_widget_type type, uint32_t& widget) const noexcept override;
+    error_type widget_delete(const uint32_t widget) const noexcept override;
+    error_type widget_label(const uint32_t widget, const string_view text) const noexcept override;
+    error_type widget_state(const uint32_t widget, const imgui_widget_state state) const noexcept override;
+    error_type widget_value(const uint32_t widget, const variant& value) const noexcept override;
+    error_type widget_udata(const uint32_t widget, const variant& value) const noexcept override;
+    error_type clear() const noexcept override;
 private:
     weak_ptr<imgui_system_data> m_system;
     const uint32_t m_index = 0;
-    std::atomic<uint32_t> m_widget = 0;
+    mutable std::atomic<uint32_t> m_widget = 0;
     weak_ptr<icy::window> m_window;
 };
 class imgui_display_data_sys
@@ -130,8 +130,8 @@ public:
     error_type widget_delete(const uint32_t widget) noexcept;
     error_type widget_label(const uint32_t widget, const string_view text) noexcept;
     error_type widget_state(const uint32_t widget, const imgui_widget_state state) noexcept;
-    error_type widget_value(const uint32_t widget, gui_variant&& value) noexcept;
-    error_type widget_udata(const uint32_t widget, gui_variant&& value) noexcept;
+    error_type widget_value(const uint32_t widget, variant&& value) noexcept;
+    error_type widget_udata(const uint32_t widget, variant&& value) noexcept;
     void clear() noexcept;
 private:
     imgui_system_data* m_system = nullptr;
@@ -185,7 +185,7 @@ imgui_display_data_usr::~imgui_display_data_usr() noexcept
         system->post(nullptr, event_type::system_internal, std::move(msg));
     }
 }
-error_type imgui_display_data_usr::repaint(uint32_t& query) noexcept
+error_type imgui_display_data_usr::repaint(uint32_t& query) const noexcept
 {
     auto system = shared_ptr<imgui_system_data>(m_system);
     if (!system)
@@ -197,7 +197,7 @@ error_type imgui_display_data_usr::repaint(uint32_t& query) noexcept
     msg.query = query = imgui_query.fetch_add(1, std::memory_order_acq_rel) + 1;
     return system->post(nullptr, event_type::system_internal, std::move(msg));
 }
-error_type imgui_display_data_usr::widget_create(const uint32_t parent, const imgui_widget_type type, uint32_t& widget) noexcept
+error_type imgui_display_data_usr::widget_create(const uint32_t parent, const imgui_widget_type type, uint32_t& widget) const noexcept
 {
     auto system = shared_ptr<imgui_system_data>(m_system);
     if (!system)
@@ -211,7 +211,7 @@ error_type imgui_display_data_usr::widget_create(const uint32_t parent, const im
     msg.state.widget_type = type;
     return system->post(nullptr, event_type::system_internal, std::move(msg));
 }
-error_type imgui_display_data_usr::widget_delete(const uint32_t widget) noexcept
+error_type imgui_display_data_usr::widget_delete(const uint32_t widget) const noexcept
 {
     auto system = shared_ptr<imgui_system_data>(m_system);
     if (!system)
@@ -223,7 +223,7 @@ error_type imgui_display_data_usr::widget_delete(const uint32_t widget) noexcept
     msg.widget = widget;
     return system->post(nullptr, event_type::system_internal, std::move(msg));
 }
-error_type imgui_display_data_usr::widget_label(const uint32_t widget, const string_view text) noexcept
+error_type imgui_display_data_usr::widget_label(const uint32_t widget, const string_view text) const noexcept
 {
     auto system = shared_ptr<imgui_system_data>(m_system);
     if (!system)
@@ -236,7 +236,7 @@ error_type imgui_display_data_usr::widget_label(const uint32_t widget, const str
     ICY_ERROR(copy(text, msg.label));
     return system->post(nullptr, event_type::system_internal, std::move(msg));
 }
-error_type imgui_display_data_usr::widget_state(const uint32_t widget, const imgui_widget_state state) noexcept
+error_type imgui_display_data_usr::widget_state(const uint32_t widget, const imgui_widget_state state) const noexcept
 {
     auto system = shared_ptr<imgui_system_data>(m_system);
     if (!system)
@@ -249,7 +249,7 @@ error_type imgui_display_data_usr::widget_state(const uint32_t widget, const img
     msg.state = state;
     return system->post(nullptr, event_type::system_internal, std::move(msg));
 }
-error_type imgui_display_data_usr::widget_value(const uint32_t widget, const gui_variant& value) noexcept
+error_type imgui_display_data_usr::widget_value(const uint32_t widget, const variant& value) const noexcept
 {
     auto system = shared_ptr<imgui_system_data>(m_system);
     if (!system)
@@ -262,7 +262,7 @@ error_type imgui_display_data_usr::widget_value(const uint32_t widget, const gui
     msg.value = value;
     return system->post(nullptr, event_type::system_internal, std::move(msg));
 }
-error_type imgui_display_data_usr::widget_udata(const uint32_t widget, const gui_variant& value) noexcept
+error_type imgui_display_data_usr::widget_udata(const uint32_t widget, const variant& value) const noexcept
 {
     auto system = shared_ptr<imgui_system_data>(m_system);
     if (!system)
@@ -275,7 +275,7 @@ error_type imgui_display_data_usr::widget_udata(const uint32_t widget, const gui
     msg.value = value;
     return system->post(nullptr, event_type::system_internal, std::move(msg));
 }
-error_type imgui_display_data_usr::clear() noexcept
+error_type imgui_display_data_usr::clear() const noexcept
 {
     auto system = shared_ptr<imgui_system_data>(m_system);
     if (!system)
@@ -689,7 +689,9 @@ error_type imgui_display_data_sys::repaint(const uint32_t index, imgui_widget& w
         {
             if (ImGui::InputText(label, widget.buffer.data(), widget.buffer.size(), widget.state.custom_flags))
             {
-                new_event.value = string_view(widget.buffer.data(), strlen(widget.buffer.data()));
+                string_view str;
+                to_string(widget.buffer, str);
+                new_event.value = str;
                 new_event.type = imgui_event_type::widget_edit;
             }
         }
@@ -697,7 +699,9 @@ error_type imgui_display_data_sys::repaint(const uint32_t index, imgui_widget& w
         {
             if (ImGui::InputTextMultiline(label, widget.buffer.data(), widget.buffer.size(), ImVec2(), widget.state.custom_flags))
             {
-                new_event.value = string_view(widget.buffer.data(), strlen(widget.buffer.data()));
+                string_view str;
+                to_string(widget.buffer, str);
+                new_event.value = str;
                 new_event.type = imgui_event_type::widget_edit;
             }
         }
@@ -1021,7 +1025,7 @@ error_type imgui_display_data_sys::widget_state(const uint32_t widget, const img
     }
     return error_type();
 }
-error_type imgui_display_data_sys::widget_value(const uint32_t widget, gui_variant&& value) noexcept
+error_type imgui_display_data_sys::widget_value(const uint32_t widget, variant&& value) noexcept
 {
     auto it = m_widgets.find(widget);
     if (it == m_widgets.end())
@@ -1046,7 +1050,7 @@ error_type imgui_display_data_sys::widget_value(const uint32_t widget, gui_varia
     }
     return error_type();
 }
-error_type imgui_display_data_sys::widget_udata(const uint32_t widget, gui_variant&& value) noexcept
+error_type imgui_display_data_sys::widget_udata(const uint32_t widget, variant&& value) noexcept
 {
     auto it = m_widgets.find(widget);
     if (it == m_widgets.end())
@@ -1201,7 +1205,7 @@ error_type imgui_system_data::exec() noexcept
 
             ICY_ERROR(it->value.repaint(pair.value.back().render));
             for (auto&& event : pair.value)
-                ICY_ERROR(event::post(this, event_type::gui_update, std::move(event)));
+                ICY_ERROR(event::post(this, event_type::gui_render, std::move(event)));
         }
         ICY_ERROR(m_sync.wait());
     }

@@ -7,19 +7,19 @@
 namespace icy
 {
     template<typename T>
-    static constexpr uint32_t gui_variant_type() noexcept
+    static constexpr uint32_t variant_type() noexcept
     {
         return constexpr_hash(typeid(remove_cvr<T>).raw_name());
     }
 
-    class gui_variant
+    class variant
     {
     public:
-        gui_variant() noexcept
+        variant() noexcept
         {
             memset(this, 0, sizeof(*this));
         }
-        ~gui_variant() noexcept
+        ~variant() noexcept
         {
             if (m_flag)
             {
@@ -32,21 +32,21 @@ namespace icy
                 }
             }
         }
-        gui_variant(const gui_variant& rhs) noexcept
+        variant(const variant& rhs) noexcept
         {
             memcpy(this, &rhs, sizeof(rhs));
             if (m_flag)
                 m_dynamic->ref.fetch_add(1, std::memory_order_release);
         }
-        gui_variant(gui_variant&& rhs) noexcept
+        variant(variant&& rhs) noexcept
         {
             memcpy(this, &rhs, sizeof(rhs));
             memset(&rhs, 0, sizeof(rhs));
         }
-        ICY_DEFAULT_COPY_ASSIGN(gui_variant);
-        ICY_DEFAULT_MOVE_ASSIGN(gui_variant);
+        ICY_DEFAULT_COPY_ASSIGN(variant);
+        ICY_DEFAULT_MOVE_ASSIGN(variant);
         template<typename T, typename = std::enable_if_t<!std::is_same<remove_cvr<T>, string>::value>>
-        gui_variant(T&& rhs) noexcept : gui_variant()
+        variant(T&& rhs) noexcept : variant()
         {
             using U = remove_cvr<T>;
             static_assert(!std::is_same<U, string>::value, "STRING NOT ALLOWED");
@@ -78,14 +78,14 @@ namespace icy
                 allocator_type::construct(reinterpret_cast<U*>(m_dynamic->bytes), std::forward<T>(rhs));
                 m_flag = 1;
             }
-            m_type = gui_variant_type<T>();
+            m_type = variant_type<T>();
             m_size = sizeof(rhs);
         }
-        gui_variant(const string& str) noexcept : gui_variant(static_cast<string_view>(str))
+        variant(const string& str) noexcept : variant(static_cast<string_view>(str))
         {
 
         }
-        gui_variant(const string_view str) noexcept : gui_variant()
+        variant(const string_view str) noexcept : variant()
         {
             if (str.bytes().size() >= max_size)
             {
@@ -103,7 +103,7 @@ namespace icy
                 memcpy(m_buffer, str.bytes().data(), str.bytes().size());
             }
             m_size = str.bytes().size();
-            m_type = gui_variant_type<string_view>();
+            m_type = variant_type<string_view>();
         }
         explicit operator bool() const noexcept
         {
@@ -127,7 +127,7 @@ namespace icy
         }
         template<typename T> const T* get() const noexcept
         {
-            return m_type == gui_variant_type<remove_cvr<T>>() ? static_cast<const T*>(data()) : nullptr;
+            return m_type == variant_type<remove_cvr<T>>() ? static_cast<const T*>(data()) : nullptr;
         }
         template<typename T> bool get(T& value) const noexcept
         {
@@ -140,12 +140,12 @@ namespace icy
         }
         template<typename T> T* get() noexcept
         {
-            return const_cast<T*>(static_cast<const gui_variant*>(this)->get<T>());
+            return const_cast<T*>(static_cast<const variant*>(this)->get<T>());
         }
         string_view str() const noexcept
         {
-            return type() == gui_variant_type<string_view>() ?
-                string_view(static_cast<const char*>(data()), size()) : string_view();
+            return type() == variant_type<string_view>() ?
+                string_view(static_cast<const char*>(data()), size(), string_view::constexpr_tag()) : string_view();
         }
     private:
         enum { max_size = 24 };
@@ -168,14 +168,14 @@ namespace icy
             dynamic_data* m_dynamic;
         };
     };
-    inline error_type to_string(const gui_variant& var, string& str) noexcept
+    inline error_type to_string(const variant& var, string& str) noexcept
     {
         if (var.type() == 0)
         {
             str.clear();
             return error_type();
         }
-        else if (var.type() == gui_variant_type<string_view>())
+        else if (var.type() == variant_type<string_view>())
         {
             return copy(var.str(), str);
         }
@@ -219,13 +219,13 @@ namespace icy
         if (func(as_float64, error)) return error;
         return make_stdlib_error(std::errc::invalid_argument);
     }
-    inline bool to_value(const gui_variant& var, color& output) noexcept
+    inline bool to_value(const variant& var, color& output) noexcept
     {
-        if (var.type() == gui_variant_type<color>())
+        if (var.type() == variant_type<color>())
         {
             return var.get(output);
         }
-        else if (var.type() == gui_variant_type<colors>())
+        else if (var.type() == variant_type<colors>())
         {
             colors value;
             if (var.get(value))
@@ -234,7 +234,7 @@ namespace icy
                 return true;
             }
         }
-        else if (var.type() == gui_variant_type<uint32_t>())
+        else if (var.type() == variant_type<uint32_t>())
         {
             uint32_t value = 0;
             if (var.get(value))
@@ -243,7 +243,7 @@ namespace icy
                 return true;
             }
         }
-        else if (var.type() == gui_variant_type<string_view>())
+        else if (var.type() == variant_type<string_view>())
         {
             auto str = var.str();
             auto sym = 0u;
@@ -351,9 +351,9 @@ namespace icy
         return false;
     }
     template<typename T>
-    inline bool to_value_numeric(const gui_variant& var, T& output) noexcept
+    inline bool to_value_numeric(const variant& var, T& output) noexcept
     {
-        if (var.type() == gui_variant_type<T>())
+        if (var.type() == variant_type<T>())
         {
             return var.get(output);
         }
@@ -397,52 +397,52 @@ namespace icy
         if (func(as_float64)) return true;
         return false;
     }
-    inline bool to_value(const gui_variant& var, float& output) noexcept
+    inline bool to_value(const variant& var, float& output) noexcept
     {
         return to_value_numeric(var, output);
     }
-    inline bool to_value(const gui_variant& var, double& output) noexcept
+    inline bool to_value(const variant& var, double& output) noexcept
     {
         return to_value_numeric(var, output);
     }
-    inline bool to_value(const gui_variant& var, uint8_t& output) noexcept
+    inline bool to_value(const variant& var, uint8_t& output) noexcept
     {
         return to_value_numeric(var, output);
     }
-    inline bool to_value(const gui_variant& var, uint16_t& output) noexcept
+    inline bool to_value(const variant& var, uint16_t& output) noexcept
     {
         return to_value_numeric(var, output);
     }
-    inline bool to_value(const gui_variant& var, uint32_t& output) noexcept
+    inline bool to_value(const variant& var, uint32_t& output) noexcept
     {
         return to_value_numeric(var, output);
     }
-    inline bool to_value(const gui_variant& var, uint64_t& output) noexcept
+    inline bool to_value(const variant& var, uint64_t& output) noexcept
     {
         return to_value_numeric(var, output);
     }
-    inline bool to_value(const gui_variant& var, int8_t& output) noexcept
+    inline bool to_value(const variant& var, int8_t& output) noexcept
     {
         return to_value_numeric(var, output);
     }
-    inline bool to_value(const gui_variant& var, int16_t& output) noexcept
+    inline bool to_value(const variant& var, int16_t& output) noexcept
     {
         return to_value_numeric(var, output);
     }
-    inline bool to_value(const gui_variant& var, int32_t& output) noexcept
+    inline bool to_value(const variant& var, int32_t& output) noexcept
     {
         return to_value_numeric(var, output);
     }
-    inline bool to_value(const gui_variant& var, int64_t& output) noexcept
+    inline bool to_value(const variant& var, int64_t& output) noexcept
     {
         return to_value_numeric(var, output);
     }
-    inline bool to_value(const gui_variant& var, bool& output) noexcept
+    inline bool to_value(const variant& var, bool& output) noexcept
     {
-        if (var.type() == gui_variant_type<bool>())
+        if (var.type() == variant_type<bool>())
             return var.get(output);
 
-        if (var.type() == gui_variant_type<string_view>())
+        if (var.type() == variant_type<string_view>())
         {
             switch (hash(var.str()))
             {

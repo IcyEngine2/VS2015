@@ -218,7 +218,8 @@ json::json(json_type_string&& value) noexcept : m_type(json_type::string), m_str
 }
 error_type json::create(const string_view str, json& parent, const const_array_view<jsmntok_t> tokens, const int token) noexcept
 {
-	const auto val = string_view(str.bytes().data() + tokens[token].start, str.bytes().data() + tokens[token].end);
+    string_view val;
+    ICY_ERROR(to_string(const_array_view<char>(str.bytes().data() + tokens[token].start, str.bytes().data() + tokens[token].end), val));
 
 	parent.m_type = get_json_type(str, tokens[token]);
 	switch (parent.m_type)
@@ -260,7 +261,8 @@ error_type json::create(const string_view str, json& parent, const const_array_v
 			if (tokens[k].type != jsmntype_t::JSMN_STRING || tokens[k + 1].parent != k)
 				return make_stdlib_error(std::errc::illegal_byte_sequence);
 
-			auto key_str = string_view(str.bytes().data() + tokens[k].start, str.bytes().data() + tokens[k].end);
+            string_view key_str;
+            ICY_ERROR(to_string(const_array_view<char>(str.bytes().data() + tokens[k].start, str.bytes().data() + tokens[k].end), key_str));
 			string key;
 			ICY_ERROR(json_load_string(key_str, key));
 			json new_json;

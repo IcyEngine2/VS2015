@@ -27,7 +27,7 @@ public:
     {
         shared_ptr<event_queue> loop;
         ICY_ERROR(create_event_system(loop, 0
-            | event_type::gui_update
+            | event_type::gui_render
             | event_type::global_timer
         ));
 
@@ -61,7 +61,7 @@ public:
                     ICY_ERROR(imgui_display->repaint(query));
                 }
             }
-            else if (event->type == event_type::gui_update)
+            else if (event->type == event_type::gui_render)
             {
                 auto& event_data = event->data<imgui_event>();
                 if (event_data.type == imgui_event_type::display_render)
@@ -247,7 +247,13 @@ error_type main_ex() noexcept
             {
                 const auto& body = event_data.http.response->body;
                 json json;
-                if (const auto error = to_value(string_view(reinterpret_cast<const char*>(body.data()), body.size()), json))
+                string_view tmp;
+                if (const auto error = to_string(body, tmp))
+                {
+                    ICY_ERROR(print("Auth error: invalid UTF string"_s));
+                    continue;
+                }
+                if (const auto error = to_value(tmp, json))
                 {
                     ICY_ERROR(print("Auth error: invalid json"_s));
                     continue;
@@ -319,11 +325,17 @@ error_type main_ex() noexcept
                         break;
                     }
 
+                    string_view str_addr;
+                    if (to_string(const_array_view<char>(client_connect.address), str_addr))
+                    {
+                        ICY_ERROR(print("Auth error: invalid UTF address string"_s));
+                        break;
+                    }
+
                     string msg;
                     string time_str;
                     ICY_ERROR(to_string(client_connect.expire, time_str));
-                    ICY_ERROR(to_string("Client connect: OK;\r\nExpire: %1\r\nAddress: %2"_s, msg, 
-                        string_view(time_str), string_view(client_connect.address, strlen(client_connect.address))));
+                    ICY_ERROR(to_string("Client connect: OK;\r\nExpire: %1\r\nAddress: %2"_s, msg, string_view(time_str), str_addr));
                     ICY_ERROR(print(msg));
                     break;
                 }
@@ -397,7 +409,7 @@ error_type main_ex() noexcept
             else if (event_data.type == imgui_event_type::widget_click)
             {
                 log.clear();
-                ICY_ERROR(imgui_display->widget_value(widgets[text_log], gui_variant()));
+                ICY_ERROR(imgui_display->widget_value(widgets[text_log], variant()));
                 if (event_data.widget == widgets[button_exec] && exec_type == auth_request_type::none)
                 {
                     if (type ==auth_request_type::none)
@@ -442,9 +454,9 @@ error_type main_ex() noexcept
                 if (type == auth_request_type::client_create || type == auth_request_type::client_ticket)
                 {
                     ICY_ERROR(print("Encrypting user password..."_s));
-                    key = crypto_key(hostname_str, password_str);
+                    key = crypto_key(username_str, password_str);
                 }
-                const auto username = hash64(hostname_str);
+                const auto username = hash64(username_str);
                 const auto hostaddr = string_view(hostname_str.begin(), it);
                 const auto hostport = string_view(it + 1, hostname_str.end());
                 const auto module = hash64(module_str);

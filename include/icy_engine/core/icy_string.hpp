@@ -98,14 +98,14 @@ namespace icy
 		}
 	}
 
-	inline error_type to_string(const char* const value, string& str) noexcept
+	/*inline error_type to_string(const char* const value, string& str) noexcept
 	{
 		return to_string(string_view(value, strlen(value)), str);
 	}
 	inline error_type to_string(const string_iterator first, const string_iterator last, string& str) noexcept
 	{
 		return to_string(string_view(first, last), str);
-	}
+	}*/
 	error_type to_string(const const_array_view<wchar_t> src, string& str) noexcept;
 	template<typename T> inline error_type to_string_unsigned(const T _value, const uint64_t base, string& str) noexcept
 	{
@@ -231,45 +231,58 @@ namespace icy
 	{
 		ICY_ERROR(reserve(bytes().size() + format.bytes().size()));
 
-		auto ptr = format.bytes().data();
-		auto len = format.bytes().size();
+		//auto ptr = format.bytes().data();
+		//auto len = format.bytes().size();
 		const auto tuple = std::make_tuple(std::forward<arg_types>(args)...);
-		for (auto k = 0_z; k < len; ++k)
+		for (auto it = format.begin(); it != format.end(); ++it)
 		{
-			if (ptr[k] == '%')
+			char32_t chr = 0;
+			ICY_ERROR(it.to_char(chr));
+
+			if (chr == '%')
 			{
-				if (k + 1 >= len)
+				if (it + 1 >= format.end())
 					return make_stdlib_error(std::errc::invalid_argument);
 
-				if (ptr[k + 1] == '%')
+				char32_t next = 0;
+				ICY_ERROR((it + 1).to_char(next));
+
+				if (next == '%')
 				{
-					if (const auto error = append("%"_s))
-						return error;
-					++k;
+					ICY_ERROR(append("%"_s));
+					++it;
 				}
-				else if (ptr[k + 1] >= '0' && ptr[k] <= '9')
+				else if (next  >= '0' && next <= '9')
 				{
-					const auto beg = ptr + k + 1;
-					k += 1;
-					while (k < len && ptr[k] >= '0' && ptr[k] <= '9')
-						++k;
+					const auto beg = it + 1;
+					++it;
+					while (it != format.end())
+					{
+						ICY_ERROR(it.to_char(next));
+						if (next >= '0' && next <= '9')
+							++it;
+						else
+							break;
+					}
 					size_t index = 0;
-					if (const auto error = to_value_uint(string_view{ beg, ptr + k }, index))
-						return error;
+					ICY_ERROR(to_value_uint(string_view(beg, it), index));
+
 					if (index > sizeof...(args))
 						return make_stdlib_error(std::errc::invalid_argument);
 					string arg;
-					ICY_ERROR(detail::to_string_arg(std::integral_constant<size_t, sizeof...(args)>{}, index, & tuple, arg));
+					ICY_ERROR(detail::to_string_arg(std::integral_constant<size_t, sizeof...(args)>(), index, &tuple, arg));
 					ICY_ERROR(append(arg));
-					if (k < len)
-						--k;
+					if (it == format.end())
+						break;
+					else
+						--it;
 				}
 				else
 					return make_stdlib_error(std::errc::invalid_argument);
 			}
 			else
 			{
-				ICY_ERROR(append(string_view{ &ptr[k], 1 }));
+				ICY_ERROR(append(string_view(it, it + 1)));
 			}
 		}
 		return error_type();
@@ -343,7 +356,9 @@ namespace icy
                 c[2] = 0x80 | (char)((chr >> 6) & 0x3f);
                 c[3] = 0x80 | (char)(chr & 0x3f);
             }
-            ICY_ERROR(output.append(string_view(c, strlen(c))));
+			string_view tmp;
+			ICY_ERROR(to_string(c, tmp));
+            ICY_ERROR(output.append(tmp));
         }
         return error_type();
     }

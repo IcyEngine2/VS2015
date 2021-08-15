@@ -143,7 +143,7 @@ namespace icy
 			if (mdb_key.size() == sizeof(K))
 			{
 				key = *reinterpret_cast<const K*>(mdb_key.data());
-				return {};
+				return error_type();
 			}
 			return database_error_invalid_size;
 		}
@@ -155,7 +155,7 @@ namespace icy
 			if (mdb_val.size() == sizeof(V))
 			{
 				val = *reinterpret_cast<const V*>(mdb_val.data());
-				return {};
+				return error_type();
 			}
 			return database_error_invalid_size;
 		}
@@ -169,7 +169,7 @@ namespace icy
 			{
 				key = *reinterpret_cast<const K*>(mdb_key.data());
 				val = *reinterpret_cast<const V*>(mdb_val.data());
-				return {};
+				return error_type();
 			}
             return database_error_invalid_size;
 		}
@@ -178,23 +178,23 @@ namespace icy
 			const_array_view<uint8_t> byte_key = key.ubytes();
 			const_array_view<uint8_t> byte_val;
 			ICY_ERROR(get_var_by_var(byte_key, byte_val, oper));
-			key = string_view(reinterpret_cast<const char*>(byte_key.data()), byte_key.size());
-			val = string_view(reinterpret_cast<const char*>(byte_val.data()), byte_val.size());
-			return {};
+			ICY_ERROR(to_string(byte_key, key));
+			ICY_ERROR(to_string(byte_val, val));
+			return error_type();
 		}
 		template<typename K> inline error_type get_str_by_type(K& key, string_view& val, const database_oper_read oper) noexcept
 		{
 			const_array_view<uint8_t> byte_val;
 			ICY_ERROR(get_var_by_type(key, byte_val, oper));
-			val = string_view(reinterpret_cast<const char*>(byte_val.data()), byte_val.size());
-			return {};
+			ICY_ERROR(to_string(byte_val, val));
+			return error_type();
 		}
 		template<typename V> inline error_type get_type_by_str(string_view& key, V& val, const database_oper_read oper) noexcept
 		{
 			const_array_view<uint8_t> byte_key = key.ubytes();
 			ICY_ERROR(get_type_by_var(byte_key, val, oper));
-			key = string_view(reinterpret_cast<const char*>(byte_key.data()), byte_key.size());
-			return {};
+			ICY_ERROR(to_string(byte_key, key));
+			return error_type();
 		}
 	protected:
 		MDB_cursor* m_cur = nullptr;
@@ -212,7 +212,7 @@ namespace icy
 			if (bytes.size() == sizeof(V))
 			{
 				new (bytes.data()) V(val);
-				return {};
+				return error_type();
 			}
 			return database_error_invalid_size;
 		}
@@ -227,7 +227,7 @@ namespace icy
 			if (bytes.size() == sizeof(V))
 			{
 				new (bytes.data()) V(val);
-				return {};
+				return error_type();
 			}
 			return database_error_invalid_size;
 		}
@@ -238,7 +238,7 @@ namespace icy
 			if (bytes.size() == val.bytes().size())
 			{
 				memcpy(bytes.data(), val.bytes().data(), val.bytes().size());
-				return {};
+				return error_type();
 			}
 			return database_error_invalid_size;
 		}

@@ -175,22 +175,31 @@ error_type file::text(const size_t max, array<string>& lines) noexcept
 		const auto cur_index = cur / buffer_size;
 		if (beg_index == cur_index)
 		{
-			ICY_ERROR(line.append(string_view(
-				buffers[beg_index].bytes + beg % buffer_size, 
-				buffers[beg_index].bytes + cur % buffer_size)));
+            string_view str;
+            ICY_ERROR(to_string(const_array_view<char>(
+                buffers[beg_index].bytes + beg % buffer_size,
+                buffers[beg_index].bytes + cur % buffer_size), str));
+
+			ICY_ERROR(line.append(str));
 		}
 		else
 		{
-			ICY_ERROR(line.append(string_view(
-				buffers[beg_index].bytes + beg % buffer_size,
-				buffers[beg_index].bytes + buffer_size)));
-			
-			for (auto n = beg_index + 1; n < cur_index; ++n)
-				ICY_ERROR(line.append(string_view(buffers[n].bytes, buffer_size)));
-			
-			ICY_ERROR(line.append(string_view(
-				buffers[cur_index].bytes,
-				buffers[cur_index].bytes + cur % buffer_size)));
+            string_view str;
+            ICY_ERROR(to_string(const_array_view<char>(
+                buffers[beg_index].bytes + beg % buffer_size,
+                buffers[beg_index].bytes + buffer_size), str));
+
+            for (auto n = beg_index + 1; n < cur_index; ++n)
+            {
+                ICY_ERROR(to_string(const_array_view<char>(buffers[n].bytes, buffer_size), str));
+                ICY_ERROR(line.append(str));
+            }
+
+            ICY_ERROR(to_string(const_array_view<char>(
+                buffers[cur_index].bytes,
+                buffers[cur_index].bytes + cur % buffer_size), str));
+
+			ICY_ERROR(line.append(str));
 		}
 		ICY_ERROR(lines.push_back(std::move(line)));
 		if (cur + 1 < buffers.size() * buffer_size && (
@@ -293,8 +302,22 @@ file_view::~file_view() noexcept
 
 static error_type enum_files(string_view path, const string_view name_prefix, const bool recursive, array<string>& files) noexcept
 {
-	while (!path.empty() && path.bytes().back() == '/' || path.bytes().back() == '\\')
-		path = { path.bytes().data(), path.bytes().size() - 1 };
+    auto it = path.end();
+    while (it != path.begin())
+    {
+        const auto jt = it - 1;
+        char32_t chr = 0;
+        ICY_ERROR(jt.to_char(chr));
+        if (chr == '/' || chr == '\\')
+        {
+            it = jt;
+        }
+        else
+        {
+            break;
+        }
+    }
+    path = string_view(path.begin(), it);
 
 	array<wchar_t> wpath;
 	auto size = 0_z;
@@ -465,7 +488,7 @@ error_type icy::dialog_select_dir(string& dir_path) noexcept
     return file_dialog(dir_path, {}, FOS_PATHMUSTEXIST | FOS_FILEMUSTEXIST | FOS_PICKFOLDERS);
 }
 
-file_name::file_name(const string_view file) noexcept
+error_type file_name::initialize(const string_view file) noexcept
 {
     const auto bytes = file.bytes();
     const auto chr_dot = '.';
@@ -487,30 +510,35 @@ file_name::file_name(const string_view file) noexcept
         {
             if (chr == chr_dot)
             {
-                extension = string_view(ptr + k, ptr + len);
+                ICY_ERROR(to_string(const_array_view<char>(ptr + k, ptr + len), extension));
                 state = find_delim;
             }
             else if (chr == chr_delim_0 || chr == chr_delim_1)
             {
-                name = string_view(ptr + k + 1, ptr + len);
-                directory = string_view(ptr, ptr + k + 1);
-                return;
+                ICY_ERROR(to_string(const_array_view<char>(ptr + k + 1, ptr + len), name));
+                ICY_ERROR(to_string(const_array_view<char>(ptr, ptr + k + 1), directory));
+                return error_type();
             }
         }
         else if (state == find_delim)
         {
             if (chr == chr_delim_0 || chr == chr_delim_1)
             {
-                name = string_view(ptr + k + 1, extension.bytes().data());
-                directory = string_view(ptr, ptr + k + 1);
-                return;
+                ICY_ERROR(to_string(const_array_view<char>(ptr + k + 1, extension.bytes().data()), name));
+                ICY_ERROR(to_string(const_array_view<char>(ptr, ptr + k + 1), directory));
+                return error_type();
             }
         }
     }
     if (extension.empty())
+    {
         name = file;
+    }
     else
-        name = string_view(ptr, extension.bytes().data());
+    {
+        ICY_ERROR(to_string(const_array_view<char>(ptr, extension.bytes().data()), name));
+    }
+    return error_type();
 }
 
 error_type icy::process_directory(string& path) noexcept

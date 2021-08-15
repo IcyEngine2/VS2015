@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -38,9 +38,11 @@
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\..\vsprops\DebugL2.props" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\..\vsprops\ReleaseL2.props" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -78,6 +80,20 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\..\source\icy_auth\icy_auth.cpp" />
+    <ClCompile Include="..\..\..\source\icy_chat\icy_chat.cpp" />
+    <ClCompile Include="..\..\..\source\icy_chat\icy_chat_server\icy_chat_server_database.cpp" />
+    <ClCompile Include="..\..\..\source\icy_chat\icy_chat_server\icy_chat_server_gui.cpp" />
+    <ClCompile Include="..\..\..\source\icy_chat\icy_chat_server\icy_chat_server_main.cpp" />
+    <ClCompile Include="..\..\..\source\icy_chat\icy_chat_server\icy_chat_server_network.cpp" />
+    <ClCompile Include="..\..\..\source\icy_engine\utility\icy_crypto.cpp" />
+    <ClCompile Include="..\..\..\source\icy_engine\utility\icy_database.cpp" />
+    <ClCompile Include="..\..\..\source\icy_engine\utility\icy_imgui.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\..\include\icy_auth\icy_auth.hpp" />
+    <ClInclude Include="..\..\..\include\icy_chat\icy_chat.hpp" />
+    <ClInclude Include="..\..\..\source\icy_chat\icy_chat_server\icy_chat_server.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

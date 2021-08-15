@@ -497,8 +497,19 @@ error_type detail::network_system_data::post(const network_tcp_connection conn, 
 }
 error_type detail::network_system_data::post(const network_tcp_connection conn, unique_ptr<http_request>&& request) noexcept
 {
-    if (!request || (m_config.port == 0 && conn.index() == 0 || conn.index() > m_conn.size()))
+    if (!request)
         return make_stdlib_error(std::errc::invalid_argument);
+
+    if (m_config.port) // is server
+    {
+        if (conn.index() == 0 || conn.index() > m_conn.size())
+            return make_stdlib_error(std::errc::invalid_argument);
+    }
+    else
+    {
+        if (conn.index() != 0)
+            return make_stdlib_error(std::errc::invalid_argument);
+    }
 
     string str;
     ICY_ERROR(to_string(*request, str));
@@ -676,10 +687,14 @@ error_type detail::network_system_data::loop_tcp(event_system& system) noexcept
                             const auto length_beg = ovl->bytes.data() + ovl->http_header + http_str_header.bytes().size();
                             const auto length_beg_ptr = reinterpret_cast<const char*>(length_beg);
                             const auto length_end_ptr = reinterpret_cast<const char*>(ovl->bytes.data() + find_endl);
-                            event.error = to_value(string_view(length_beg_ptr, length_end_ptr), ovl->http_length);
-                            if (ovl->http_header + ovl->http_length + 4 > m_config.buffer)
-                                event.error = make_stdlib_error(std::errc::no_buffer_space);
-
+                            string_view tmp;
+                            if (!event.error) event.error = to_string(const_array_view<char>(length_beg_ptr, length_end_ptr), tmp);
+                            if (!event.error) event.error = to_value(tmp, ovl->http_length);
+                            if (!event.error) 
+                            {
+                                if (ovl->http_header + ovl->http_length + 4 > m_config.buffer)
+                                    event.error = make_stdlib_error(std::errc::no_buffer_space);
+                            }
                         }
                     }
                 }
@@ -690,7 +705,8 @@ error_type detail::network_system_data::loop_tcp(event_system& system) noexcept
                 {
                     if (ovl->http_length + ovl->http_offset + 4 == ovl->offset)
                     {
-                        auto http_str = string_view(reinterpret_cast<const char*>(ovl->bytes.data()), ovl->offset);
+                        string_view http_str;
+                        to_string(const_array_view<uint8_t>(ovl->bytes.data(), ovl->offset), http_str);
                         
                         if (http_str.bytes().size() > 4 && string_view(http_str.begin(), http_str.begin() + 4) == "HTTP"_s)
                         {

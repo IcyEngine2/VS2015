@@ -493,8 +493,8 @@ namespace icy
         uint32_t widget = 0;
         uint32_t query = 0;
         render_gui_frame render;
-        gui_variant value;
-        gui_variant udata;
+        variant value;
+        variant udata;
     };
     struct imgui_system;
     struct imgui_display
@@ -506,14 +506,14 @@ namespace icy
         virtual uint32_t index() const noexcept = 0;
         virtual shared_ptr<imgui_system> system() const noexcept = 0;
         virtual shared_ptr<icy::window> handle() const noexcept = 0;
-        virtual error_type repaint(uint32_t& query) noexcept = 0;
-        virtual error_type widget_create(const uint32_t parent, const imgui_widget_type type, uint32_t& widget) noexcept = 0;
-        virtual error_type widget_delete(const uint32_t widget) noexcept = 0;
-        virtual error_type widget_label(const uint32_t widget, const string_view text) noexcept = 0;
-        virtual error_type widget_state(const uint32_t widget, const imgui_widget_state state) noexcept = 0;
-        virtual error_type widget_value(const uint32_t widget, const gui_variant& var) noexcept = 0;
-        virtual error_type widget_udata(const uint32_t widget, const gui_variant& var) noexcept = 0;
-        virtual error_type clear() noexcept = 0;
+        virtual error_type repaint(uint32_t& query) const noexcept = 0;
+        virtual error_type widget_create(const uint32_t parent, const imgui_widget_type type, uint32_t& widget) const noexcept = 0;
+        virtual error_type widget_delete(const uint32_t widget) const noexcept = 0;
+        virtual error_type widget_label(const uint32_t widget, const string_view text) const noexcept = 0;
+        virtual error_type widget_state(const uint32_t widget, const imgui_widget_state state) const noexcept = 0;
+        virtual error_type widget_value(const uint32_t widget, const variant& var) const noexcept = 0;
+        virtual error_type widget_udata(const uint32_t widget, const variant& var) const noexcept = 0;
+        virtual error_type clear() const noexcept = 0;
     };
     struct imgui_system : public event_system
     {

@@ -39,7 +39,9 @@ image::~image() noexcept
 }
 image_type image::type_from_string(const string_view str) noexcept
 {
-    switch (hash(file_name(str).extension))
+    file_name file;
+    file.initialize(str);
+    switch (hash(file.extension))
     {
     case ".png"_hash:
         return image_type::png;

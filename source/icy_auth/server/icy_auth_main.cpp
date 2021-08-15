@@ -53,9 +53,11 @@ private:
             ICY_ERROR(func("guid"_s, auth_query_flag::client_guid));
         }
 
-        char index_str[5] = {};
-        sprintf_s(index_str, "%03u", ++m_index);
-        ICY_ERROR(m_output.appendf("\r\n[%1]"_s, string_view(index_str, strlen(index_str))));
+        char index_buffer[5] = {};
+        sprintf_s(index_buffer, "%03u", ++m_index);
+        string_view index_str;
+        ICY_ERROR(to_string(const_array_view<char>(index_buffer), index_str));
+        ICY_ERROR(m_output.appendf("\r\n[%1]"_s, index_str));
 
         if (m_flag & auth_query_flag::client_name)
         {
@@ -111,9 +113,11 @@ private:
             ICY_ERROR(func("guid"_s, auth_query_flag::module_guid));
         }
 
-        char index_str[5] = {};
-        sprintf_s(index_str, "%03u", ++m_index);
-        ICY_ERROR(m_output.appendf("\r\n[%1]"_s, string_view(index_str, strlen(index_str))));
+        char index_buffer[5] = {};
+        sprintf_s(index_buffer, "%03u", ++m_index);
+        string_view index_str;
+        ICY_ERROR(to_string(const_array_view<char>(index_buffer), index_str));
+        ICY_ERROR(m_output.appendf("\r\n[%1]"_s, index_str));
 
         if (m_flag & auth_query_flag::module_name)
         {
@@ -123,7 +127,9 @@ private:
         }
         if (m_flag & auth_query_flag::module_addr)
         {
-            ICY_ERROR(m_output.appendf(" %1"_s, string_view(data.addr, strnlen(data.addr, auth_addr_length))));
+            string_view addr_str;
+            ICY_ERROR(to_string(const_array_view<char>(data.addr), addr_str));
+            ICY_ERROR(m_output.appendf(" %1"_s, addr_str));
         }
         if (m_flag & auth_query_flag::module_time)
         {
@@ -250,7 +256,9 @@ error_type main_ex() noexcept
 
         if (args.size() == 1)
         {
-            ICY_ERROR(path.append(file_name(args[0]).directory));
+            file_name fname;
+            ICY_ERROR(fname.initialize(args[0]));
+            ICY_ERROR(path.append(fname.directory));
             ICY_ERROR(path.append(auth_config::default_values::file_path));
         }
         else if (args.size() > 1)
@@ -264,12 +272,12 @@ error_type main_ex() noexcept
         auto size = _countof(buffer);
         ICY_ERROR(file.read(buffer, size));
 
+        string_view tmp;
+        ICY_ERROR(to_string(const_array_view<char>(buffer, size), tmp));
         json json;
-        ICY_ERROR(to_value(string_view(buffer, buffer + size), json));
-
+        ICY_ERROR(to_value(tmp, json));
         ICY_ERROR(config.from_json(json));
     }
-
 
     const auto hint = [&console]
     {
@@ -289,7 +297,7 @@ error_type main_ex() noexcept
 
     auto mode = event_type::none;
     char base64[base64_encode_size(sizeof(crypto_salt))];
-    const auto str_code = string_view(base64, _countof(base64) / 2);
+    string_view str_code;
 
     const auth_request_type client_types[] =
     {
@@ -375,7 +383,8 @@ error_type main_ex() noexcept
             {
                 string msg;
                 crypto_salt random = crypto_random;
-                base64_encode(random, base64);
+                ICY_ERROR(base64_encode(random, base64));
+                ICY_ERROR(to_string(const_array_view<char>(base64, _countof(base64) / 2), str_code));
                 ICY_ERROR(to_string("\r\nPlease confirm operation (input code '%1'): "_s, msg, str_code));
                 ICY_ERROR(console->write(msg));
                 mode = etype;
@@ -590,7 +599,9 @@ error_type main_ex() noexcept
 
                 if (auth_system)
                 {
-                    const auto error = auth_system->process(string_view((const char*)body.data(), body.size()), event_data.address, response);
+                    string_view body_str;
+                    to_string(body, body_str);
+                    const auto error = auth_system->process(body_str, event_data.address, response);
                     if (response.type() != json_type::none)
                     {
                         if (!response.find("Error"_s))

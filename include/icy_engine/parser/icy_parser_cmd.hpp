@@ -43,7 +43,7 @@ namespace icy
         {
             m_state = state::find_key;
             string val;
-            ICY_ERROR(to_string(string_view(m_buffer.data(), m_buffer.size()), val));
+            ICY_ERROR(to_string(m_buffer, val));
             m_buffer.clear();
             auto it = m_args.find(m_key);
             if (it == m_args.end())
@@ -56,7 +56,7 @@ namespace icy
         const auto save_cmd = [this]() -> error_type
         {
             m_state = state::find_key;
-            ICY_ERROR(to_string(string_view(m_buffer.data(), m_buffer.size()), m_cmd));
+            ICY_ERROR(to_string(m_buffer, m_cmd));
             m_buffer.clear();
             return error_type();
         };
@@ -119,7 +119,7 @@ namespace icy
                     if (chr == cmd_chr_assign)
                     {
                         m_state = state::find_val;
-                        ICY_ERROR(to_string(string_view(m_buffer.data(), m_buffer.size()), m_key));
+                        ICY_ERROR(to_string(m_buffer, m_key));
                         m_buffer.clear();
                     }
                     else
