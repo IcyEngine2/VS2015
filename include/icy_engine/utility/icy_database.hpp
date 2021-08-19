@@ -248,7 +248,15 @@ namespace icy
 		}
 		template<typename K> error_type put_str_by_type(const K& key, const database_oper_write flags, const string_view val) noexcept
 		{
-			return put_str_by_str(string_view(reinterpret_cast<const char*>(&key), sizeof(key)), val, flags);
+			const_array_view<uint8_t> key_var(reinterpret_cast<const uint8_t*>(&key), sizeof(key));
+			array_view<uint8_t> bytes;
+			ICY_ERROR(put_var_by_var(key_var, val.bytes().size(), flags, bytes));
+			if (bytes.size() == val.bytes().size())
+			{
+				memcpy(bytes.data(), val.bytes().data(), val.bytes().size());
+				return error_type();
+			}
+			return database_error_invalid_size;
 		}
         error_type del_by_var(const const_array_view<uint8_t> key) noexcept;
         template<typename K> error_type del_by_type(const K& key) noexcept

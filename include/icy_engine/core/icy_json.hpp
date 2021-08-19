@@ -100,6 +100,8 @@ namespace icy
         }
         string_view get(const string_view key) const noexcept;
         error_type get(const string_view key, json_type_string& value) const noexcept;
+        error_type get(const string_view key, guid& value) const noexcept;
+        error_type get(const string_view key, clock_type::time_point& value) const noexcept;
         size_t size() const noexcept;
         const json* find(const string_view key) const noexcept;
         const json* at(const size_t index) const noexcept;
@@ -130,7 +132,21 @@ namespace icy
             return insert(key, json(value));
         }
         error_type insert(const string_view key, const string_view value) noexcept;
-		error_type push_back(json&& json) noexcept;
+        error_type insert(const string_view key, const guid& value) noexcept
+        {
+            string str;
+            ICY_ERROR(to_string(value, str));
+            ICY_ERROR(insert(key, std::move(str)));
+            return error_type();
+        }
+        error_type insert(const string_view key, const clock_type::time_point value) noexcept
+        {
+            string str;
+            ICY_ERROR(to_string(value, str, false));
+            ICY_ERROR(insert(key, std::move(str)));
+            return error_type();
+        }
+        error_type push_back(json&& json) noexcept;
         template<typename T, typename = std::enable_if_t<std::is_integral<T>::value>>
         error_type push_back(const T value) noexcept
         {

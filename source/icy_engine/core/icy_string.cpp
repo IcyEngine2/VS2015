@@ -706,12 +706,12 @@ uint32_t icy::hash(const string_view string) noexcept
     }
     return value;
 }
-uint64_t icy::hash64(const string_view string) noexcept
+uint64_t icy::hash64(const void* const data, const size_t size) noexcept
 {
     auto value = 14695981039346656037ui64;
-    for (auto&& chr : string.bytes())
+    for (auto k = 0u; k < size; ++k)
     {
-        value = uint64_t((value ^ uint64_t(chr)) * 1099511628211ui64);
+        value = uint64_t((value ^ uint64_t(static_cast<const uint8_t*>(data)[k])) * 1099511628211ui64);
     }
     return value;
 }

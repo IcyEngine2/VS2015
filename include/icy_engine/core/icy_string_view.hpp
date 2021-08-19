@@ -229,7 +229,11 @@ namespace icy
 		return string_view(ptr, size, string_view::constexpr_tag());
 	}
     uint32_t hash(const string_view string) noexcept;
-    uint64_t hash64(const string_view string) noexcept;
+	uint64_t hash64(const void* const data, const size_t size) noexcept;
+	inline uint64_t hash64(const string_view string) noexcept
+	{
+		return hash64(string.ubytes().data(), string.ubytes().size());
+	}
 
     //  split string by specific delimiter
 	error_type split(const string_view str, array<string_view>& words, const string_view delims) noexcept;

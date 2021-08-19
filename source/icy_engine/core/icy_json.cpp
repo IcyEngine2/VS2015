@@ -435,6 +435,18 @@ error_type json::get(const string_view key, json_type_string& value) const noexc
         return to_string(ptr->get(), value);
     return make_stdlib_error(std::errc::invalid_argument);
 }
+error_type json::get(const string_view key, guid& value) const noexcept
+{
+    if (const auto ptr = find(key))
+        return to_value(ptr->get(), value);
+    return make_stdlib_error(std::errc::invalid_argument);    
+}
+error_type json::get(const string_view key, clock_type::time_point& value) const noexcept
+{
+    if (const auto ptr = find(key))
+        return to_value(ptr->get(), value, false);
+    return make_stdlib_error(std::errc::invalid_argument);
+}
 size_t json::size() const noexcept
 {
     if (m_type == json_type::array)

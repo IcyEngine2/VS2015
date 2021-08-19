@@ -58,6 +58,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "zlib", "..\libs\zlib\zlib.v
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_auth_test", "..\icy_auth\icy_auth_test\icy_auth_test.vcxproj", "{32ED4FB8-166C-4531-9FA7-C37FB2EB457B}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_engine_resource", "..\icy_engine\resource\resource.vcxproj", "{EC4C10F2-BD8F-494C-8D95-0FF06A15E81E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -116,6 +118,10 @@ Global
 		{32ED4FB8-166C-4531-9FA7-C37FB2EB457B}.Debug|x64.Build.0 = Debug|x64
 		{32ED4FB8-166C-4531-9FA7-C37FB2EB457B}.Release|x64.ActiveCfg = Release|x64
 		{32ED4FB8-166C-4531-9FA7-C37FB2EB457B}.Release|x64.Build.0 = Release|x64
+		{EC4C10F2-BD8F-494C-8D95-0FF06A15E81E}.Debug|x64.ActiveCfg = Debug|x64
+		{EC4C10F2-BD8F-494C-8D95-0FF06A15E81E}.Debug|x64.Build.0 = Debug|x64
+		{EC4C10F2-BD8F-494C-8D95-0FF06A15E81E}.Release|x64.ActiveCfg = Release|x64
+		{EC4C10F2-BD8F-494C-8D95-0FF06A15E81E}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

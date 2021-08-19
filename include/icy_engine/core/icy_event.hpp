@@ -15,7 +15,7 @@ namespace icy
         {            
             bitcnt_global   =   0x02,
             bitcnt_system   =   0x02,
-            bitcnt_fileio   =   0x02,
+            bitcnt_resource =   0x02,
             bitcnt_network  =   0x04,
             bitcnt_console  =   0x03,
             bitcnt_window   =   0x06,
@@ -29,8 +29,8 @@ namespace icy
         {
             offset_global   =   0x00,
             offset_system   =   offset_global + bitcnt_global,
-            offset_fileio   =   offset_system + bitcnt_system,
-            offset_network  =   offset_fileio + bitcnt_fileio,
+            offset_resource =   offset_system + bitcnt_system,
+            offset_network  =   offset_resource + bitcnt_resource,
             offset_console  =   offset_network + bitcnt_network,
             offset_window   =   offset_console + bitcnt_console,
             offset_gui      =   offset_window + bitcnt_window,
@@ -43,7 +43,7 @@ namespace icy
         {
             mask_global     =   ((1ui64 << bitcnt_global)   - 1)    <<  offset_global,
             mask_system     =   ((1ui64 << bitcnt_system)   - 1)    <<  offset_system,
-            mask_fileio     =   ((1ui64 << bitcnt_fileio)   - 1)    <<  offset_fileio,
+            mask_resource   =   ((1ui64 << bitcnt_resource) - 1)    <<  offset_resource,
             mask_network    =   ((1ui64 << bitcnt_network)  - 1)    <<  offset_network,
             mask_console    =   ((1ui64 << bitcnt_console)  - 1)    <<  offset_console,
             mask_window     =   ((1ui64 << bitcnt_window)   - 1)    <<  offset_window,
@@ -66,9 +66,9 @@ namespace icy
             //system_error            =   1ui64   <<  (offset_system + 0x01),
             system_any              =   mask_system,
 
-            file_read               =   1ui64   <<  (offset_fileio + 0x00),
-            file_write              =   1ui64   <<  (offset_fileio + 0x01),
-            file_any                =   mask_fileio,
+            resource_load           =   1ui64   <<  (offset_resource + 0x00),
+            resource_store          =   1ui64   <<  (offset_resource + 0x01),
+            resource_any            =   mask_resource,
 
             network_connect         =   1ui64   <<  (offset_network + 0x00),
             network_disconnect      =   1ui64   <<  (offset_network + 0x01),
