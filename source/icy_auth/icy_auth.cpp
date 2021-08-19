@@ -8,29 +8,29 @@ using namespace icy;
 
 ICY_STATIC_NAMESPACE_BEG
 constexpr auto auth_version = 2021'08'09'0002;
-constexpr auto auth_str_key_version = "Version"_s;
-constexpr auto auth_str_key_type = "Type"_s;
-constexpr auto auth_str_key_time = "Time"_s;
-constexpr auto auth_str_key_timeout = "Timeout"_s;
-constexpr auto auth_str_key_guid = "GUID"_s;
-constexpr auto auth_str_key_error_code = "Error Code"_s;
-constexpr auto auth_str_key_error_text = "Error Text"_s;
-constexpr auto auth_str_key_username = "Username"_s;
-constexpr auto auth_str_key_password = "Password"_s;
-constexpr auto auth_str_key_userguid = "Userguid"_s;
-constexpr auto auth_str_key_address = "Address"_s;
-constexpr auto auth_str_key_module = "Module"_s;
-constexpr auto auth_str_key_message = "Message"_s;
-constexpr auto auth_str_key_server_ticket = "Server Ticket"_s;
-constexpr auto auth_str_key_client_ticket = "Client Ticket"_s;
-constexpr auto auth_str_key_module_ticket = "Module Ticket"_s;
+constexpr auto auth_str_key_version = "version"_s;
+constexpr auto auth_str_key_type = "type"_s;
+constexpr auto auth_str_key_time = "time"_s;
+constexpr auto auth_str_key_timeout = "timeout"_s;
+constexpr auto auth_str_key_guid = "guid"_s;
+constexpr auto auth_str_key_error_code = "errorCode"_s;
+constexpr auto auth_str_key_error_text = "errorText"_s;
+constexpr auto auth_str_key_username = "username"_s;
+constexpr auto auth_str_key_password = "password"_s;
+constexpr auto auth_str_key_userguid = "userguid"_s;
+constexpr auto auth_str_key_address = "address"_s;
+constexpr auto auth_str_key_module = "module"_s;
+constexpr auto auth_str_key_message = "message"_s;
+constexpr auto auth_str_key_server_ticket = "serverTicket"_s;
+constexpr auto auth_str_key_client_ticket = "clientTicket"_s;
+constexpr auto auth_str_key_module_ticket = "moduleTicket"_s;
 constexpr std::pair<string_view, auth_request_type> auth_str_request_map[] =
 {
-    { "Client Create"_s, auth_request_type::client_create },
-    { "Client Ticket"_s, auth_request_type::client_ticket },
-    { "Client Connect"_s, auth_request_type::client_connect  },
-    { "Module Create"_s, auth_request_type::module_create },
-    { "Module Update"_s, auth_request_type::module_update },
+    { "clientCreate"_s, auth_request_type::client_create },
+    { "clientTicket"_s, auth_request_type::client_ticket },
+    { "clientConnect"_s, auth_request_type::client_connect  },
+    { "moduleCreate"_s, auth_request_type::module_create },
+    { "moduleUpdate"_s, auth_request_type::module_update },
 };
 static error_type auth_error_to_string(const unsigned integer_code, const string_view, string& str) noexcept
 {
@@ -39,7 +39,7 @@ static error_type auth_error_to_string(const unsigned integer_code, const string
     switch (auth_error_category(code))
     {
     case auth_error_code::invalid_json:
-        prefix = "Invalid JSON"_s;
+        prefix = "Invalid input"_s;
         break;
 
     case auth_error_code::client_access:
@@ -62,26 +62,14 @@ static error_type auth_error_to_string(const unsigned integer_code, const string
     switch (code)
     {
     case auth_error_code::invalid_json: 
-        return str.append("root object"_s);
-    case auth_error_code::invalid_json_guid:
-        return str.append("message guid"_s);
-    case auth_error_code::invalid_json_error:
-        return str.append("error code"_s);
-    case auth_error_code::invalid_json_message:
-        return str.append("message body"_s);
-    case auth_error_code::invalid_json_password:
-        return str.append("password"_s);
-    case auth_error_code::invalid_json_time:
-        return str.append("time string format"_s);
-    case auth_error_code::invalid_json_type:
-        return str.append("request type"_s);
-    case auth_error_code::invalid_json_username:
-        return str.append("username"_s);
-    case auth_error_code::invalid_json_version:
-        return str.append("protocol version"_s);
+        return str.append("json"_s);
+    case auth_error_code::invalid_utf_string:
+        return str.append("utf string"_s);
+    case auth_error_code::invalid_hostname:
+        return str.append("hostname"_s);
 
     case auth_error_code::client_access:
-        return {};
+        return error_type();
 
     case auth_error_code::client_max_capacity:
         return str.append("too many users"_s);        
@@ -99,7 +87,7 @@ static error_type auth_error_to_string(const unsigned integer_code, const string
         return str.append("invalid module"_s);
 
     case auth_error_code::module_access:
-        return {};
+        return error_type();
     case auth_error_code::module_max_capacity:
         return str.append("too many modules"_s);
     case auth_error_code::module_already_exists:
@@ -117,7 +105,7 @@ template<typename T> static error_type auth_from_json(const icy::json& object, T
     json_type_integer version = 0;
     object.get(auth_str_key_version, version);
     if (version != auth_version)
-        return make_auth_error(auth_error_code::invalid_json_version);
+        return make_auth_error(auth_error_code::invalid_json);
 
     auth.type = auth_request_type::none;
     const auto str_type = object.get(auth_str_key_type);
@@ -130,20 +118,20 @@ template<typename T> static error_type auth_from_json(const icy::json& object, T
         }
     }
     if (auth.type == auth_request_type::none)
-        return make_auth_error(auth_error_code::invalid_json_type);
+        return make_auth_error(auth_error_code::invalid_json);
 
     const auto str_time = object.get(auth_str_key_time);
     if (const auto error = to_value(str_time, auth.time, false))
     {
         if (error == make_stdlib_error(std::errc::illegal_byte_sequence))
-            return make_auth_error(auth_error_code::invalid_json_time);
+            return make_auth_error(auth_error_code::invalid_json);
     }
 
     const auto str_guid = object.get(auth_str_key_guid);
     if (const auto error = to_value(str_guid, auth.guid))
     {
         if (error == make_stdlib_error(std::errc::illegal_byte_sequence))
-            return make_auth_error(auth_error_code::invalid_json_guid);
+            return make_auth_error(auth_error_code::invalid_json);
     }
 
     const auto json_message = object.find(auth_str_key_message);
@@ -240,12 +228,12 @@ error_type auth_response::from_json(const json& input) noexcept
     ICY_ERROR(auth_from_json(input, *this));
 
     if (guid != old_guid)
-        return make_auth_error(auth_error_code::invalid_json_guid);
+        return make_auth_error(auth_error_code::invalid_json);
     if (type != old_type)
-        return make_auth_error(auth_error_code::invalid_json_type);
+        return make_auth_error(auth_error_code::invalid_json);
     json_type_integer error_code = 0;
     if (input.get(auth_str_key_error_code, error_code))
-        return make_auth_error(auth_error_code::invalid_json_error);
+        return make_auth_error(auth_error_code::invalid_json);
 
     if (error_code)
     {
@@ -253,7 +241,7 @@ error_type auth_response::from_json(const json& input) noexcept
         if (const auto to_string_error = to_string(make_auth_error(auth_error_code(error_code)), error_text))
         {
             if (to_string_error == make_stdlib_error(std::errc::invalid_argument))
-                return make_auth_error(auth_error_code::invalid_json_error);
+                return make_auth_error(auth_error_code::invalid_json);
             ICY_ERROR(to_string_error);
         }
         error = auth_error_code(error_code);
@@ -294,30 +282,30 @@ error_type auth_response_msg_client_connect::to_json(json& json) const noexcept
 error_type auth_response_msg_client_ticket::from_json(const json& response) noexcept
 {
     if (const auto error = base64_decode(response.get(auth_str_key_client_ticket), encrypted_client_ticket))
-        return make_auth_error(auth_error_code::invalid_json_message);
+        return make_auth_error(auth_error_code::invalid_json);
     if (const auto error = base64_decode(response.get(auth_str_key_server_ticket), encrypted_server_ticket))
-        return make_auth_error(auth_error_code::invalid_json_message);
+        return make_auth_error(auth_error_code::invalid_json);
     return error_type();
 }
 error_type auth_response_msg_client_connect::from_json(const json& response) noexcept
 {
     if (const auto error = base64_decode(response.get(auth_str_key_client_ticket), encrypted_client_connect))
-        return make_auth_error(auth_error_code::invalid_json_message);
+        return make_auth_error(auth_error_code::invalid_json);
     if (const auto error = base64_decode(response.get(auth_str_key_module_ticket), encrypted_module_connect))
-        return make_auth_error(auth_error_code::invalid_json_message);
+        return make_auth_error(auth_error_code::invalid_json);
     return error_type();
 }
 
 error_type auth_request_msg_client_create::from_json(const json& input) noexcept
 {
     if (const auto error = base64_decode(input.get(), password))
-        return make_auth_error(auth_error_code::invalid_json_message);
+        return make_auth_error(auth_error_code::invalid_json);
     return error_type();
 }
 error_type auth_request_msg_client_ticket::from_json(const json& input) noexcept
 {
     if (const auto error = base64_decode(input.get(), encrypted_time))
-        return make_auth_error(auth_error_code::invalid_json_message);
+        return make_auth_error(auth_error_code::invalid_json);
     return error_type();
 }
 error_type auth_request_msg_client_connect::from_json(const json& input) noexcept
@@ -325,12 +313,12 @@ error_type auth_request_msg_client_connect::from_json(const json& input) noexcep
     json_type_integer json_module = 0;
     input.get(auth_str_key_module, json_module);
     if (!json_module)
-        return make_auth_error(auth_error_code::invalid_json_message);
+        return make_auth_error(auth_error_code::invalid_json);
     module = uint64_t(json_module);
 
     const auto base64 = input.get(auth_str_key_server_ticket);
     if (const auto error = base64_decode(base64, encrypted_server_ticket))
-        return make_auth_error(auth_error_code::invalid_json_message);
+        return make_auth_error(auth_error_code::invalid_json);
 
     return error_type();
 }
@@ -339,7 +327,7 @@ error_type auth_request_msg_module_create::from_json(const json& input) noexcept
     json_type_integer json_module = 0;
     input.get(json_module);
     if (!json_module)
-        return make_auth_error(auth_error_code::invalid_json_message);
+        return make_auth_error(auth_error_code::invalid_json);
     
     module = uint64_t(json_module);
     return error_type();
@@ -347,20 +335,20 @@ error_type auth_request_msg_module_create::from_json(const json& input) noexcept
 error_type auth_request_msg_module_update::from_json(const json& input) noexcept
 {
     if (const auto error = base64_decode(input.get(auth_str_key_password), array_view<uint8_t>(password.data(), password.size())))
-        return make_auth_error(auth_error_code::invalid_json_message);
+        return make_auth_error(auth_error_code::invalid_json);
 
     ICY_ERROR(to_string(input.get(auth_str_key_address), address));
     
     json_type_integer timeout_ms = 0;
     input.get(auth_str_key_timeout, timeout_ms);
     if (!timeout_ms)
-        return make_auth_error(auth_error_code::invalid_json_message);
+        return make_auth_error(auth_error_code::invalid_json);
     timeout = std::chrono::milliseconds(timeout_ms);
 
     json_type_integer json_module = 0;
     input.get(auth_str_key_module, json_module);
     if (!json_module)
-        return make_auth_error(auth_error_code::invalid_json_message);
+        return make_auth_error(auth_error_code::invalid_json);
     module = uint64_t(json_module);    
 
     return error_type();
@@ -417,6 +405,7 @@ ICY_STATIC_NAMESPACE_BEG
 struct internal_message
 {
     auth_request_type type = auth_request_type::none;
+    array<network_address> network_address;
     guid guid;
     uint64_t module = 0;
     uint64_t username = 0;
@@ -428,7 +417,7 @@ struct internal_message
 class auth_system_data : public auth_system
 {
 public:
-    error_type initialize(const string_view hostname) noexcept;
+    error_type initialize() noexcept;
     ~auth_system_data() noexcept
     {
         if (m_thread)
@@ -445,6 +434,7 @@ private:
     {
         return *m_thread;
     }
+    error_type connect(const string_view hostname, const duration_type timeout) noexcept override;
     error_type client_create(const guid guid, const uint64_t username, const crypto_key& password) noexcept override;
     error_type client_ticket(const guid guid, const uint64_t username, const crypto_key& password) noexcept override;
     error_type client_connect(const guid guid, const uint64_t username, const crypto_key& password, const uint64_t module, const crypto_msg<auth_client_ticket_server>& encrypted_server_ticket) noexcept override;
@@ -452,28 +442,13 @@ private:
     error_type module_update(const guid guid, const uint64_t module, const string_view address, const auth_clock::duration timeout, const crypto_key& password) noexcept override;
 private:
     sync_handle m_sync;
-    array<network_address> m_address;
     shared_ptr<event_thread> m_thread;
 };
 ICY_STATIC_NAMESPACE_END
 
-error_type auth_system_data::initialize(const string_view hostname) noexcept
+error_type auth_system_data::initialize() noexcept
 {
     ICY_ERROR(m_sync.initialize());
-
-    const auto it = hostname.find(":"_s);
-    if (it == hostname.end())
-        return make_stdlib_error(std::errc::invalid_argument);
-    
-    const auto addr = string_view(hostname.begin(), it);
-    const auto port = string_view(it + 1, hostname.end());
-
-    uint32_t port_index = 0;
-    ICY_ERROR(to_value(port, port_index));
-    if (port_index < 0x400 || port_index >= 0xFFFF)
-        return make_stdlib_error(std::errc::invalid_argument);
-
-    ICY_ERROR(network_address::query(m_address, addr, port));
 
     ICY_ERROR(make_shared(m_thread));
     m_thread->system = this;
@@ -488,6 +463,7 @@ error_type auth_system_data::initialize(const string_view hostname) noexcept
 }
 error_type auth_system_data::exec() noexcept
 {
+    array<network_address> address;
     shared_ptr<network_system_http_client> network;
 
 
@@ -509,9 +485,9 @@ error_type auth_system_data::exec() noexcept
         string str;
         ICY_ERROR(to_string(json, str));
         ICY_ERROR(hrequest.body.assign(str.ubytes()));
-        for (auto&& addr : m_address)
+        for (auto&& addr : address)
         {
-            if (create_network_http_client(network, addr, hrequest, network_default_timeout, 0x1000) == error_type())
+            if (create_network_http_client(network, addr, hrequest, network_default_timeout, network_default_buffer) == error_type())
                 break;
         }
         if (!network)
@@ -534,7 +510,13 @@ error_type auth_system_data::exec() noexcept
         {
             if (event->type == event_type::system_internal)
             {
-                const auto& event_data = event->data<internal_message>();
+                auto& event_data = event->data<internal_message>();
+
+                if (!event_data.network_address.empty())
+                {
+                    address = std::move(event_data.network_address);
+                    continue;
+                }
 
                 auth_request new_request;
                 new_request.guid = event_data.guid;
@@ -703,6 +685,27 @@ error_type auth_system_data::exec() noexcept
     }
     return error_type();
 }
+error_type auth_system_data::connect(const string_view hostname, const duration_type timeout) noexcept
+{
+    const auto it = hostname.find(":"_s);
+    if (it == hostname.end())
+        return make_auth_error(auth_error_code::invalid_hostname);
+
+    const auto addr = string_view(hostname.begin(), it);
+    const auto port = string_view(it + 1, hostname.end());
+
+    uint32_t port_index = 0;
+    ICY_ERROR(to_value(port, port_index));
+    if (port_index < 0x400 || port_index >= 0xFFFF)
+        return make_auth_error(auth_error_code::invalid_hostname);
+
+    internal_message msg;
+    ICY_ERROR(network_address::query(msg.network_address, addr, port, timeout));
+    if (msg.network_address.empty())
+        return make_stdlib_error(std::errc::host_unreachable);
+    
+    return event_system::post(nullptr, event_type::system_internal, std::move(msg));
+}
 error_type auth_system_data::client_create(const guid guid, const uint64_t username, const crypto_key& password) noexcept
 {
     if (!guid || !username)
@@ -761,11 +764,11 @@ error_type auth_system_data::module_update(const guid guid, const uint64_t modul
     msg.timeout = timeout;
     return event_system::post(nullptr, event_type::system_internal, std::move(msg));
 }
-error_type icy::create_auth_system(shared_ptr<auth_system>& system, const string_view hostname) noexcept
+error_type icy::create_auth_system(shared_ptr<auth_system>& system) noexcept
 {
     shared_ptr<auth_system_data> new_system;
     ICY_ERROR(make_shared(new_system));
-    ICY_ERROR(new_system->initialize(hostname));
+    ICY_ERROR(new_system->initialize());
     system = std::move(new_system);
     return error_type();
 }

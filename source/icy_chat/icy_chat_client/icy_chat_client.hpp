@@ -3,6 +3,7 @@
 #include <icy_engine/core/icy_core.hpp>
 #include <icy_engine/core/icy_event.hpp>
 #include <icy_engine/core/icy_thread.hpp>
+#include <icy_engine/core/icy_set.hpp>
 #include <icy_engine/graphics/icy_window.hpp>
 #include <icy_engine/graphics/icy_adapter.hpp>
 #include <icy_engine/graphics/icy_display.hpp>
@@ -32,7 +33,6 @@ struct chat_client_application
 public:
     ~chat_client_application() noexcept
     {
-        if (network_thread) network_thread->wait();
         if (gui_thread) gui_thread->wait();
     }
     icy::error_type initialize() noexcept;
@@ -48,7 +48,8 @@ public:
     icy::adapter gpu;
     icy::shared_ptr<icy::event_queue> loop;
     icy::shared_ptr<chat_client_gui_thread> gui_thread;
-    icy::shared_ptr<chat_client_network_thread> network_thread;
     icy::shared_ptr<icy::network_system_http_client> http_client;
-    std::array<uint32_t, 23> widgets = {};
+    std::array<uint32_t, 26> widgets = {};
+    icy::set<icy::guid> users;
+    icy::set<icy::guid> rooms;
 };

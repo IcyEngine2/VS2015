@@ -60,7 +60,7 @@ error_type auth_network_system::process(const string_view str_request, const net
     {
         const auto found = std::find(m_types.begin(), m_types.end(), auth_request.type);
         if (found == m_types.end())
-            error = make_auth_error(auth_error_code::invalid_json_type);
+            error = make_auth_error(auth_error_code::invalid_json);
     }
     if (!error)
     {

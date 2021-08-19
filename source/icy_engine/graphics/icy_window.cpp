@@ -13,6 +13,7 @@
 #if _WIN32
 #include <Windows.h>
 #include <windowsx.h>
+#include <shellapi.h>
 #include <d2d1.h>
 #endif
 
@@ -57,8 +58,8 @@ ICY_STATIC_NAMESPACE_BEG
 enum class internal_message_type : uint32_t
 {
     none,
-    create,
-    destroy,
+    create_window,
+    destroy_window,
     restyle,
     rename,
     repaint,
@@ -66,6 +67,10 @@ enum class internal_message_type : uint32_t
     show,
     cursor,
     query,
+    taskbar_create,
+    taskbar_destroy,
+    taskbar_rename,
+    taskbar_popup,
 };
 struct internal_message
 {
@@ -90,6 +95,7 @@ struct internal_message
     shared_ptr<query_type> query;
     array<window_render_item> repaint;
     shared_ptr<render_surface> surface;
+    array<window_taskbar::action_type> actions;  
 };
 struct win32_flag_enum
 {
@@ -156,6 +162,11 @@ static decltype(&::OpenClipboard) win32_open_clipboard;
 static decltype(&::CloseClipboard) win32_close_clipboard;
 static decltype(&::GetClipboardData) win32_get_clipboard_data;
 static decltype(&::ScreenToClient) win32_screen_to_client;
+static decltype(&::GetCursorPos) win32_get_cursor_pos;
+static decltype(&::CreatePopupMenu) win32_create_popup_menu;
+static decltype(&::DestroyMenu) win32_destroy_menu;
+static decltype(&::AppendMenuW) win32_append_menu;
+static decltype(&::TrackPopupMenu) win32_track_popup_menu;
 #endif
 class window_system_data;
 class window_data_usr : public window
@@ -302,20 +313,66 @@ private:
     uint32_t m_capture = 0;
     map<string, array<window_render_item>> m_repaint;
 };
-class window_thread_data : public thread
+class window_taskbar_data : public window_taskbar
 {
 public:
-    error_type run() noexcept override
+    window_taskbar_data(shared_ptr<window_system_data> system, const uint32_t index) noexcept : m_system(system), m_index(index)
     {
-        if (auto error = system->exec())
-        {
-            icy::post_quit_event();
-            return error;
-        }
-        return error_type();
+
     }
+    ~window_taskbar_data() noexcept;
+private:
+    shared_ptr<window_system> system() noexcept override
+    {
+        return shared_ptr<window_system_data>(m_system);
+    }
+    uint32_t index() const noexcept override
+    {
+        return m_index;
+    }
+    error_type rename(const string_view name) noexcept override;
+    error_type popup(const const_array_view<action_type> actions) noexcept override;
+private:
+    weak_ptr<window_system_data> m_system;
+    const uint32_t m_index = 0;
+};
+class window_taskbar_system
+{
 public:
-    window_system* system = nullptr;
+    window_taskbar_system(window_system_data& system) noexcept : m_system(system)
+    {
+
+    }
+    window_taskbar_system(const window_taskbar_system&) noexcept;
+    ~window_taskbar_system() noexcept
+    {
+        for (auto&& pair : m_data)
+            pair.value.destroy(*this);
+        if (m_handle)
+            win32_destroy_window(m_handle);
+    }
+    error_type initialize(const wchar_t* cname) noexcept;
+    error_type proc(WPARAM wparam, LPARAM lparam) noexcept;
+    error_type create(const uint32_t taskbar, const string_view name) noexcept;
+    void destroy(const uint32_t taskbar) noexcept;
+    error_type rename(const uint32_t taskbar, const string_view name) noexcept;
+    error_type popup(const uint32_t taskbar, const const_array_view<window_taskbar::action_type> actions) noexcept;
+private:
+    struct data_type
+    {
+        void destroy(window_taskbar_system& system) noexcept;
+        bool lpress = false;
+        bool rpress = false;
+        int32_t cursor_x = 0;
+        int32_t cursor_y = 0;
+        NOTIFYICONDATAW notify = { sizeof(notify) };
+    };
+private:
+    window_system_data& m_system;
+    library m_lib = "shell32"_lib;
+    decltype(&Shell_NotifyIconW) m_func = nullptr;
+    HWND m_handle = nullptr;
+    map<uint32_t, data_type> m_data;
 };
 class window_cursor_data : public window_cursor
 {
@@ -378,6 +435,7 @@ private:
         return *m_thread;
     }
     error_type create(shared_ptr<window>& window, const window_flags flags) noexcept override;
+    error_type create(shared_ptr<window_taskbar>& taskbar, const string_view name) noexcept override;
     error_type signal(const event_data* event) noexcept override
     {
 #if X11_GUI
@@ -406,10 +464,12 @@ private:
     com_ptr<ID2D1DCRenderTarget> m_render;
     map<uint32_t, com_ptr<ID2D1Bitmap>> m_images;
 #endif
-    wchar_t m_cname[64] = {};
-    shared_ptr<window_thread_data> m_thread;
+    wchar_t m_cname_win[64] = {};
+    wchar_t m_cname_msg[64] = {};
+    shared_ptr<event_thread> m_thread;
     error_type m_error;
-    std::atomic<uint32_t> m_index = 0;
+    std::atomic<uint32_t> m_window = 0;
+    std::atomic<uint32_t> m_taskbar = 0;
 };
 ICY_STATIC_NAMESPACE_END
 
@@ -442,7 +502,7 @@ window_data_usr::~window_data_usr() noexcept
     if (auto system = shared_ptr<window_system_data>(m_system))
     {
         internal_message msg;
-        msg.type = internal_message_type::destroy;
+        msg.type = internal_message_type::destroy_window;
         msg.index = m_index;
         system->post(std::move(msg));
     }
@@ -1240,6 +1300,151 @@ error_type window_data_usr::repaint(const string_view tag, array<window_render_i
     return system->post(std::move(msg));
 }
 
+void window_taskbar_system::data_type::destroy(window_taskbar_system& system) noexcept
+{
+    system.m_func(NIM_DELETE, &notify);
+}
+error_type window_taskbar_system::initialize(const wchar_t* cname) noexcept
+{
+    if (m_handle)
+        return error_type();
+
+    ICY_ERROR(m_lib.initialize());
+    m_func = ICY_FIND_FUNC(m_lib, Shell_NotifyIconW);
+    if (!m_func)
+        return make_stdlib_error(std::errc::function_not_supported);
+
+    m_handle = win32_create_window(0, cname, nullptr, 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, win32_instance(), nullptr);
+    if (!m_handle)
+        return last_system_error();
+
+    const auto proc = [](HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) -> LRESULT
+    {
+        const auto ptr = reinterpret_cast<window_taskbar_system*>(win32_get_window_longptr(hwnd, GWLP_USERDATA));
+        if (ptr && hwnd == ptr->m_handle && msg == WM_USER)
+            ptr->proc(wparam, lparam);
+        return win32_def_window_proc(hwnd, msg, wparam, lparam);
+    };
+    win32_set_window_longptr(m_handle, GWLP_USERDATA, LONG_PTR(this));
+    win32_set_window_longptr(m_handle, GWLP_WNDPROC, LONG_PTR(WNDPROC(proc)));
+    return error_type();
+}
+error_type window_taskbar_system::proc(WPARAM wparam, LPARAM lparam) noexcept
+{
+    const auto it = m_data.find(wparam);
+    if (it == m_data.end())
+        return error_type();
+
+    taskbar_event msg;
+    msg.taskbar = it->key;
+    switch (lparam)
+    {
+    case WM_LBUTTONDOWN:
+        it->value.lpress = true;
+        break;
+    
+    case WM_LBUTTONUP:
+        if (it->value.lpress)
+            msg.type = taskbar_event_type::single_click;
+        it->value.lpress = false;
+        break;
+        
+    case WM_LBUTTONDBLCLK:
+        msg.type = taskbar_event_type::double_click;
+        it->value.lpress = false;
+        break;
+
+    case WM_RBUTTONDOWN:
+        it->value.rpress = true;
+        break;
+
+    case WM_CONTEXTMENU:
+        msg.type = taskbar_event_type::context;
+        break;
+
+    case WM_RBUTTONUP:
+        if (it->value.rpress)
+            msg.type = taskbar_event_type::context;
+        it->value.rpress = false;
+        break;
+    }
+    if (msg.type != taskbar_event_type::none)
+    {
+        POINT point;
+        if (!win32_get_cursor_pos(&point))
+            return last_system_error();
+
+        it->value.cursor_x = point.x;
+        it->value.cursor_y = point.y;
+        ICY_ERROR(event::post(&m_system, event_type::window_taskbar, std::move(msg)));
+    }
+    return error_type();
+}
+error_type window_taskbar_system::create(const uint32_t taskbar, const string_view name) noexcept
+{
+    auto it = m_data.find(taskbar);
+    if (it != m_data.end())
+        return error_type();
+
+    data_type new_data;
+    new_data.notify.hWnd = m_handle;
+    new_data.notify.uID = taskbar;
+    new_data.notify.uFlags = NIF_MESSAGE | NIF_TIP;
+    new_data.notify.uCallbackMessage = WM_USER;
+    size_t size = _countof(new_data.notify.szTip);
+    ICY_ERROR(name.to_utf16(new_data.notify.szTip, &size));
+    if (!m_func(NIM_ADD, &new_data.notify))
+        return last_system_error();
+
+    ICY_ERROR(m_data.insert(taskbar, std::move(new_data), &it));
+    return error_type();
+}
+void window_taskbar_system::destroy(const uint32_t taskbar) noexcept
+{
+    auto it = m_data.find(taskbar);
+    if (it == m_data.end())
+        return;
+    it->value.destroy(*this);
+    m_data.erase(it);
+}
+error_type window_taskbar_system::rename(const uint32_t taskbar, const string_view name) noexcept
+{
+    return error_type();
+}
+error_type window_taskbar_system::popup(const uint32_t taskbar, const const_array_view<window_taskbar::action_type> actions) noexcept
+{
+    const auto it = m_data.find(taskbar);
+    if (it == m_data.end())
+        return error_type();
+
+    HMENU menu = win32_create_popup_menu();
+    if (!menu)
+        return last_system_error();
+    ICY_SCOPE_EXIT{ win32_destroy_menu(menu); };
+
+    for (auto k = 0u; k < actions.size(); ++k)
+    {
+        array<wchar_t> wtext;
+        ICY_ERROR(to_utf16(actions[k].text.str(), wtext));
+        if (!win32_append_menu(menu, MF_STRING, k + 1, wtext.data()))
+            return last_system_error();
+    }
+
+    const auto id = win32_track_popup_menu(menu, TPM_RETURNCMD | TPM_NONOTIFY, it->value.cursor_x, it->value.cursor_y, 0, m_handle, nullptr);
+    if (!id)
+        return last_system_error();
+
+    if (id > actions.size())
+        return error_type();
+
+    taskbar_event new_event;
+    new_event.type = taskbar_event_type::action;
+    new_event.taskbar = taskbar;
+    new_event.action = actions[id - 1].udata;
+    ICY_ERROR(event::post(&m_system, event_type::window_taskbar, std::move(new_event)));
+    return error_type();
+}
+
 error_type window_cursor_data::initialize() noexcept
 {
 #if X11_GUI
@@ -1306,6 +1511,43 @@ error_type window_cursor_data::initialize() noexcept
     return error_type();
 }
 
+window_taskbar_data::~window_taskbar_data() noexcept
+{
+    if (auto system = shared_ptr<window_system_data>(m_system))
+    {
+        internal_message msg;
+        msg.type = internal_message_type::taskbar_destroy;
+        msg.index = m_index;
+        system->post(std::move(msg));
+    }
+}
+error_type window_taskbar_data::rename(const string_view name) noexcept
+{
+    auto system = shared_ptr<window_system_data>(m_system);
+    if (!system)
+        return make_stdlib_error(std::errc::invalid_argument);
+
+    internal_message msg;
+    msg.type = internal_message_type::taskbar_rename;
+    msg.index = m_index;
+    ICY_ERROR(copy(name, msg.name));
+    ICY_ERROR(system->post(std::move(msg)));
+    return error_type();
+}
+error_type window_taskbar_data::popup(const const_array_view<action_type> actions) noexcept
+{
+    auto system = shared_ptr<window_system_data>(m_system);
+    if (!system)
+        return make_stdlib_error(std::errc::invalid_argument);
+
+    internal_message msg;
+    msg.type = internal_message_type::taskbar_popup;
+    msg.index = m_index;
+    ICY_ERROR(msg.actions.assign(actions));
+    ICY_ERROR(system->post(std::move(msg)));
+    return error_type();
+}
+
 window_system_data::~window_system_data() noexcept
 {
     if (m_thread)
@@ -1314,8 +1556,10 @@ window_system_data::~window_system_data() noexcept
     if (m_display)
         XCloseDisplay(m_display);
 #elif _WIN32
-    if (*m_cname)
-        win32_unregister_class(m_cname, win32_instance());
+    if (*m_cname_msg)
+        win32_unregister_class(m_cname_msg, win32_instance());
+    if (*m_cname_win)
+        win32_unregister_class(m_cname_win, win32_instance());
 #endif
     filter(0);
 }
@@ -1380,25 +1624,40 @@ error_type window_system_data::initialize() noexcept
     ICY_USER32_FUNC(win32_close_clipboard, CloseClipboard);
     ICY_USER32_FUNC(win32_get_clipboard_data, GetClipboardData);
     ICY_USER32_FUNC(win32_screen_to_client, ScreenToClient);
+    ICY_USER32_FUNC(win32_get_cursor_pos, GetCursorPos);
+    ICY_USER32_FUNC(win32_create_popup_menu, CreatePopupMenu);
+    ICY_USER32_FUNC(win32_destroy_menu, DestroyMenu);
+    ICY_USER32_FUNC(win32_append_menu, AppendMenuW);
+    ICY_USER32_FUNC(win32_track_popup_menu, TrackPopupMenu);
 
     m_cursor = static_cast<HCURSOR>(win32_load_cursor(nullptr, IDC_ARROW));
     if (!m_cursor)
         return last_system_error();
 
-    swprintf_s(m_cname, L"Icy Window %u.%u", GetCurrentProcessId(), GetCurrentThreadId());
+    swprintf_s(m_cname_win, L"Icy Window %u.%u", GetCurrentProcessId(), GetCurrentThreadId());
 
     WNDCLASSEXW cls = { sizeof(WNDCLASSEXW) };
-    cls.lpszClassName = m_cname;
+    cls.lpszClassName = m_cname_win;
     cls.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
     cls.lpfnWndProc = win32_def_window_proc;
     cls.hInstance = win32_instance();
     cls.hCursor = m_cursor;
     if (win32_register_class(&cls) == 0)
     {
-        memset(m_cname, 0, sizeof(m_cname));
+        memset(m_cname_win, 0, sizeof(m_cname_win));
         return last_system_error();
     }
 
+    swprintf_s(m_cname_msg, L"Icy Message %u.%u", GetCurrentProcessId(), GetCurrentThreadId());
+    cls = { sizeof(WNDCLASSEXW) };
+    cls.lpszClassName = m_cname_msg;
+    cls.lpfnWndProc = win32_def_window_proc;
+    cls.hInstance = win32_instance();
+    if (win32_register_class(&cls) == 0)
+    {
+        memset(m_cname_msg, 0, sizeof(m_cname_msg));
+        return last_system_error();
+    }
 
     using d2d1_func_type = HRESULT(WINAPI *)(D2D1_FACTORY_TYPE, REFIID, const D2D1_FACTORY_OPTIONS*, void**);
     if (auto func = static_cast<d2d1_func_type>(m_lib_d2d1.find("D2D1CreateFactory")))
@@ -1461,6 +1720,8 @@ error_type window_system_data::exec() noexcept
     _putenv("_XKB_CHARSET=utf8");
 #endif
 
+    window_taskbar_system taskbar_system(*this);
+    
     while (*this)
     {
         while (auto event = pop())
@@ -1493,18 +1754,35 @@ error_type window_system_data::exec() noexcept
 
             auto& event_data = event->data<internal_message>();
             auto it = windows.find(event_data.index);
-            if (event_data.type == internal_message_type::create)
+            if (event_data.type == internal_message_type::create_window)
             {
                 if (it == windows.end())
                 {
                     ICY_ERROR(windows.insert(event_data.index, window_data_sys(*this, event_data.index), &it));
-                    ICY_ERROR(it->value.initialize(m_cname, event_data.flags));
+                    ICY_ERROR(it->value.initialize(m_cname_win, event_data.flags));
                 }
             }
-            else if (event_data.type == internal_message_type::destroy)
+            else if (event_data.type == internal_message_type::destroy_window)
             {
                 if (it != windows.end())
                     windows.erase(it);
+            }
+            else if (event_data.type == internal_message_type::taskbar_create)
+            {
+                ICY_ERROR(taskbar_system.initialize(m_cname_msg));
+                ICY_ERROR(taskbar_system.create(event_data.index, event_data.name));
+            }
+            else if (event_data.type == internal_message_type::taskbar_destroy)
+            {
+                taskbar_system.destroy(event_data.index);
+            }
+            else if (event_data.type == internal_message_type::taskbar_rename)
+            {
+                ICY_ERROR(taskbar_system.rename(event_data.index, event_data.name));
+            }
+            else if (event_data.type == internal_message_type::taskbar_popup)
+            {
+                ICY_ERROR(taskbar_system.popup(event_data.index, event_data.actions));
             }
             else if (event_data.type == internal_message_type::show)
             {
@@ -1699,15 +1977,29 @@ error_type window_system_data::post(internal_message&& msg) noexcept
 error_type window_system_data::create(shared_ptr<window>& new_window, const window_flags flags) noexcept
 {
     shared_ptr<window_data_usr> ptr;
-    auto index = m_index.fetch_add(1, std::memory_order_acq_rel) + 1;
+    auto index = m_window.fetch_add(1, std::memory_order_acq_rel) + 1;
 
     ICY_ERROR(make_shared(ptr, make_shared_from_this(this), flags, index));
     internal_message msg;
-    msg.type = internal_message_type::create;
+    msg.type = internal_message_type::create_window;
     msg.flags = flags;
     msg.index = index;
     ICY_ERROR(post(std::move(msg)));
     new_window = std::move(ptr);
+    return error_type();
+}
+error_type window_system_data::create(shared_ptr<window_taskbar>& new_taskbar, string_view name) noexcept
+{
+    shared_ptr<window_taskbar_data> ptr;
+    auto index = m_taskbar.fetch_add(1, std::memory_order_acq_rel) + 1;
+
+    ICY_ERROR(make_shared(ptr, make_shared_from_this(this), index));
+    internal_message msg;
+    msg.type = internal_message_type::taskbar_create;
+    msg.index = index;
+    ICY_ERROR(copy(name, msg.name));
+    ICY_ERROR(post(std::move(msg)));
+    new_taskbar = std::move(ptr);
     return error_type();
 }
 void window_system_data::exit(const error_type error) noexcept

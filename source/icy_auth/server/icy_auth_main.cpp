@@ -1,6 +1,7 @@
 #include <icy_engine/core/icy_json.hpp>
 #include <icy_engine/core/icy_file.hpp>
 #include <icy_engine/core/icy_console.hpp>
+#include <icy_engine/graphics/icy_window.hpp>
 #include <icy_engine/parser/icy_parser_cmd.hpp>
 #include "icy_auth_config.hpp"
 #include "icy_auth_database.hpp"
@@ -10,9 +11,11 @@
 
 #if _DEBUG
 #pragma comment(lib, "icy_engine_cored")
+#pragma comment(lib, "icy_engine_graphicsd")
 #pragma comment(lib, "icy_engine_networkd")
 #else
 #pragma comment(lib, "icy_engine_core")
+#pragma comment(lib, "icy_engine_graphics")
 #pragma comment(lib, "icy_engine_network")
 #endif
 
@@ -166,8 +169,6 @@ static error_type append(map<string_view, command_pair>& cmds,
     return error_type();
 }
 
-
-
 error_type cmd_init(map<string_view, command_pair>& cmds, const auth_config& config) noexcept
 {
     ICY_ERROR(append(cmds, "run_http_admin"_s,
@@ -229,11 +230,21 @@ error_type cmd_init(map<string_view, command_pair>& cmds, const auth_config& con
 error_type main_ex() noexcept
 {
     ICY_ERROR(event_system::initialize());
+    
     shared_ptr<event_queue> loop;
     ICY_ERROR(create_event_system(loop, 0
         | event_type::network_connect
         | event_type::network_recv
-        | event_type::console_read_line));
+        | event_type::console_read_line
+        | event_type::window_taskbar));
+    
+    shared_ptr<window_system> window_system;
+    ICY_ERROR(create_window_system(window_system));
+    ICY_ERROR(window_system->thread().launch());
+    ICY_ERROR(window_system->thread().rename("Window Thread"_s));
+
+    shared_ptr<window_taskbar> taskbar;
+    ICY_ERROR(window_system->create(taskbar, "IcyAuth Server"_s));
     
     shared_ptr<console_system> console;
     ICY_ERROR(create_console_system(console));
@@ -553,6 +564,28 @@ error_type main_ex() noexcept
         return error_type();
     };
 
+    enum class menu_action
+    {
+        none,
+        open,
+        run_clients,
+        run_modules,
+        quit,
+    };
+
+    array<window_taskbar::action_type> actions;
+    const auto func = [&actions](const string_view text, const menu_action id)
+    {
+        window_taskbar::action_type next;
+        next.text = text;
+        next.udata = id;
+        return actions.push_back(std::move(next));
+    };
+    ICY_ERROR(func("Open"_s, menu_action::open));
+    ICY_ERROR(func("Run Clients"_s, menu_action::run_clients));
+    ICY_ERROR(func("Run Modules"_s, menu_action::run_modules));
+    ICY_ERROR(func("Quit"_s, menu_action::quit));
+
     while (*loop)
     {
         event event;
@@ -563,6 +596,36 @@ error_type main_ex() noexcept
         if (event->type == event_type::console_read_line)
         {
             ICY_ERROR(exec_console(event));
+            continue;
+        }
+        else if (event->type == event_type::window_taskbar)
+        {
+            const auto& event_data = event->data<taskbar_event>();
+
+            if (event_data.type == taskbar_event_type::context)
+            {
+                ICY_ERROR(taskbar->popup(actions));
+            }
+            else if (event_data.type == taskbar_event_type::action)
+            {
+                auto action = menu_action::none;
+                if (event_data.action.get(action))
+                {
+                    switch (action)
+                    {
+                    case menu_action::open:
+                        ICY_ERROR(console->show(false));
+                        break;
+                    case menu_action::run_clients:
+                        break;
+                    case menu_action::run_modules:
+                        break;
+                    case menu_action::quit:
+                        return error_type();
+                    }
+
+                }
+            }
             continue;
         }
 

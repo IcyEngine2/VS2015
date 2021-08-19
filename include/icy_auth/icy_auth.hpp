@@ -14,14 +14,8 @@ namespace icy
         none,
 
         invalid_json = 100,
-        invalid_json_version,
-        invalid_json_type,
-        invalid_json_guid,
-        invalid_json_time,
-        invalid_json_message,
-        invalid_json_username,
-        invalid_json_password,
-        invalid_json_error,
+        invalid_utf_string,
+        invalid_hostname,
 
         client_access = 200,
         client_max_capacity,
@@ -246,13 +240,14 @@ namespace icy
         {
             return const_cast<icy::thread&>(static_cast<const auth_system*>(this)->thread());
         }
+        virtual error_type connect(const string_view hostname, const duration_type timeout) noexcept = 0;
         virtual error_type client_create(const guid guid, const uint64_t username, const crypto_key& password) noexcept = 0;
         virtual error_type client_ticket(const guid guid, const uint64_t username, const crypto_key& password) noexcept = 0;
         virtual error_type client_connect(const guid guid, const uint64_t username, const crypto_key& password, const uint64_t module, const crypto_msg<auth_client_ticket_server>& encrypted_server_ticket) noexcept = 0;
         virtual error_type module_create(const guid guid, const uint64_t module) noexcept = 0;
         virtual error_type module_update(const guid guid, const uint64_t module, const string_view address, const auth_clock::duration timeout, const crypto_key& password) noexcept = 0;
     };
-    error_type create_auth_system(shared_ptr<auth_system>& system, const string_view hostname) noexcept;
+    error_type create_auth_system(shared_ptr<auth_system>& system) noexcept;
 
     extern const event_type auth_event_type;
 }

@@ -135,8 +135,8 @@ error_type chat_server_application::run_gui() noexcept
                 const auto port_str = string_view(module_hostname.find(":"_s) + 1, module_hostname.end());
 
                 network_server_config config;
-                config.buffer = 4096;
-                config.capacity = 128;
+                config.buffer = 0x1000;
+                config.capacity = 8;
                 config.timeout = max_timeout;
                 to_value(port_str, config.port);
                 if (config.port < 0x400)
@@ -200,18 +200,19 @@ error_type chat_server_application::run_gui() noexcept
                         continue;
                     }
 
+                    ICY_ERROR(create_auth_system(auth));
                     ICY_ERROR(print("Connecting to auth server..."_s));
-
-                    if (const auto error = create_auth_system(auth, auth_hostname))
+                    if (const auto error = auth->connect(auth_hostname, network_default_timeout))
                     {
                         ICY_ERROR(print("Invalid auth hostname"_s));
+                        auth = nullptr;
                         continue;
                     }
-                    ICY_ERROR(auth->module_update(guid::create(), hash64(chat_auth_module), 
-                        module_hostname, std::chrono::minutes(240), crypto_password));
+
                     ICY_ERROR(auth->thread().launch());
                     ICY_ERROR(auth->thread().rename("Auth Thread"_s));
-
+                    ICY_ERROR(auth->module_update(guid::create(), hash64(chat_auth_module),
+                        module_hostname, std::chrono::minutes(240), database.password));
                 }
             }
             else if (event_data.type == imgui_event_type::widget_edit)

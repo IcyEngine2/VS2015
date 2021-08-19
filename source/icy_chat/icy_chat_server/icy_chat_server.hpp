@@ -3,6 +3,9 @@
 #include <icy_engine/core/icy_core.hpp>
 #include <icy_engine/core/icy_event.hpp>
 #include <icy_engine/core/icy_thread.hpp>
+#include <icy_engine/core/icy_map.hpp>
+#include <icy_engine/core/icy_set.hpp>
+#include <icy_engine/core/icy_queue.hpp>
 #include <icy_engine/graphics/icy_window.hpp>
 #include <icy_engine/graphics/icy_adapter.hpp>
 #include <icy_engine/graphics/icy_display.hpp>
@@ -26,6 +29,46 @@ struct chat_server_network_thread : public icy::thread
     void cancel() noexcept override;
     icy::error_type run() noexcept override;
     chat_server_application* app = nullptr;
+}; 
+
+struct chat_entry
+{
+    icy::chat_time time = {};
+    uint32_t size = 0;
+    uint32_t _padding = 0;
+    icy::guid user;
+    icy::guid room;
+};/*
+struct chat_action
+{
+    icy::chat_request_type type = icy::chat_request_type::none;
+    icy::chat_time time = {};
+    icy::guid user;
+    icy::guid room;
+    icy::string text;
+};
+struct chat_user
+{
+    icy::array<chat_entry> data;
+    uint32_t size = 0;
+    icy::mpsc_queue<chat_action> actions;
+};
+struct chat_room
+{
+    icy::set<icy::guid> users;
+    icy::mpsc_queue<chat_action> actions;
+};*/
+class chat_database
+{
+public:
+    icy::error_type initialize(const icy::string_view path, const size_t capacity) noexcept;
+    icy::error_type exec(const icy::chat_request& request, icy::chat_response& response) noexcept;
+    icy::crypto_key password = icy::crypto_random;
+private:
+    icy::sync_handle m_sync;
+    icy::database_system_write m_base;
+    icy::database_dbi m_dbi_users;
+    icy::database_dbi m_dbi_rooms;
 };
 
 struct chat_server_application
@@ -41,7 +84,6 @@ public:
     icy::error_type run() noexcept;
     icy::error_type run_gui() noexcept;
     icy::error_type run_network() noexcept;
-    icy::error_type exec(const icy::guid& author, const icy::chat_message& request) noexcept;
 public:
     icy::shared_ptr<icy::window_system> window_system;
     icy::shared_ptr<icy::window> window;
@@ -55,8 +97,5 @@ public:
     icy::shared_ptr<icy::event_thread> http_thread;
     icy::shared_ptr<icy::network_system_http_server> http_server;
     std::array<uint32_t, 24> widgets = {};
-    icy::crypto_key crypto_password = icy::crypto_random;
-    icy::database_system_write database;
-    icy::database_dbi dbi_users;
-    icy::database_dbi dbi_rooms;
+    chat_database database;
 };

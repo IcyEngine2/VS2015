@@ -18,7 +18,7 @@ namespace icy
             bitcnt_fileio   =   0x02,
             bitcnt_network  =   0x04,
             bitcnt_console  =   0x03,
-            bitcnt_window   =   0x05,
+            bitcnt_window   =   0x06,
             bitcnt_gui      =   0x02,
             bitcnt_display  =   0x01,
             bitcnt_render   =   0x01,
@@ -86,6 +86,7 @@ namespace icy
             window_input            =   1ui64   <<  (offset_window + 0x02),
             window_data             =   1ui64   <<  (offset_window + 0x03),
             window_action           =   1ui64   <<  (offset_window + 0x04),
+            window_taskbar          =   1ui64   <<  (offset_window + 0x05),
             window_any              =   mask_window,
 
             gui_update              =   1ui64   <<  (offset_gui + 0x00),

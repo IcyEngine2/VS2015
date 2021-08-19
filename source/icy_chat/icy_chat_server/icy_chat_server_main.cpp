@@ -11,7 +11,6 @@
 
 using namespace icy;
 
-
 void chat_server_gui_thread::cancel() noexcept
 {
     if (app)
@@ -49,12 +48,14 @@ error_type chat_server_application::initialize() noexcept
     ICY_ERROR(window->rename("Icy Chat Server"_s));
     ICY_ERROR(create_imgui_system(imgui_system));
     ICY_ERROR(imgui_system->create_display(imgui_display, window));
+    ICY_ERROR(database.initialize("chat_database.dat"_s, 1_gb));
 
     array<adapter> gpu_list;
     ICY_ERROR(adapter::enumerate(adapter_flags::d3d10 | adapter_flags::hardware, gpu_list));
     if (gpu_list.empty())
         return make_unexpected_error();
     gpu = gpu_list[0];
+
 
     ICY_ERROR(create_event_system(loop, 0
         | event_type::gui_render

@@ -25,20 +25,6 @@ error_type chat_client_gui_thread::run() noexcept
     }
     return error_type();
 }
-void chat_client_network_thread::cancel() noexcept
-{
-    if (app)
-        app->loop->post_quit_event();
-}
-error_type chat_client_network_thread::run() noexcept
-{
-    if (auto error = app->run_network())
-    {
-        cancel();
-        return error;
-    }
-    return error_type();
-}
 
 error_type chat_client_application::initialize() noexcept
 {
@@ -55,6 +41,45 @@ error_type chat_client_application::initialize() noexcept
         return make_unexpected_error();
     gpu = gpu_list[0];
 
+
+    database_system_read dbase;
+    ICY_ERROR(dbase.initialize("chat_database.dat"_s, 1_gb));
+    database_txn_read txn;
+    ICY_ERROR(txn.initialize(dbase));
+    database_dbi dbi_users;
+    database_dbi dbi_rooms;
+    if (dbi_users.initialize_open_any_key(txn, "users"_s) == error_type())
+    {
+        database_cursor_read cur_users;
+        ICY_ERROR(cur_users.initialize(txn, dbi_users));
+        guid key;
+        const_array_view<uint8_t> val;
+        auto error = cur_users.get_var_by_type(key, val, database_oper_read::none);
+        while (error != database_error_not_found)
+        {
+            ICY_ERROR(users.insert(key));
+            error = cur_users.get_var_by_type(key, val, database_oper_read::next);
+        }
+        if (error != database_error_not_found)
+            ICY_ERROR(error);
+    }
+    if (dbi_rooms.initialize_open_any_key(txn, "rooms"_s) == error_type())
+    {
+        database_cursor_read cur_rooms;
+        ICY_ERROR(cur_rooms.initialize(txn, dbi_rooms));
+        guid key;
+        const_array_view<uint8_t> val;
+        auto error = cur_rooms.get_var_by_type(key, val, database_oper_read::none);
+        while (error != database_error_not_found)
+        {
+            ICY_ERROR(rooms.insert(key));
+            error = cur_rooms.get_var_by_type(key, val, database_oper_read::next);
+        }
+        if (error != database_error_not_found)
+            ICY_ERROR(error);
+    }
+    
+
     ICY_ERROR(create_event_system(loop, 0
         | event_type::gui_render
         | event_type::window_resize
@@ -63,8 +88,6 @@ error_type chat_client_application::initialize() noexcept
 
     ICY_ERROR(make_shared(gui_thread));
     gui_thread->app = this;
-    ICY_ERROR(make_shared(network_thread));
-    network_thread->app = this;
 
     return error_type();
 }
@@ -84,9 +107,6 @@ error_type chat_client_application::run() noexcept
 
     ICY_ERROR(gui_thread->launch());
     ICY_ERROR(gui_thread->rename("GUI Thread"_s));
-
-    ICY_ERROR(network_thread->launch());
-    ICY_ERROR(network_thread->rename("Network Thread"_s));
 
     auto query = 0u;
     ICY_ERROR(imgui_display->repaint(query));

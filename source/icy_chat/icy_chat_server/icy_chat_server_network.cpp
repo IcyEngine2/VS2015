@@ -3,29 +3,12 @@
 
 using namespace icy;
 
-ICY_STATIC_NAMESPACE_BEG
-struct chat_connection
-{
-    network_tcp_connection network;
-    crypto_key session;
-    auth_clock::time_point expire;
-};
-struct chat_user
-{
-    map<uint64_t, chat_connection> connections;
-};
-ICY_STATIC_NAMESPACE_END
-
 error_type chat_server_application::run_network() noexcept
 {
     shared_ptr<event_queue> loop;
     ICY_ERROR(create_event_system(loop, 0
         | event_type::network_recv 
-        | event_type::network_connect 
-        | event_type::network_disconnect));
-
-    map<guid, chat_user> guid_to_user;
-    map<uint64_t, guid> conn_to_guid;
+        | event_type::network_connect));
 
     while (*loop)
     {
@@ -42,7 +25,7 @@ error_type chat_server_application::run_network() noexcept
 
         if (event->type == event_type::network_disconnect)
         {
-            const auto it = conn_to_guid.find(hash);
+            /*const auto it = conn_to_guid.find(hash);
             if (it != conn_to_guid.end())
             {
                 const auto guid = it->value;
@@ -55,7 +38,7 @@ error_type chat_server_application::run_network() noexcept
                     if (kt != conn_list.end())
                         conn_list.erase(kt);
                 }
-            }
+            }*/
         }
         else if (event->type == event_type::network_connect)
         {
@@ -83,16 +66,36 @@ error_type chat_server_application::run_network() noexcept
                 ICY_ERROR(http_server->disc(event_data.conn));
                 continue;
             }
-            chat_message msg;
-            if (const auto error = from_json(json, msg))
+            chat_request request;
+            if (const auto error = request.from_json(json))
             {
                 if (error == make_stdlib_error(std::errc::not_enough_memory))
                     return error;
                 ICY_ERROR(http_server->disc(event_data.conn));
                 continue;
             }
+            
+            chat_response response;
+            ICY_ERROR(database.exec(request, response));
+            ICY_ERROR(response.to_json(json));
+            string str;
+            ICY_ERROR(to_string(json, str));
 
-            if (msg.type == chat_message_type::user_connect ||
+            http_response hresponse;
+            hresponse.type = http_content_type::application_json;
+            hresponse.body.assign(str.ubytes());
+            hresponse.herror = http_error::success;
+            ICY_ERROR(http_server->send(event_data.conn, hresponse));
+            ICY_ERROR(http_server->recv(event_data.conn));
+        }
+    }
+
+    return error_type();
+}
+
+/*
+
+            if (request.type == chat_request_type::user_send_text||
                 msg.type == chat_message_type::system_connect)
             {
                 auth_client_connect_module auth;
@@ -118,18 +121,29 @@ error_type chat_server_application::run_network() noexcept
                 jt->value.network = event_data.conn;
                 jt->value.expire = auth.expire;
                 jt->value.session = auth.session;
+
+                database_txn_write txn;
+                txn.initialize(database);
+                database_cursor_write cur;
+                cur.initialize(txn, dbi_users);
+
+
+
             }
             else if (msg.type == chat_message_type::user_send)
             {
+                const auto it = conn_to_guid.find(hash);
+                if (it == conn_to_guid.end())
+                {
+                    ICY_ERROR(http_server->disc(event_data.conn));
+                    continue;
+                }
+                ICY_ERROR(exec(, msg));
+
             }
             else // bad event type
             {
                 ICY_ERROR(http_server->disc(event_data.conn));
                 continue;
             }
-            ICY_ERROR(http_server->recv(event_data.conn));
-        }
-    }
-
-    return error_type();
-}
+*/

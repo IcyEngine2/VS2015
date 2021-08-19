@@ -34,7 +34,7 @@ error_type icy::create_console_system(shared_ptr<console_system>& system) noexce
 
     shared_ptr<console_system> new_system;
     ICY_ERROR(make_shared(new_system, console_system::tag()));
-    //ICY_ERROR(new_system->m_mutex.initialize());   
+    ICY_ERROR(new_system->m_lib.initialize());
     ICY_ERROR(new_system->m_sync.initialize()); 
 
     shared_ptr<event_thread> thread;
@@ -52,8 +52,19 @@ console_system::~console_system() noexcept
     filter(0);
 }
 
-error_type console_system::exec() noexcept
+error_type console_system::show(const bool value) noexcept
 {
+    const auto win32_show_window = ICY_FIND_FUNC(m_lib, ShowWindowAsync);
+    if (!win32_show_window)
+        return make_stdlib_error(std::errc::function_not_supported);
+
+    if (!win32_show_window(GetConsoleWindow(), value ? SW_SHOW : SW_HIDE))
+        return last_system_error();
+    
+    return error_type();
+}
+error_type console_system::exec() noexcept
+{  
     uint32_t wait_key = 0;
     while (*this)
     {

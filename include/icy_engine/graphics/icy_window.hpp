@@ -7,6 +7,7 @@
 #include <icy_engine/core/icy_color.hpp>
 #include <icy_engine/core/icy_string.hpp>
 #include <icy_engine/core/icy_blob.hpp>
+#include <icy_engine/utility/icy_variant.hpp>
 
 namespace icy
 {
@@ -169,6 +170,36 @@ namespace icy
 
         }
     };
+    enum class taskbar_event_type : uint32_t
+    {
+        none,
+        action,
+        context,
+        single_click,
+        double_click,
+    };
+    struct taskbar_event
+    {
+        taskbar_event_type type = taskbar_event_type::none;
+        uint32_t taskbar = 0u;
+        variant action = 0u;
+    };
+    struct window_taskbar
+    {
+        struct action_type
+        {
+            variant udata;
+            variant text;
+        };
+        virtual ~window_taskbar() noexcept = 0
+        {
+
+        }
+        virtual shared_ptr<window_system> system() noexcept = 0;
+        virtual uint32_t index() const noexcept = 0;
+        virtual error_type rename(const string_view name) noexcept = 0;
+        virtual error_type popup(const const_array_view<action_type> actions) noexcept = 0;
+    };
     struct window_system : public event_system
     {
         virtual const icy::thread& thread() const noexcept = 0;
@@ -177,9 +208,17 @@ namespace icy
             return const_cast<icy::thread&>(static_cast<const window_system*>(this)->thread());
         }
         virtual error_type create(shared_ptr<window>& window, const window_flags flags = default_window_flags) noexcept = 0;
+        virtual error_type create(shared_ptr<window_taskbar>& taskbar, const string_view name) noexcept = 0;
     };
 
     error_type create_window_cursor(shared_ptr<window_cursor>& cursor, const window_cursor::type type) noexcept;
     error_type create_window_cursor(shared_ptr<window_cursor>& cursor, const const_array_view<uint8_t> bytes) noexcept;
     error_type create_window_system(shared_ptr<window_system>& system) noexcept;
+
+    inline error_type copy(const window_taskbar::action_type& src, window_taskbar::action_type& dst) noexcept
+    {
+        dst.text = src.text;
+        dst.udata = src.udata;
+        return error_type();
+    }
 }

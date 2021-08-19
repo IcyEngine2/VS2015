@@ -177,7 +177,7 @@ error_type auth_database::exec(const auth_request& request, auth_response& respo
         break;
     }
     default:
-        return make_auth_error(auth_error_code::invalid_json_type);
+        return make_auth_error(auth_error_code::invalid_json);
     }
     return error_type();
 }

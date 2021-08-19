@@ -52,10 +52,12 @@ namespace icy
             event._type = event_type::console_read_key;
             return event_system::post(nullptr, event_type::system_internal, std::move(event));
         }
+        error_type show(const bool value) noexcept;
     private:
         error_type exec() noexcept override;
         error_type signal(const event_data* event) noexcept override;
     private:
+        library m_lib = "user32"_lib;
         sync_handle m_sync;
         shared_ptr<icy::thread> m_thread;
     };
