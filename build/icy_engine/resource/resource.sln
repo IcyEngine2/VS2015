@@ -3,7 +3,15 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.31424.327
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "resource", "resource.vcxproj", "{EC4C10F2-BD8F-494C-8D95-0FF06A15E81E}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_engine_resource", "resource.vcxproj", "{EC4C10F2-BD8F-494C-8D95-0FF06A15E81E}"
+	ProjectSection(ProjectDependencies) = postProject
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC} = {B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}
+		{7AC2D47E-3301-4B25-83DF-53A2A046E2D7} = {7AC2D47E-3301-4B25-83DF-53A2A046E2D7}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_engine_core", "..\core\core.vcxproj", "{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_engine_resource_manager", "icy_engine_resource_manager.vcxproj", "{7AC2D47E-3301-4B25-83DF-53A2A046E2D7}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +23,14 @@ Global
 		{EC4C10F2-BD8F-494C-8D95-0FF06A15E81E}.Debug|x64.Build.0 = Debug|x64
 		{EC4C10F2-BD8F-494C-8D95-0FF06A15E81E}.Release|x64.ActiveCfg = Release|x64
 		{EC4C10F2-BD8F-494C-8D95-0FF06A15E81E}.Release|x64.Build.0 = Release|x64
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}.Debug|x64.ActiveCfg = Debug|x64
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}.Debug|x64.Build.0 = Debug|x64
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}.Release|x64.ActiveCfg = Release|x64
+		{B69A0E38-2B43-4213-86AE-C3B9A65D4FBC}.Release|x64.Build.0 = Release|x64
+		{7AC2D47E-3301-4B25-83DF-53A2A046E2D7}.Debug|x64.ActiveCfg = Debug|x64
+		{7AC2D47E-3301-4B25-83DF-53A2A046E2D7}.Debug|x64.Build.0 = Debug|x64
+		{7AC2D47E-3301-4B25-83DF-53A2A046E2D7}.Release|x64.ActiveCfg = Release|x64
+		{7AC2D47E-3301-4B25-83DF-53A2A046E2D7}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

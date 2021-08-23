@@ -216,7 +216,8 @@ error_type imgui_display_data_usr::widget_delete(const uint32_t widget) const no
     auto system = shared_ptr<imgui_system_data>(m_system);
     if (!system)
         return make_stdlib_error(std::errc::invalid_argument);
-
+    if (!widget)
+        return error_type();
     internal_message msg;
     msg.type = internal_message_type::widget_delete;
     msg.display = m_index;
@@ -226,7 +227,7 @@ error_type imgui_display_data_usr::widget_delete(const uint32_t widget) const no
 error_type imgui_display_data_usr::widget_label(const uint32_t widget, const string_view text) const noexcept
 {
     auto system = shared_ptr<imgui_system_data>(m_system);
-    if (!system)
+    if (!system || !widget)
         return make_stdlib_error(std::errc::invalid_argument);
 
     internal_message msg;
@@ -239,7 +240,7 @@ error_type imgui_display_data_usr::widget_label(const uint32_t widget, const str
 error_type imgui_display_data_usr::widget_state(const uint32_t widget, const imgui_widget_state state) const noexcept
 {
     auto system = shared_ptr<imgui_system_data>(m_system);
-    if (!system)
+    if (!system || !widget)
         return make_stdlib_error(std::errc::invalid_argument);
 
     internal_message msg;
@@ -252,7 +253,7 @@ error_type imgui_display_data_usr::widget_state(const uint32_t widget, const img
 error_type imgui_display_data_usr::widget_value(const uint32_t widget, const variant& value) const noexcept
 {
     auto system = shared_ptr<imgui_system_data>(m_system);
-    if (!system)
+    if (!system || !widget)
         return make_stdlib_error(std::errc::invalid_argument);
 
     internal_message msg;
@@ -265,7 +266,7 @@ error_type imgui_display_data_usr::widget_value(const uint32_t widget, const var
 error_type imgui_display_data_usr::widget_udata(const uint32_t widget, const variant& value) const noexcept
 {
     auto system = shared_ptr<imgui_system_data>(m_system);
-    if (!system)
+    if (!system || !widget)
         return make_stdlib_error(std::errc::invalid_argument);
 
     internal_message msg;

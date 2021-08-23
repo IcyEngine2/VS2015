@@ -7,8 +7,10 @@
 #include <icy_engine/core/icy_map.hpp>
 #include <icy_engine/utility/icy_variant.hpp>
 
+
 namespace icy
 {
+    class json;
     enum class resource_locale : uint32_t
     {
         none,
