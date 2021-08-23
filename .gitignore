@@ -2,6 +2,7 @@ bin
 obj
 lib
 dat
+shared
 *.vs
 build/test
 build/kuzzchat
