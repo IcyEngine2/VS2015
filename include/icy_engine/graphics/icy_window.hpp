@@ -6,8 +6,8 @@
 #include <icy_engine/core/icy_matrix.hpp>
 #include <icy_engine/core/icy_color.hpp>
 #include <icy_engine/core/icy_string.hpp>
-#include <icy_engine/core/icy_blob.hpp>
 #include <icy_engine/utility/icy_variant.hpp>
+#include <icy_engine/resource/icy_engine_resource.hpp>
 
 namespace icy
 {
@@ -127,23 +127,13 @@ namespace icy
     };
     struct window_render_item
     {
-        window_render_item() noexcept = default;
-        window_render_item(window_render_item&& rhs) noexcept : type(rhs.type),
-            min_x(rhs.min_x), min_y(rhs.min_y), max_x(rhs.max_x), max_y(rhs.max_y),
-            color(rhs.color), handle(rhs.handle), blob(std::move(rhs.blob))
-        {
-            rhs.handle = nullptr;
-        }
-        ICY_DEFAULT_MOVE_ASSIGN(window_render_item);
-        ~window_render_item() noexcept;
         window_render_item_type type = window_render_item_type::none;
         float min_x = 0;
         float min_y = 0;
         float max_x = 0;
         float max_y = 0;
         color color;
-        void* handle = nullptr;
-        blob blob;
+        guid data;
     };
     struct window_cursor
     {

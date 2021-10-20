@@ -1,6 +1,7 @@
 #include <icy_engine/core/icy_json.hpp>
 #include "jsmn.h"
 #include <cmath>
+#include <icy_engine/core/icy_color.hpp>
 
 using namespace icy;
 
@@ -440,6 +441,12 @@ error_type json::get(const string_view key, guid& value) const noexcept
     if (const auto ptr = find(key))
         return to_value(ptr->get(), value);
     return make_stdlib_error(std::errc::invalid_argument);    
+}
+error_type json::get(const string_view key, color& value) const noexcept
+{
+    if (const auto ptr = find(key))
+        return to_value(*ptr, value);
+    return make_stdlib_error(std::errc::invalid_argument);
 }
 error_type json::get(const string_view key, clock_type::time_point& value) const noexcept
 {

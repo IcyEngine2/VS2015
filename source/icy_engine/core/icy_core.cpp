@@ -257,35 +257,6 @@ void mutex::unlock() noexcept
 {
 	LeaveCriticalSection(reinterpret_cast<CRITICAL_SECTION*>(this));
 }
-/*
-void cvar::wake() noexcept
-{
-    WakeConditionVariable(reinterpret_cast<CONDITION_VARIABLE*>(this));
-}
-error_type cvar::wait(mutex& mutex, const duration_type timeout) noexcept
-{
-    if (timeout.count() < 0)
-        return make_stdlib_error(std::errc::invalid_argument);
-
-    mutex.lock();
-    const auto sleep = SleepConditionVariableCS(
-        reinterpret_cast<CONDITION_VARIABLE*>(this), 
-        reinterpret_cast<CRITICAL_SECTION*>(&mutex), 
-        ms_timeout(timeout));
-    mutex.unlock();
-    if (!sleep)
-    {
-        if (const auto error = last_system_error())
-        {
-            if (error == make_system_error(make_system_error_code(ERROR_TIMEOUT)))
-                return make_stdlib_error(std::errc::timed_out);
-            else
-                return error;
-        }
-    }
-    return error_type();
-}
-*/
 
 sync_handle::~sync_handle() noexcept
 {
@@ -593,6 +564,11 @@ error_type icy::win32_debug_print(const string_view str) noexcept
     return error_type();
 }
 
+detail::global_init_entry* detail::global_init_entry::list = nullptr;
+detail::global_init_entry::global_init_entry(const func_type func) noexcept : func(func), prev(list)
+{
+    list = this;
+}
 /*
     library ole32("ole32");
         ICY_ERROR(ole32.initialize());

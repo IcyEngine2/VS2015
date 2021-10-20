@@ -3,7 +3,9 @@
 
 using namespace icy;
 
-ICY_DECLARE_GLOBAL(event_system::g_lock);
+ICY_STATIC_NAMESPACE_BEG
+static mutex g_lock;
+ICY_STATIC_NAMESPACE_END
 ICY_DECLARE_GLOBAL(event_system::g_list);
 ICY_DECLARE_GLOBAL(event_system::g_error);
 
@@ -27,7 +29,7 @@ void event_data::release() noexcept
 }
 error_type event_data::post(event_data& new_event) noexcept
 {
-    ICY_LOCK_GUARD(event_system::g_lock);
+    ICY_LOCK_GUARD(g_lock);
     auto next = event_system::g_list;
     auto error = error_type{};
     while (next)
@@ -53,11 +55,6 @@ error_type event_data::create(const event_type type, event_system* const source,
     return error_type();
 }
 
-error_type event_system::initialize() noexcept
-{
-    ICY_ERROR(g_lock.initialize());
-    return error_type();
-}
 void event_system::filter(const uint64_t mask) noexcept
 {
     if (mask == m_mask)
@@ -181,7 +178,7 @@ event_type icy::next_event_user() noexcept
 }
 error_type icy::post_quit_event() noexcept
 {
-    ICY_LOCK_GUARD(event_system::g_lock);
+    ICY_LOCK_GUARD(g_lock);
     auto next = event_system::g_list;
     error_type error;
     while (next)
@@ -196,8 +193,10 @@ error_type icy::post_quit_event() noexcept
 error_type icy::post_error_event(const error_type error) noexcept
 {
     {
-        ICY_LOCK_GUARD(event_system::g_lock);
+        ICY_LOCK_GUARD(g_lock);
         event_system::g_error = error;
     }
     return post_quit_event();
 }
+
+static icy::detail::global_init_entry g_init([] { return g_lock.initialize(); });

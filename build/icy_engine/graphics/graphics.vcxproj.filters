@@ -13,9 +13,6 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="Private Header Files">
-      <UniqueIdentifier>{400c4242-5e4c-4066-86f2-9166472824c0}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Shaders">
       <UniqueIdentifier>{7abab056-782c-423f-8450-0d1af841f079}</UniqueIdentifier>
     </Filter>
@@ -24,25 +21,16 @@
     <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_window.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_adapter.cpp">
+    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_vulkan.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_image_bmp.cpp">
+    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_directx.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_image.cpp">
+    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_render.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_image_jpg.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_image_png.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_image_tif.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_display.cpp">
+    <ClCompile Include="..\..\..\source\icy_engine\graphics\icy_render_core.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -53,22 +41,22 @@
     <ClInclude Include="..\..\..\include\icy_engine\graphics\icy_window.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\include\icy_engine\graphics\icy_adapter.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_adapter.hpp">
-      <Filter>Private Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\..\include\icy_engine\graphics\icy_display.hpp">
       <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_image_core.hpp">
-      <Filter>Private Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\include\icy_engine\graphics\icy_render.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\include\icy_engine\graphics\icy_render_core.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\icy_engine\graphics\icy_gpu.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_vulkan.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\source\icy_engine\graphics\icy_directx.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

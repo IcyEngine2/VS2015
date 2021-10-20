@@ -1,366 +1,283 @@
-#include <icy_engine/core/icy_file.hpp>
-#include <icy_engine/core/icy_event_thread.hpp>
-#include <icy_engine/graphics/icy_graphics.hpp>
-#include <icy_engine/image/icy_image.hpp>
-#if _DEBUG
-#pragma comment(lib, "icy_engine_cored")
-#pragma comment(lib, "icy_engine_graphicsd")
-#pragma comment(lib, "icy_engine_imaged")
-#pragma comment(lib, "liblitehtmld")
-#else
-#pragma comment(lib, "icy_engine_core")
-#pragma comment(lib, "icy_engine_graphics")
-#pragma comment(lib, "icy_engine_image")
-#endif
-
-#include "../../libs/duktape/duktape.h"
-#include <Windows.h>
-#include <icy_engine/html/icy_css.hpp>
+﻿#include <icy_engine/core/icy_core.hpp>
+#include <icy_engine/core/icy_array.hpp>
+#include <icy_engine/core/icy_string.hpp>
+#include <icy_engine/core/icy_thread.hpp>
+#include <icy_engine/graphics/icy_window.hpp>
+#include <icy_engine/graphics/icy_gpu.hpp>
+#include <icy_engine/graphics/icy_display.hpp>
+#include <icy_engine/resource/icy_engine_resource.hpp>
+#include <icy_engine/utility/icy_imgui.hpp>
 
 using namespace icy;
 
-struct application;
+#if _DEBUG
+#pragma comment(lib, "icy_engine_cored")
+#pragma comment(lib, "icy_engine_resourced")
+#pragma comment(lib, "icy_engine_graphicsd")
+#endif
 
-
-class game_system : public event_system
+class render_thread : public icy::thread
 {
 public:
-    game_system() noexcept
+    error_type run() noexcept override
     {
-        filter(event_type::window_any | event_type::render_frame);
-    }
-    ~game_system() noexcept
-    {
-        filter(0);
-    }
-    error_type exec() noexcept override;
-    application* app = nullptr;
-    cvar var;
-    mutex lock;
-private:
-    error_type signal(const event_data& event) noexcept override
-    {
-        var.wake();
+        shared_ptr<event_queue> loop;
+        ICY_ERROR(create_event_system(loop, 0
+            | event_type::gui_render
+            | event_type::global_timer
+            | event_type::resource_load
+            | event_type::render_event
+        ));
+
+        render_gui_frame gui_render;
+        timer win_render_timer;
+        timer gui_render_timer;
+        ICY_ERROR(win_render_timer.initialize(SIZE_MAX, std::chrono::nanoseconds(1'000'000'000 / 60)));
+        ICY_ERROR(gui_render_timer.initialize(SIZE_MAX, std::chrono::nanoseconds(1'000'000'000 / 60)));
+
+        map<guid, resource_data> list;
+        auto resource = resource_system::global();
+        resource->list(list);
+
+        auto cur_count = 0u;
+        auto max_count = 0u;
+        render_scene scene;
+        for (auto&& pair : list)
+        {
+            if (pair.value.type == resource_type::mesh ||
+                pair.value.type == resource_type::material ||
+                pair.value.type == resource_type::node)
+            {
+                resource_header header;
+                header.index = pair.key;
+                header.type = pair.value.type;
+                ICY_ERROR(resource->load(header));
+                ++max_count;
+
+                if (header.type == resource_type::node)
+                {
+                    ICY_ERROR(scene.nodes.insert(header.index, render_node()));
+                }
+                else if (header.type == resource_type::material)
+                {
+                    ICY_ERROR(scene.materials.insert(header.index, render_material()));
+                }
+                else if (header.type == resource_type::mesh)
+                {
+                    ICY_ERROR(scene.meshes.insert(header.index, render_mesh()));
+                }
+            }
+        }
+        auto query = 0u;
+        ICY_ERROR(imgui_display->repaint(query));
+
+        while (*loop)
+        {
+            event event;
+            ICY_ERROR(loop->pop(event));
+            if (!event)
+                break;
+
+            if (event->type == event_type::global_timer)
+            {
+                const auto pair = event->data<timer::pair>();
+                if (pair.timer == &win_render_timer)
+                {
+                    render_gui_frame copy_frame;
+                    ICY_ERROR(copy(gui_render, copy_frame));
+                    ICY_ERROR(display_system->repaint("ImGui"_s, copy_frame));
+                }
+                else if (pair.timer == &gui_render_timer)
+                {
+                    ICY_ERROR(imgui_display->repaint(query));
+                }
+            }
+            else if (event->type == event_type::gui_render)
+            {
+                auto& event_data = event->data<imgui_event>();
+                if (event_data.type == imgui_event_type::display_render)
+                {
+                    gui_render = std::move(event_data.render);
+                }
+            }
+            else if (event->type == event_type::render_event)
+            {
+                ICY_ERROR(display_system->repaint("3D"_s, render_surface));
+            }
+            else if (event->type == event_type::resource_load)
+            {
+                auto& event_data = event->data<resource_event>();
+                if (event_data.error)
+                    continue;
+
+                if (event_data.header.type == resource_type::material)
+                {
+                    const auto it = scene.materials.find(event_data.header.index);
+                    if (it != scene.materials.end())
+                    {
+                        it->value = std::move(event_data.material());
+                        ++cur_count;
+                    }
+                }
+                else if (event_data.header.type == resource_type::mesh)
+                {
+                    const auto it = scene.meshes.find(event_data.header.index);
+                    if (it != scene.meshes.end())
+                    {
+                        it->value = std::move(event_data.mesh());
+                        ++cur_count;
+                    }
+                }
+                else if (event_data.header.type == resource_type::node)
+                {
+                    const auto it = scene.nodes.find(event_data.header.index);
+                    if (it != scene.nodes.end())
+                    {
+                        it->value = std::move(event_data.node());
+                        ++cur_count;
+                    }
+                }
+                if (cur_count == max_count)
+                {
+                    render_surface->repaint(scene);
+                }
+            }
+        }
         return error_type();
     }
+    shared_ptr<window_system> window_system;
+    shared_ptr<display_system> display_system;
+    shared_ptr<imgui_system> imgui_system;
+    shared_ptr<imgui_display> imgui_display;
+    shared_ptr<render_system> render_system;
+    shared_ptr<render_surface> render_surface;
+    //guid root_node;
 };
 
-struct application
+
+
+error_type main_ex(heap& heap)
 {
-    error_type run(const uint64_t luid) noexcept;
-    ~application() noexcept
+    shared_ptr<event_queue> loop;
+    ICY_ERROR(create_event_system(loop, 0
+        | event_type::window_resize
+        | event_type::gui_update
+        | event_type::resource_store
+        | event_type::resource_load
+    ));
+
+    shared_ptr<resource_system> rsystem;
+    ICY_ERROR(create_resource_system(rsystem, "icy-resource.dat"_s, 1_gb));
+    ICY_ERROR(rsystem->thread().launch());
+    ICY_ERROR(rsystem->thread().rename("Resource Thread"_s))
+
+    shared_ptr<window_system> window_system;
+    ICY_ERROR(create_window_system(window_system));
+    ICY_ERROR(window_system->thread().launch());
+    ICY_ERROR(window_system->thread().rename("Window Thread"_s))
+
+    shared_ptr<window> window;
+    ICY_ERROR(window_system->create(window));
+    ICY_ERROR(window->restyle(window_style::windowed));
+
+    shared_ptr<imgui_system> imgui_system;
+    ICY_ERROR(create_imgui_system(imgui_system));
+    ICY_ERROR(imgui_system->thread().launch());
+    ICY_ERROR(imgui_system->thread().rename("ImGui Thread"_s));
+
+    shared_ptr<imgui_display> imgui_display;
+    ICY_ERROR(imgui_system->create_display(imgui_display, window));
+
+    array<shared_ptr<gpu_device>> gpu;
+    ICY_ERROR(create_gpu_list(gpu_flags::d3d11 | gpu_flags::hardware | gpu_flags::debug, gpu));
+
+    shared_ptr<display_system> display_system;
+    ICY_ERROR(create_display_system(display_system, window, gpu[0]));
+    ICY_ERROR(display_system->thread().launch());
+    ICY_ERROR(display_system->thread().rename("Display Thread"_s));
+
+
+    shared_ptr<render_system> render_system;
+    ICY_ERROR(create_render_system(render_system, gpu[0]));
+    ICY_ERROR(render_system->thread().launch());
+    ICY_ERROR(render_system->thread().rename("DirectX Thread"_s));
+
+    shared_ptr<render_surface> render_surface;
+    ICY_ERROR(render_system->create({ 640, 480 }, render_surface));
+
+   /* map<guid, resource_data> list;
+    rsystem->list(list);
+    guid root_node;
+    for (auto&& pair : list)
     {
-        event::post(nullptr, event_type::global_quit);
-        if (game) game->wait();
-        if (display) display->wait();
-        if (window) window->wait();
-    }
-    shared_ptr<event_thread<window_system>> window;
-    shared_ptr<event_thread<display_system>> display;
-    shared_ptr<event_thread<game_system>> game;
-    shared_ptr<render_factory> render_10;
-    shared_ptr<render_factory> render_11;
-};
-
-static duk_ret_t native_print(duk_context* ctx) {
-    duk_push_string(ctx, " ");
-    duk_insert(ctx, 0);
-    duk_join(ctx, duk_get_top(ctx) - 1);
-    char str[256];
-    sprintf_s(str, "%s\n", duk_safe_to_string(ctx, -1));
-    OutputDebugStringA(str);
-    return 0;
-}
-static duk_ret_t native_adder(duk_context* ctx) {
-    int i;
-    int n = duk_get_top(ctx);  /* #args */
-    double res = 0.0;
-
-    for (i = 0; i < n; i++) {
-        res += duk_to_number(ctx, i);
-    }
-
-    duk_push_number(ctx, res);
-    return 1;  /* one return value */
-}
-
-#include <icy_engine/html/icy_html.hpp>
-#include <icy_engine/html/icy_css.hpp>
-
-error_type game_system::exec() noexcept
-{
-    ICY_SCOPE_EXIT{ event::post(nullptr, event_type::global_quit); };
-
-    render_svg_font font;
-    render_svg_font_data font_data;
-    ICY_ERROR(copy("Arial"_s, font_data.name));
-    ICY_ERROR(font_data.flags.push_back(render_svg_text_flag(render_svg_text_flag::font_size, 72)));
-    ICY_ERROR(app->render_10->create_svg_font(font_data, font));
-    
-
-    const auto read_file = [](const string_view name, array<char>& bytes)
-    {
-        string str;
-        ICY_ERROR(to_string("G:/VS2015/dat/%1"_s, str, name));
-        file f;
-        ICY_ERROR(f.open(str, file_access::read, file_open::open_existing, file_share::none));
-        auto size = f.info().size;
-        ICY_ERROR(bytes.resize(size));
-        ICY_ERROR(f.read(bytes.data(), size));
-        return error_type();
-    };
-
-    html_document_css doc;
-    array<char> bytes;
-    ICY_ERROR(read_file("t1.html"_s, bytes));
-    ICY_ERROR(doc.initialize(bytes));
-
-    css_system css;
-    ICY_ERROR(create_css_system(nullptr, css));
-
-    ICY_ERROR(read_file("styles.css"_s, bytes));
-    css_style style;
-    ICY_ERROR(css.create(""_s, bytes, style));
-    ICY_ERROR(css.insert(style));
-
-    for (auto k = 0u; k < doc.size(); ++k)
-    {
-        auto node = doc.node(k);
-        auto chk = node->tag() == "p"_s;
-        if (chk)
-            chk = true;
-        
-        ICY_ERROR(css.apply(doc, k));
-
-        if (chk)
+        if (pair.value.type == resource_type::node && pair.value.name == "RootNode"_s)
         {
-            auto clr = node->color();
-            clr = {};
-        }
-    }
-    
-
-   /* duk_context* ctx = duk_create_heap_default();
-
-    duk_push_c_function(ctx, native_print, DUK_VARARGS);
-    duk_put_global_string(ctx, "print");
-    duk_push_c_function(ctx, native_adder, DUK_VARARGS);
-    duk_put_global_string(ctx, "adder");
-
-    duk_eval_string(ctx, "print('Hello world!');");
-
-    duk_eval_string(ctx, "print('2+3=' + adder(2, 3));");
-    duk_pop(ctx);  // pop eval result
-
-    duk_destroy_heap(ctx);*/
-    
-
-    window_size size = window_size(1424, 720);
-    render_svg_geometry geo;
-    render_texture texture_geo;
-    app->render_10->create_svg_geometry(bytes, geo);
-    {   
-        render_commands_2d cmds;
-        ICY_ERROR(app->render_10->open_commands_2d(cmds));
-        ICY_ERROR(cmds.draw(geo));
-        ICY_ERROR(cmds.close(size, texture_geo));
-    }
-
-    const auto func = [&](size_t index)
-    {
-        string str;
-        ICY_ERROR(to_string("Frame %1"_s, str, index));
-
-        render_svg_text text;
-        ICY_ERROR(app->render_10->create_svg_text(str, colors::white, window_size(), font, text));
-
-        render_texture texture_num;
-        render_texture texture_frame;
-        {
-            render_commands_2d cmds;
-            ICY_ERROR(app->render_10->open_commands_2d(cmds));
-            ICY_ERROR(cmds.draw(text, render_d2d_matrix(), 0));
-            ICY_ERROR(cmds.close(size, texture_num));
-        }
-        render_commands_3d cmds;
-        ICY_ERROR(app->render_10->open_commands_3d(cmds));
-        ICY_ERROR(cmds.clear(icy::color::from_rgba(0, 0, index % 255, 255)));
-        ICY_ERROR(cmds.draw(render_d2d_rectangle_u(0, 0, size.x, size.y), texture_geo));
-        ICY_ERROR(cmds.draw(render_d2d_rectangle_u(0, 0, size.x, size.y), texture_num));
-        ICY_ERROR(cmds.close(size, texture_frame));
-
-        //matrix<color> m = matrix<color>(size.y, size.x);
-        //ICY_ERROR(texture_frame.save({ 0, 0, size.x, size.y }, m));
-        //ICY_ERROR(image::save(icy::detail::global_heap, m, "G:/VS2015/dat/img1.png"_s, image_type::png));
-
-
-        ICY_ERROR(app->display->system->render(texture_frame));
-        return error_type();
-    };
-    ICY_ERROR(func(0));
-
-    auto now_0 = clock_type::now();
-    auto frame_0 = 0_z;
-    
-    while (true)
-    {
-        auto event = pop();
-        if (!event)
-        {
-            ICY_ERROR(var.wait(lock));
-            continue;
-        }
-        if (event->type == event_type::global_quit)
+            root_node = pair.key;
             break;
+        }
+    }*/
+
+    shared_ptr<render_thread> render_thread;
+    ICY_ERROR(make_shared(render_thread));
+    render_thread->window_system = window_system;
+    render_thread->display_system = display_system;
+    render_thread->imgui_system = imgui_system;
+    render_thread->imgui_display = imgui_display;
+    render_thread->render_system = render_system;
+    render_thread->render_surface = render_surface;
+    ICY_SCOPE_EXIT{ render_thread->wait(); };
+
+    ICY_ERROR(window->show(true));
+
+    map<guid, resource_data> list;
+    rsystem->list(list);
+
+    if (list.empty())
+    {
+        resource_header header;
+        header.index = guid::create();
+        header.type = resource_type::node;
+        ICY_ERROR(rsystem->store(header, "D:/Downloads/53-cottage_fbx/cottage_fbx.fbx"_s));
+    }
+    else
+    {
+        ICY_ERROR(render_thread->launch());
+        ICY_ERROR(render_thread->rename("Render Thread"_s));
+    }
+
+    while (*loop)
+    {
+        event event;
+        ICY_ERROR(loop->pop(event));
+        if (!event)
+            break;
+
         if (event->type == event_type::window_resize)
         {
-            size = event->data<window_size>();
+            const auto& event_data = event->data<window_message>();
+            ICY_ERROR(display_system->resize(event_data.size));
         }
-        if (event->type == event_type::render_frame)
+        else if (event->type == event_type::gui_update)
         {
-            auto frame = event->data<render_frame>();
-            ICY_ERROR(func(frame.index + 1));
-
-            const auto now_1 = clock_type::now();
-            const auto delta = std::chrono::duration_cast<std::chrono::milliseconds>(now_1 - now_0);
-            if (delta.count() >= 1000)
+            auto& event_data = event->data<imgui_event>();            
+        }
+        else if (event->type == event_type::resource_store)
+        {
+            if (list.empty())
             {
-                auto fps = (frame.index - frame_0) * 1000 / delta.count();
-                frame_0 = frame.index;
-                now_0 = now_1;
-                string name;
-                auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(frame.time[render_frame::time_display]);
-                ICY_ERROR(to_string("FPS [%1], Frame #%2, Time = %3 ms"_s, name, fps, frame.index, ms.count()));
-                ICY_ERROR(app->window->system->rename(name));
+                ICY_ERROR(render_thread->launch());
+                ICY_ERROR(render_thread->rename("Render Thread"_s));
             }
         }
     }
     return error_type();
 }
-namespace icy
-{
-    error_type create_event_system(shared_ptr<game_system>& system, application* app) noexcept
-    {
-        shared_ptr<game_system> ptr;
-        ICY_ERROR(make_shared(ptr));
-        ICY_ERROR(ptr->lock.initialize());
-        ptr->app = app;
-        system = std::move(ptr);
-        return error_type();
-    }
-}
 
-error_type main_func(const uint64_t luid) noexcept
-{
-    //win32_message("Hi"_s, "Hi"_s);
-    array<adapter> adapters;
-    auto adapter_flags = adapter_flags::debug;
-    adapter_flags = adapter_flags | adapter_flags::d3d11 | adapter_flags::d3d10 | adapter_flags::hardware;
-    
-    ICY_ERROR(adapter::enumerate(adapter_flags, adapters));
-    adapter adapter11;
-    adapter adapter10;
 
-    if (!adapters.empty())
-    {
-        for (auto&& ad : adapters)
-        {
-            if ((ad.flags() & adapter_flags::d3d11)) //&& ad.name().find("NVIDIA"_s) != ad.name().end())
-            {
-                adapter11 = ad;
-                break;
-            }
-        }
-       /* for (auto&& ad : adapters)
-        {
-            // 40019
-            if ((ad.flags() & adapter_flags::d3d10) && ad.name() == adapter11.name())
-            {
-                adapter10 = ad;
-                break;
-            }
-        }*/
-    }
-    //if (!adapter11 || !adapter10)
-     //   return last_system_error();
-
-    adapter10 = adapter11;
-
-    application app;
-    ICY_ERROR(create_event_thread(app.window, default_window_flags));
-    ICY_ERROR(app.window->launch());
-
-    ICY_ERROR(create_event_thread(app.display, adapter11, app.window->system->handle(), display_flags::none));
-    ICY_ERROR(app.display->launch());
-
-    display_options opts;
-    opts.vsync = display_frame_vsync;
-    ICY_ERROR(app.display->system->options(opts));
-
-    ICY_ERROR(create_render_factory(app.render_10, adapter10, render_flags::sRGB));
-    //ICY_ERROR(create_render_factory(app.render_10, adapter10, render_flags::none));
-    
-    ICY_ERROR(create_event_thread(app.game, &app));
-    ICY_ERROR(app.game->launch());
-    ICY_ERROR(app.game->wait());
-    ICY_ERROR(app.window->wait());
-    return error_type();
-}
 
 int main()
 {
     heap gheap;
-    if (const auto error = gheap.initialize(heap_init::global(16_gb)))
-        return error.code;
-
-    if (const auto error = main_func(0))
-    {
-        string str;
-        to_string(error, str);
-        win32_message(str, "App exec");
-        return error.code;
-    }
-    return 0;
+    gheap.initialize(heap_init::global(16_mb));
+    return main_ex(gheap).code;
 }
-
-/*
-  render_index idx_mesh;
-  render_index idx_obj;
-  list->create(render_type::mesh, idx_mesh);
-  list->create(render_type::object, idx_obj);
-
-  render_mesh data_mesh;
-  render_vertex v0;
-  render_vertex v1;
-  render_vertex v2;
-  v1.pos = { 1, 0, 0 };
-  v2.pos = { 0, 1, 0 };
-  data_mesh.vertices.push_back(v0);
-  data_mesh.vertices.push_back(v1);
-  data_mesh.vertices.push_back(v2);
-
-  render_object data_obj;
-  data_obj.data.push_back({ render_index(), idx_mesh });
-
-  render_camera data_camera;
-  data_camera.pos = { 1, 1, 1 };
-  data_camera.dir = { -1, -1, -1 };
-  data_camera.min_z = 0.1;
-  data_camera.max_z = 100.0;
-  data_camera.view = { 0, 0, 800, 500 };
-
-
-  list->update(idx_mesh, std::move(data_mesh));
-  list->update(idx_obj, std::move(data_obj));
-  list->camera(data_camera);
-  list->exec();
-
-icy::file file;
- file.open("D:/Downloads/tiger.svg"_s, file_access::read, file_open::open_existing, file_share::read);
- array<char> svg_data;
- svg_data.resize(file.info().size);
- auto size = svg_data.size();
- file.read(svg_data.data(), size);
-
- render_svg_geometry svg2;
- svg2.initialize(render_d2d_matrix(), svg_data);*/

@@ -2,7 +2,7 @@
 
 #include <icy_engine/core/icy_event.hpp>
 #include "icy_render_core.hpp"
-#include "icy_adapter.hpp"
+#include "icy_gpu.hpp"
 #include "icy_window.hpp"
 
 namespace icy
@@ -30,10 +30,9 @@ namespace icy
             return const_cast<icy::thread&>(static_cast<const display_system*>(this)->thread());
         }
         virtual error_type repaint(const string_view tag, render_gui_frame& frame) noexcept = 0;
-        //virtual error_type repaint(const render_surface& texture) noexcept = 0;
-        //virtual error_type repaint(const render_surface& texture, const window_size offset, const window_size size) noexcept = 0;
+        virtual error_type repaint(const string_view tag, shared_ptr<render_surface> surface) noexcept = 0;
         virtual error_type resize(const window_size size) noexcept = 0;
         virtual error_type frame(const duration_type delta) noexcept = 0;
     };
-    error_type create_display_system(shared_ptr<display_system>& system, shared_ptr<window> window, const adapter adapter) noexcept;
+    error_type create_display_system(shared_ptr<display_system>& system, const shared_ptr<window> window, const shared_ptr<gpu_device> gpu) noexcept;
 }

@@ -371,4 +371,18 @@ namespace icy
             return const_cast<pointer>(base::m_data);
         }
     };
+    template<typename T>
+    error_type copy(const const_matrix_view<T> src, matrix<T>& dst) noexcept
+    {
+        dst = matrix<T>(src.rows(), src.cols());
+        if (dst.size() != src.size())
+            return make_stdlib_error(std::errc::not_enough_memory);
+
+        for (auto row = 0u; row < src.rows(); ++row)
+        {
+            for (auto col = 0u; col < src.cols(); ++col)
+                dst.at(row, col) = src.at(row, col);
+        }
+        return error_type();
+    }
 }

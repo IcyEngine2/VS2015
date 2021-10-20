@@ -13,10 +13,12 @@
 #pragma comment(lib, "icy_engine_cored")
 #pragma comment(lib, "icy_engine_graphicsd")
 #pragma comment(lib, "icy_engine_networkd")
+#pragma comment(lib, "icy_engine_resourced")
 #else
 #pragma comment(lib, "icy_engine_core")
 #pragma comment(lib, "icy_engine_graphics")
 #pragma comment(lib, "icy_engine_network")
+#pragma comment(lib, "icy_engine_resource")
 #endif
 
 using namespace icy;
@@ -229,8 +231,9 @@ error_type cmd_init(map<string_view, command_pair>& cmds, const auth_config& con
 
 error_type main_ex() noexcept
 {
-    ICY_ERROR(event_system::initialize());
-    
+    shared_ptr<resource_system> rsystem;
+    ICY_ERROR(create_resource_system(rsystem, string_view(), 0));
+
     shared_ptr<event_queue> loop;
     ICY_ERROR(create_event_system(loop, 0
         | event_type::network_connect

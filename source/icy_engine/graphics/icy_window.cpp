@@ -5,9 +5,7 @@
 #include <icy_engine/core/icy_thread.hpp>
 #include <icy_engine/core/icy_set.hpp>
 #include <icy_engine/core/icy_map.hpp>
-#include <icy_engine/core/icy_blob.hpp>
 #include <icy_engine/utility/icy_com.hpp>
-#include <icy_engine/graphics/icy_image.hpp>
 #include <icy_engine/graphics/icy_render.hpp>
 
 #if _WIN32
@@ -94,7 +92,7 @@ struct internal_message
     cursor_type cursor;
     shared_ptr<query_type> query;
     array<window_render_item> repaint;
-    shared_ptr<render_surface> surface;
+    //shared_ptr<render_surface> surface;
     array<window_taskbar::action_type> actions;  
 };
 struct win32_flag_enum
@@ -421,9 +419,9 @@ public:
     {
         return *m_render;
     }
-    com_ptr<ID2D1Bitmap> image(const blob blob) const noexcept 
+    com_ptr<ID2D1Bitmap> image(const guid data) const noexcept 
     {
-        auto it = m_images.find(blob.index);
+        auto it = m_images.find(data);
         if (it != m_images.end())
             return it->value;
         return nullptr;
@@ -462,7 +460,7 @@ private:
     HCURSOR m_cursor = nullptr;
     com_ptr<ID2D1Factory> m_factory;
     com_ptr<ID2D1DCRenderTarget> m_render;
-    map<uint32_t, com_ptr<ID2D1Bitmap>> m_images;
+    map<guid, com_ptr<ID2D1Bitmap>> m_images;
 #endif
     wchar_t m_cname_win[64] = {};
     wchar_t m_cname_msg[64] = {};
@@ -999,13 +997,13 @@ LRESULT window_data_sys::proc(uint32_t msg, WPARAM wparam, LPARAM lparam) noexce
                  }
                  case window_render_item_type::text:
                  {
-                     brush->SetColor(to_color(item.color));
-                     render.DrawTextLayout({ item.min_x, item.min_y }, static_cast<IDWriteTextLayout*>(item.handle), brush);
+                     //brush->SetColor(to_color(item.color));
+                     //render.DrawTextLayout({ item.min_x, item.min_y }, static_cast<IDWriteTextLayout*>(item.handle), brush);
                      break;
                  }
                  case window_render_item_type::image:
                  {
-                     if (auto image = m_system.image(item.blob))
+                     if (auto image = m_system.image(item.data))
                          render.DrawBitmap(image, to_rect(item));
                      //brush->SetColor(to_color(item.color));
                      //render.DrawTextLayout({ item.min_x, item.min_y }, static_cast<IDWriteTextLayout*>(item.handle), brush);
@@ -1422,7 +1420,7 @@ error_type window_taskbar_system::popup(const uint32_t taskbar, const const_arra
         return last_system_error();
     ICY_SCOPE_EXIT{ win32_destroy_menu(menu); };
 
-    for (auto k = 0u; k < actions.size(); ++k)
+    for (auto k = 0_z; k < actions.size(); ++k)
     {
         array<wchar_t> wtext;
         ICY_ERROR(to_utf16(actions[k].text.str(), wtext));
@@ -1430,7 +1428,7 @@ error_type window_taskbar_system::popup(const uint32_t taskbar, const const_arra
             return last_system_error();
     }
 
-    const auto id = win32_track_popup_menu(menu, TPM_RETURNCMD | TPM_NONOTIFY, it->value.cursor_x, it->value.cursor_y, 0, m_handle, nullptr);
+    const size_t id = win32_track_popup_menu(menu, TPM_RETURNCMD | TPM_NONOTIFY, it->value.cursor_x, it->value.cursor_y, 0, m_handle, nullptr);
     if (!id)
         return last_system_error();
 
@@ -1584,7 +1582,7 @@ error_type window_system_data::initialize() noexcept
         func(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
     decltype(&::RegisterClassExW) win32_register_class = nullptr;
-    
+
     ICY_USER32_FUNC(win32_translate_message, TranslateMessage);
     ICY_USER32_FUNC(win32_dispatch_message, DispatchMessageW);
     ICY_USER32_FUNC(win32_get_keyboard_state, GetKeyboardState);
@@ -1659,14 +1657,14 @@ error_type window_system_data::initialize() noexcept
         return last_system_error();
     }
 
-    using d2d1_func_type = HRESULT(WINAPI *)(D2D1_FACTORY_TYPE, REFIID, const D2D1_FACTORY_OPTIONS*, void**);
+    using d2d1_func_type = HRESULT(WINAPI*)(D2D1_FACTORY_TYPE, REFIID, const D2D1_FACTORY_OPTIONS*, void**);
     if (auto func = static_cast<d2d1_func_type>(m_lib_d2d1.find("D2D1CreateFactory")))
     {
         D2D1_FACTORY_OPTIONS options = {};
 #if _DEBUG
         options.debugLevel = D2D1_DEBUG_LEVEL::D2D1_DEBUG_LEVEL_WARNING;
 #endif
-        ICY_COM_ERROR(func(D2D1_FACTORY_TYPE_MULTI_THREADED, 
+        ICY_COM_ERROR(func(D2D1_FACTORY_TYPE_MULTI_THREADED,
             __uuidof(ID2D1Factory), &options, reinterpret_cast<void**>(&m_factory)));
         const auto pixel = D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED);
         const auto desc = D2D1::RenderTargetProperties(D2D1_RENDER_TARGET_TYPE::D2D1_RENDER_TARGET_TYPE_DEFAULT, pixel);
@@ -1681,7 +1679,7 @@ error_type window_system_data::initialize() noexcept
     ICY_ERROR(make_shared(m_thread));
     m_thread->system = this;
 
-    uint64_t mask = event_type::system_internal;
+    uint64_t mask = event_type::system_internal | event_type::resource_load;
 #if X11_GUI
     mask |= event_type::global_timer;
 #endif
@@ -1749,6 +1747,23 @@ error_type window_system_data::exec() noexcept
                 continue;
             }
 #endif
+            if (event->type == event_type::resource_load)
+            {
+                auto& event_data = event->data<resource_event>();
+                auto it = m_images.find(event_data.header.index);
+                if (it == m_images.end() || it->value)
+                    continue;
+
+                const auto& image = event_data.image();
+                com_ptr<ID2D1Bitmap> bitmap;
+                auto props = D2D1::BitmapProperties(
+                    D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
+                ICY_COM_ERROR(m_render->CreateBitmap(D2D1::SizeU(uint32_t(image.cols()), uint32_t(image.rows())),
+                    image.data(), uint32_t(image.cols() * 4), props, &bitmap));
+                it->value = std::move(bitmap);
+                continue;
+            }
+
             if (event->type != event_type::system_internal)
                 continue;
 
@@ -1802,28 +1817,19 @@ error_type window_system_data::exec() noexcept
             }
             else if (event_data.type == internal_message_type::repaint)
             {
+                auto rsystem = resource_system::global();
                 for (auto&& item : event_data.repaint)
                 {
                     if (item.type == window_render_item_type::image)
                     {
-                        auto jt = m_images.find(item.blob.index);
-                        if (jt == m_images.end())
+                        auto jt = m_images.find(item.data);
+                        if (jt == m_images.end() && rsystem)
                         {
-                            const auto bytes = blob_data(item.blob);
-
-                            icy::image image;
-                            ICY_ERROR(image.load(global_realloc, nullptr, bytes, image_type::png));
-                            matrix<color> colors(image.size().y, image.size().x);
-                            if (colors.empty())
-                                return make_stdlib_error(std::errc::not_enough_memory);
-                            ICY_ERROR(image.view(image_size(), colors));
-
-                            com_ptr<ID2D1Bitmap> bitmap;
-                            auto props = D2D1::BitmapProperties(
-                                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
-                            ICY_COM_ERROR(m_render->CreateBitmap(D2D1::SizeU(image.size().x, image.size().y),
-                                colors.data(), uint32_t(colors.cols() * 4), props, &bitmap));
-                            ICY_ERROR(m_images.insert(item.blob.index, std::move(bitmap)));
+                            resource_header header;
+                            header.index = item.data;
+                            header.type = resource_type::image;
+                            ICY_ERROR(rsystem->load(header));
+                            ICY_ERROR(m_images.insert(item.data, com_ptr<ID2D1Bitmap>()));
                         }
                     }
                 }
@@ -2029,10 +2035,4 @@ error_type icy::create_window_system(shared_ptr<window_system>& system) noexcept
     ICY_ERROR(new_ptr->initialize());
     system = std::move(new_ptr);
     return error_type();
-}
-
-window_render_item::~window_render_item() noexcept
-{
-    if (handle)
-        static_cast<IUnknown*>(handle)->Release();
 }

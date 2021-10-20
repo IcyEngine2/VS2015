@@ -127,7 +127,6 @@ namespace icy
     public:
         friend error_type post_quit_event() noexcept;
         friend error_type post_error_event(const error_type error) noexcept;
-        static error_type initialize() noexcept;
         virtual ~event_system() noexcept = 0
         {
 
@@ -151,7 +150,6 @@ namespace icy
         event_system* m_prev = nullptr;
         uint64_t m_mask = 0;
         std::atomic<bool> m_quit = false;
-        static mutex g_lock;
         static event_system* g_list;
     protected:
         static error_type g_error;

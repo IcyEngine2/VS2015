@@ -267,6 +267,14 @@ error_type heap::initialize(const heap_init init) noexcept
     }
     std::swap(mem, m_ptr);
     m_init = init;
+
+    if (init.global_heap)
+    {
+        for (auto ptr = detail::global_init_entry::list; ptr; ptr = ptr->prev)
+            ICY_ERROR(ptr->func());
+        detail::global_init_entry::list = nullptr;
+    }
+
     return error_type();
 }
 error_type heap::enable(const bool value) noexcept

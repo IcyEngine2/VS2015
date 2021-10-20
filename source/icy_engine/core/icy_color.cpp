@@ -1,5 +1,6 @@
 #include <icy_engine/core/icy_color.hpp>
 #include <icy_engine/core/icy_string.hpp>
+#include <icy_engine/core/icy_json.hpp>
 #include <cmath>
 
 using namespace icy;
@@ -379,7 +380,7 @@ color_hsv::color_hsv(const color& color) noexcept
 	static const auto eps = 1e-20F;
 	auto r = color.r * c;
 	auto g = color.g * c;
-	auto b = color.a * c;
+	auto b = color.b * c;
 
 	if (g < b)
 	{
@@ -411,5 +412,24 @@ error_type icy::to_string(const color value, string& str) noexcept
 {
 	ICY_ERROR(icy::to_string(value.bgra, 0x10, str));
 	ICY_ERROR(str.replace("0x"_s, "#"_s));
+	return error_type();
+}
+
+error_type icy::to_value(const json& input, color& output) noexcept
+{
+	ICY_ERROR(input.get("r"_s, output.r));
+	ICY_ERROR(input.get("g"_s, output.g));
+	ICY_ERROR(input.get("b"_s, output.b));
+	input.get("a"_s, output.a);
+	return error_type();
+}
+error_type icy::to_json(const color input, json& output) noexcept
+{
+	output = json_type::object;
+	ICY_ERROR(output.insert("r"_s, input.r));
+	ICY_ERROR(output.insert("g"_s, input.g));
+	ICY_ERROR(output.insert("b"_s, input.b));
+	if (input.a != 0xFF)
+		ICY_ERROR(output.insert("a"_s, input.a));
 	return error_type();
 }

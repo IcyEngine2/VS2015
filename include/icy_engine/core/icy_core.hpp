@@ -489,7 +489,7 @@ namespace icy
         realloc_func m_realloc = nullptr;
         void* m_user = nullptr;
         size_t m_size = 0;
-        char m_data[1];
+        char m_data[1] = {};
     };
     struct error_type
     {
@@ -774,6 +774,18 @@ namespace icy
         uint32_t x;
         uint32_t y;
     };
+
+    namespace detail
+    {
+        struct global_init_entry
+        {
+            using func_type = error_type(*)();
+            static global_init_entry* list;
+            global_init_entry(const func_type func) noexcept;
+            const func_type func;
+            global_init_entry* const prev = nullptr;
+        };
+    }
 }
 
 #if !defined _CONSOLE

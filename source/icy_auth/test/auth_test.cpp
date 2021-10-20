@@ -1,7 +1,7 @@
 #include <icy_engine/core/icy_core.hpp>
 #include <icy_engine/core/icy_thread.hpp>
 #include <icy_engine/graphics/icy_window.hpp>
-#include <icy_engine/graphics/icy_adapter.hpp>
+#include <icy_engine/graphics/icy_gpu.hpp>
 #include <icy_engine/graphics/icy_display.hpp>
 #include <icy_engine/utility/icy_crypto.hpp>
 #include <icy_engine/utility/icy_imgui.hpp>
@@ -12,10 +12,12 @@
 #pragma comment(lib, "icy_engine_cored")
 #pragma comment(lib, "icy_engine_graphicsd")
 #pragma comment(lib, "icy_engine_networkd")
+#pragma comment(lib, "icy_engine_resourced")
 #else
 #pragma comment(lib, "icy_engine_core")
 #pragma comment(lib, "icy_engine_graphics")
 #pragma comment(lib, "icy_engine_network")
+#pragma comment(lib, "icy_engine_resource")
 #endif
 
 using namespace icy;
@@ -80,9 +82,8 @@ public:
 
 error_type main_ex() noexcept
 {
-    ICY_ERROR(event_system::initialize());
-    ICY_ERROR(blob_initialize());
-    ICY_SCOPE_EXIT{ blob_shutdown(); };
+    shared_ptr<resource_system> rsystem;
+    ICY_ERROR(create_resource_system(rsystem, string_view(), 0));
 
     shared_ptr<event_queue> loop;
     ICY_ERROR(create_event_system(loop, 0
@@ -169,9 +170,8 @@ error_type main_ex() noexcept
     imgui_display->widget_label(widgets[button_exec], "Execute"_s);
     imgui_display->widget_state(widgets[text_log], imgui_widget_flag::is_same_line);
     
-
-    array<adapter> gpu;
-    ICY_ERROR(adapter::enumerate(adapter_flags::d3d10 | adapter_flags::hardware, gpu));
+    array<shared_ptr<gpu_device>> gpu;
+    ICY_ERROR(create_gpu_list(gpu_flags::vulkan | gpu_flags::hardware | gpu_flags::debug, gpu));
 
     shared_ptr<display_system> display_system;
     ICY_ERROR(create_display_system(display_system, window, gpu[0]));
@@ -573,6 +573,7 @@ int main()
 
     return 0;
 }
+
 
 /*
 namespace auth_test_event_enum

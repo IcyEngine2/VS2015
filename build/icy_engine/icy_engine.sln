@@ -12,8 +12,6 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_engine_network", "netwo
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_engine_graphics", "graphics\graphics.vcxproj", "{2529D4F5-C845-4B41-B789-4FCFFF27B9BA}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_engine_image", "image\image.vcxproj", "{93F213D6-C10B-4300-89C3-28C242CEFAB7}"
-EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "icy_engine_audio", "audio\audio.vcxproj", "{C85F3C45-A158-4803-BDC4-5AE36A2DFF34}"
 EndProject
 Global
@@ -34,10 +32,6 @@ Global
 		{2529D4F5-C845-4B41-B789-4FCFFF27B9BA}.Debug|x64.Build.0 = Debug|x64
 		{2529D4F5-C845-4B41-B789-4FCFFF27B9BA}.Release|x64.ActiveCfg = Release|x64
 		{2529D4F5-C845-4B41-B789-4FCFFF27B9BA}.Release|x64.Build.0 = Release|x64
-		{93F213D6-C10B-4300-89C3-28C242CEFAB7}.Debug|x64.ActiveCfg = Debug|x64
-		{93F213D6-C10B-4300-89C3-28C242CEFAB7}.Debug|x64.Build.0 = Debug|x64
-		{93F213D6-C10B-4300-89C3-28C242CEFAB7}.Release|x64.ActiveCfg = Release|x64
-		{93F213D6-C10B-4300-89C3-28C242CEFAB7}.Release|x64.Build.0 = Release|x64
 		{C85F3C45-A158-4803-BDC4-5AE36A2DFF34}.Debug|x64.ActiveCfg = Debug|x64
 		{C85F3C45-A158-4803-BDC4-5AE36A2DFF34}.Debug|x64.Build.0 = Debug|x64
 		{C85F3C45-A158-4803-BDC4-5AE36A2DFF34}.Release|x64.ActiveCfg = Release|x64

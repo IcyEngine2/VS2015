@@ -296,6 +296,10 @@ namespace icy
 
 	string_view to_string(const colors value) noexcept;
 	error_type to_string(const color value, string& str) noexcept;
+
+	class json;
+	error_type to_value(const json& input, color& output) noexcept;
+	error_type to_json(const color input, json& output) noexcept;
 }
 
 #pragma warning(pop)

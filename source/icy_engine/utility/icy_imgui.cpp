@@ -6,7 +6,6 @@
 #include <icy_engine/core/icy_set.hpp>
 #include <icy_engine/graphics/icy_window.hpp>
 #include <icy_engine/graphics/icy_render.hpp>
-#include <icy_engine/graphics/icy_image.hpp>
 #include "../../libs/imgui/imgui.h"
 
 #if _DEBUG
@@ -141,7 +140,7 @@ private:
     uint32_t m_wid = 0;
     clock_type::time_point m_now = clock_type::now();
     ImGuiMouseCursor m_cursor_type = ImGuiMouseCursor_None;
-    map<void*, blob> m_texture;
+    map<void*, guid> m_texture;
     map<uint32_t, imgui_widget> m_widgets;
     imgui_widget m_root;
     bool m_demo = false;
@@ -319,12 +318,13 @@ error_type imgui_display_data_sys::initialize(shared_ptr<window> handle) noexcep
         }
     }
 
-    array<uint8_t> buffer;
-    ICY_ERROR(image::save(global_realloc, nullptr, colors, image_type::png, buffer));
+    auto rsystem = resource_system::global();
+    if (!rsystem)
+        return make_unexpected_error();
 
-    blob new_blob;
-    ICY_ERROR(blob_add(buffer, "image.png"_s, new_blob));
-    ICY_ERROR(m_texture.insert(0u, std::move(new_blob)));
+    const auto new_guid = guid::create();
+    ICY_ERROR(rsystem->store(new_guid, colors));
+    ICY_ERROR(m_texture.insert(nullptr, new_guid));
 
     io.DisplaySize = { float(size.x), float(size.y) };
     io.KeyMap[ImGuiKey_Tab] = uint32_t(key::tab);

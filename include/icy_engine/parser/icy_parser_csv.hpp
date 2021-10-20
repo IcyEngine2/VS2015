@@ -37,11 +37,15 @@ namespace icy
             {
                 if (chr == m_delim)
                 {
-                    ICY_ERROR(tabs.push_back(string_view(beg, &chr)));
+                    string_view str;
+                    ICY_ERROR(to_string(const_array_view<char>(beg, &chr), str));
+                    ICY_ERROR(tabs.push_back(str));
                     beg = &chr + 1;
                 }
             }
-            ICY_ERROR(tabs.push_back(string_view(beg, m_buffer.data() + m_buffer.size())));
+            string_view str;
+            ICY_ERROR(to_string(const_array_view<char>(beg, m_buffer.data() + m_buffer.size()), str));
+            ICY_ERROR(tabs.push_back(str));
             ICY_ERROR(callback(tabs));
             m_buffer.clear();
             return error_type();

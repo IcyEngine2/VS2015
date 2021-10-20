@@ -2,11 +2,38 @@
 
 #include <icy_engine/core/icy_event.hpp>
 #include "icy_render_core.hpp"
-#include "icy_adapter.hpp"
+#include "icy_gpu.hpp"
 
 namespace icy
 {
+    struct render_surface;
+    struct render_system;
+    struct render_event
+    {
+        weak_ptr<render_surface> surface;
+    };
     struct render_surface
+    {
+        virtual ~render_surface() noexcept = 0
+        {
+
+        }
+        virtual shared_ptr<render_system> system() noexcept = 0;
+        virtual uint32_t index() const noexcept = 0;
+        virtual error_type repaint(render_scene& scene) noexcept = 0;
+    };
+    struct render_system : public event_system
+    {
+        virtual const icy::thread& thread() const noexcept = 0;
+        icy::thread& thread() noexcept
+        {
+            return const_cast<icy::thread&>(static_cast<const render_system*>(this)->thread());
+        }
+        virtual error_type create(const window_size size, shared_ptr<render_surface>& surface) noexcept = 0;
+    };
+
+    error_type create_render_system(shared_ptr<render_system>& system, const shared_ptr<gpu_device> gpu) noexcept;
+    /*struct render_surface
     {
         virtual ~render_surface() noexcept = 0
         {
@@ -26,19 +53,8 @@ namespace icy
         void* handle() noexcept;
         render_surface& surface;
     };
-    struct render_system : public event_system
-    {
-        virtual const icy::thread& thread() const noexcept = 0;
-        icy::thread& thread() noexcept
-        {
-            return const_cast<icy::thread&>(static_cast<const render_system*>(this)->thread());
-        }
-        virtual adapter adapter() const noexcept = 0;
-        virtual error_type create(shared_ptr<render_surface>& surface, const window_size size) noexcept = 0;
-    };
-
-    error_type create_render_system(shared_ptr<render_system>& system, const adapter adapter) noexcept;
-
+  
+    */
    /* struct render_system;
     struct render_query
     {

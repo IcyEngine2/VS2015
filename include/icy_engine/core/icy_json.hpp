@@ -99,6 +99,7 @@ namespace icy
             return make_stdlib_error(std::errc::invalid_argument);
         }
         string_view get(const string_view key) const noexcept;
+        error_type get(const string_view key, color& value) const noexcept;
         error_type get(const string_view key, json_type_string& value) const noexcept;
         error_type get(const string_view key, guid& value) const noexcept;
         error_type get(const string_view key, clock_type::time_point& value) const noexcept;

@@ -45,9 +45,6 @@
     <ClCompile Include="..\..\..\source\icy_engine\core\icy_console.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\source\icy_engine\core\icy_blob.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_process.hpp">
@@ -111,9 +108,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_console.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\include\icy_engine\core\icy_blob.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
