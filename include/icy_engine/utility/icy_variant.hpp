@@ -14,6 +14,91 @@ namespace icy
 
     class variant
     {
+        enum constructor_type
+        {
+            constructor_default,
+            constructor_dynamic,
+            constructor_string,
+            constructor_array,
+        };
+        template<typename T>
+        variant(std::integral_constant<constructor_type, constructor_default>, T&& value) noexcept : variant()
+        {
+            using U = remove_cvr<T>;
+            static_assert(std::is_trivially_destructible<U>::value, "BAD VARIANT TYPE");
+            if (sizeof(U) <= max_size)
+            {
+                allocator_type::construct(reinterpret_cast<U*>(m_buffer), std::forward<T>(value));
+            }
+            else
+            {
+                m_dynamic = reinterpret_cast<dynamic_data*>(allocator_type::allocate<char>(sizeof(dynamic_data) + sizeof(U) - 1));
+                if (!m_dynamic)
+                    return;
+
+                allocator_type::construct(m_dynamic);
+                allocator_type::construct(reinterpret_cast<U*>(m_dynamic->bytes), std::forward<T>(value));
+                m_flag = 1;
+            }
+            m_type = variant_type<T>();
+            m_size = sizeof(U);
+        }
+        template<typename T>
+        variant(std::integral_constant<constructor_type, constructor_dynamic>, T&& value) noexcept : variant()
+        {
+            using U = remove_cvr<T>;
+            m_dynamic = reinterpret_cast<dynamic_data*>(allocator_type::allocate<char>(sizeof(dynamic_data) + sizeof(U) - 1));
+            if (!m_dynamic)
+                return;
+
+            allocator_type::construct(m_dynamic);
+            m_dynamic->destructor = [](void* ptr)
+            {
+                allocator_type::destroy(static_cast<U*>(ptr));
+            };
+            allocator_type::construct(reinterpret_cast<U*>(m_dynamic->bytes), std::forward<T>(value));
+            m_flag = 1;
+            m_type = variant_type<T>();
+            m_size = sizeof(U);
+        }
+        variant(std::integral_constant<constructor_type, constructor_string>, string_view value) noexcept
+        {
+            if (value.bytes().size() >= max_size)
+            {
+                m_dynamic = reinterpret_cast<dynamic_data*>(allocator_type::allocate<char>(sizeof(dynamic_data) + value.bytes().size()));
+                if (!m_dynamic)
+                    return;
+
+                allocator_type::construct(m_dynamic);
+                memcpy(m_dynamic->bytes, value.bytes().data(), value.bytes().size());
+                m_dynamic->bytes[value.bytes().size()] = 0;
+                m_flag = 1;
+            }
+            else
+            {
+                memcpy(m_buffer, value.bytes().data(), value.bytes().size());
+            }
+            m_size = value.bytes().size();
+            m_type = variant_type<string_view>();
+        }
+        template<typename T>
+        variant(std::integral_constant<constructor_type, constructor_array>, const const_array_view<T> rhs) noexcept
+        {
+            static_assert(std::is_trivially_destructible<T>::value, "BAD ARRAY TYPE");
+            m_dynamic = reinterpret_cast<dynamic_data*>(allocator_type::allocate<char>(sizeof(dynamic_data) + rhs.size() * sizeof(T) - 1));
+            if (!m_dynamic)
+                return;
+
+            allocator_type::construct(m_dynamic);
+            auto ptr = reinterpret_cast<T*>(m_dynamic->bytes);
+            for (auto k = 0u; k < rhs.size(); ++k)
+            {
+                allocator_type::construct(ptr + k, rhs[k]);
+            }
+            m_flag = 1;
+            m_type = variant_type<const_array_view<T>>();
+            m_size = rhs.size() * sizeof(T);
+        }
     public:
         variant() noexcept
         {
@@ -45,65 +130,17 @@ namespace icy
         }
         ICY_DEFAULT_COPY_ASSIGN(variant);
         ICY_DEFAULT_MOVE_ASSIGN(variant);
-        template<typename T, typename = std::enable_if_t<!std::is_same<remove_cvr<T>, string>::value>>
-        variant(T&& rhs) noexcept : variant()
-        {
-            using U = remove_cvr<T>;
-            static_assert(!std::is_same<U, string>::value, "STRING NOT ALLOWED");
-            if (std::is_trivially_destructible<U>::value)
-            {
-                if (sizeof(U) <= max_size)
-                {
-                    allocator_type::construct(reinterpret_cast<U*>(m_buffer), std::forward<T>(rhs));
-                }
-                else
-                {
-                    m_dynamic = reinterpret_cast<dynamic_data*>(allocator_type::allocate<char>(sizeof(dynamic_data) + sizeof(T) - 1));
-                    if (!m_dynamic)
-                        return;
-
-                    allocator_type::construct(m_dynamic);
-                    allocator_type::construct(reinterpret_cast<U*>(m_dynamic->bytes), std::forward<T>(rhs));
-                    m_flag = 1;
-                }
-            }
-            else
-            {
-                m_dynamic = reinterpret_cast<dynamic_data*>(allocator_type::allocate<char>(sizeof(dynamic_data) + sizeof(T) - 1));
-                if (!m_dynamic)
-                    return;
-
-                allocator_type::construct(m_dynamic);
-                m_dynamic->destructor = [](void* ptr) { allocator_type::destroy(static_cast<U*>(ptr)); };
-                allocator_type::construct(reinterpret_cast<U*>(m_dynamic->bytes), std::forward<T>(rhs));
-                m_flag = 1;
-            }
-            m_type = variant_type<T>();
-            m_size = sizeof(rhs);
-        }
-        variant(const string& str) noexcept : variant(static_cast<string_view>(str))
+        template<typename T>
+        variant(T&& rhs) noexcept : variant(std::integral_constant<constructor_type,
+            std::is_same<T, string_view>::value || std::is_same<T, string>::value ? constructor_string :
+            std::is_trivially_destructible<T>::value ? constructor_default : constructor_dynamic>(), std::forward<T>(rhs))
         {
 
         }
-        variant(const string_view str) noexcept : variant()
+        template<typename T>
+        static variant from_array(const const_array_view<T> value) noexcept
         {
-            if (str.bytes().size() >= max_size)
-            {
-                m_dynamic = reinterpret_cast<dynamic_data*>(allocator_type::allocate<char>(sizeof(dynamic_data) + str.bytes().size()));
-                if (!m_dynamic)
-                    return;
-
-                allocator_type::construct(m_dynamic);
-                memcpy(m_dynamic->bytes, str.bytes().data(), str.bytes().size());
-                m_dynamic->bytes[str.bytes().size()] = 0;
-                m_flag = 1;
-            }
-            else
-            {
-                memcpy(m_buffer, str.bytes().data(), str.bytes().size());
-            }
-            m_size = str.bytes().size();
-            m_type = variant_type<string_view>();
+            return variant(std::integral_constant<constructor_type, constructor_array>(), value);
         }
         explicit operator bool() const noexcept
         {
@@ -146,6 +183,17 @@ namespace icy
         {
             return type() == variant_type<string_view>() ?
                 string_view(static_cast<const char*>(data()), size(), string_view::constexpr_tag()) : string_view();
+        }
+        template<typename U> bool get(const_array_view<U>& value) const noexcept
+        {
+            if (m_type == variant_type<const_array_view<U>>())
+            {
+                const auto ptr = static_cast<const U*>(data());
+                const auto len = size() / sizeof(U);
+                value = { ptr, len };
+                return true;
+            }
+            return false;
         }
     private:
         enum { max_size = 24 };
@@ -477,5 +525,11 @@ namespace icy
             }
         }
         return false;
+    }
+
+    inline error_type copy(const variant& src, variant& dst) noexcept
+    {
+        dst = src;
+        return error_type();
     }
 }

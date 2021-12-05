@@ -1688,7 +1688,7 @@ error_type window_system_data::initialize() noexcept
 }
 error_type window_system_data::exec() noexcept
 {
-    const auto timeout = max_timeout;
+    const auto timeout = std::chrono::seconds(5);// max_timeout;
     const auto ms = ms_timeout(timeout);
 
     map<uint32_t, window_data_sys> windows;
@@ -1966,7 +1966,7 @@ error_type window_system_data::exec() noexcept
         }
         else if (index == WAIT_TIMEOUT)
         {
-            return make_stdlib_error(std::errc::timed_out);
+            //return make_stdlib_error(std::errc::timed_out);
         }
         else if (index == WAIT_FAILED)
         {

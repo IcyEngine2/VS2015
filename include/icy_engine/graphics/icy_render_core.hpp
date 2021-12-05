@@ -8,6 +8,7 @@
 
 namespace icy
 {
+    static const auto render_channel_count = 8_z;
     enum class render_animation_type : uint32_t
     {
         none,
@@ -282,15 +283,14 @@ namespace icy
     {
         struct channel
         {
-            array<render_vec3> tex;
+            array<render_vec2> tex;
             array<color> color;
-            uint32_t uv = 0; //  Specifies the number of components for a given UV channel
         };
         render_mesh() noexcept = default;
         render_mesh_type type = render_mesh_type::none;
         array<render_vec3> world;
         array<render_vec4> angle;
-        channel channels[8];
+        channel channels[render_channel_count];
         array<uint32_t> indices;
         array<render_bone> bones;
         guid material;
@@ -332,14 +332,14 @@ namespace icy
         unique_ptr<render_camera> camera;
         unique_ptr<render_light> light;
     };
-    struct render_scene
+   /* struct render_scene
     {
         map<guid, render_texture> textures;
         map<guid, render_mesh> meshes;
         map<guid, render_material> materials;
         map<guid, render_node> nodes;
         render_vec4 viewport;
-    };
+    };*/
 
     inline error_type copy(const render_gui_list& src, render_gui_list& dst) noexcept
     {
@@ -354,6 +354,49 @@ namespace icy
         dst.ibuffer = src.ibuffer;
         dst.viewport = src.viewport;
         ICY_ERROR(copy(src.data, dst.data));
+        return error_type();
+    }
+
+    inline error_type copy(const render_bone& src, render_bone& dst) noexcept
+    {
+        ICY_ERROR(copy(src.name, dst.name));
+        ICY_ERROR(copy(src.weights, dst.weights));
+        dst.transform = src.transform;
+        return error_type();
+    }
+    inline error_type copy(const render_mesh& src, render_mesh& dst) noexcept
+    {
+        dst.type = src.type;
+        ICY_ERROR(copy(src.world, dst.world));
+        ICY_ERROR(copy(src.angle, dst.angle));
+        for (auto k = 0; k < render_channel_count; ++k)
+        {
+            ICY_ERROR(copy(src.channels[k].color, dst.channels[k].color));
+            ICY_ERROR(copy(src.channels[k].tex, dst.channels[k].tex));
+        }
+        ICY_ERROR(copy(src.indices, dst.indices));
+        ICY_ERROR(copy(src.bones, dst.bones));
+        dst.material = src.material;
+        return error_type();
+    }
+    inline error_type copy(const render_material& src, render_material& dst) noexcept
+    {
+        dst.shading = src.shading;
+        dst.two_sided = src.two_sided;
+        dst.opacity = src.opacity;
+        dst.transparency = src.transparency;
+        dst.bump_scaling = src.bump_scaling;
+        dst.reflectivity = src.reflectivity;
+        dst.shininess = src.shininess;
+        dst.shininess_percent = src.shininess_percent;
+        dst.refract = src.refract;
+        dst.color_diffuse = src.color_diffuse;
+        dst.color_ambient = src.color_ambient;
+        dst.color_specular = src.color_specular;
+        dst.color_emissive = src.color_emissive;
+        dst.color_transparent = src.color_transparent;
+        dst.color_reflective = src.color_reflective;
+        ICY_ERROR(copy(src.textures, dst.textures));
         return error_type();
     }
 

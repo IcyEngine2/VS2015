@@ -88,6 +88,7 @@
   <ItemGroup>
     <ClCompile Include="..\..\..\source\icy_engine\core\icy_color.cpp" />
     <ClCompile Include="..\..\..\source\icy_engine\core\icy_console.cpp" />
+    <ClCompile Include="..\..\..\source\icy_engine\core\icy_entity.cpp" />
     <ClCompile Include="..\..\..\source\icy_engine\core\icy_event.cpp" />
     <ClCompile Include="..\..\..\source\icy_engine\core\icy_file.cpp" />
     <ClCompile Include="..\..\..\source\icy_engine\core\icy_input.cpp" />
@@ -104,6 +105,7 @@
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_color.hpp" />
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_console.hpp" />
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_core.hpp" />
+    <ClInclude Include="..\..\..\include\icy_engine\core\icy_entity.hpp" />
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_event.hpp" />
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_file.hpp" />
     <ClInclude Include="..\..\..\include\icy_engine\core\icy_function.hpp" />

@@ -79,7 +79,7 @@ namespace icy
             rhs.header.type = resource_type::none;
         }
         ICY_DEFAULT_MOVE_ASSIGN(resource_event);
-        void check(const resource_type type) noexcept
+        void check(const resource_type type) const noexcept
         {
 #if _DEBUG
             ICY_ASSERT(header.type == type && bytes, "INVALID TYPE OR NULL BYTES");
@@ -127,6 +127,46 @@ namespace icy
             check(resource_type::node);
             return *static_cast<render_node*>(bytes);
         }    
+        const_array_view<uint8_t> user() const noexcept
+        {
+            check(resource_type::user);
+            return *static_cast<array<uint8_t>*>(bytes);
+        }
+        string_view text() const noexcept
+        {
+            check(resource_type::text);
+            return *static_cast<string*>(bytes);
+        }
+        const_matrix_view<color> image() const noexcept
+        {
+            check(resource_type::image);
+            return *static_cast<matrix<color>*>(bytes);
+        }
+        const render_animation& animation() const noexcept
+        {
+            check(resource_type::animation);
+            return *static_cast<render_animation*>(bytes);
+        }
+        const render_texture& texture() const noexcept
+        {
+            check(resource_type::texture);
+            return *static_cast<render_texture*>(bytes);
+        }
+        const render_material& material() const noexcept
+        {
+            check(resource_type::material);
+            return *static_cast<render_material*>(bytes);
+        }
+        const render_mesh& mesh() const noexcept
+        {
+            check(resource_type::mesh);
+            return *static_cast<render_mesh*>(bytes);
+        }
+        const render_node& node() const noexcept
+        {
+            check(resource_type::node);
+            return *static_cast<render_node*>(bytes);
+        }
     public:
         resource_header header;
         clock_type::time_point time_create = {};
@@ -148,6 +188,7 @@ namespace icy
         virtual error_type store(const resource_header& header, const const_array_view<uint8_t> bytes) noexcept = 0;
         virtual error_type store(const guid& index, const const_matrix_view<color> colors) noexcept = 0;
         virtual error_type list(map<guid, resource_data>& output) const noexcept = 0;
+        virtual error_type list(const resource_locale locale, array<resource_event>& output) const noexcept = 0;
     };
 
     error_type create_resource_system(shared_ptr<resource_system>& system, const string_view path, const size_t capacity) noexcept;

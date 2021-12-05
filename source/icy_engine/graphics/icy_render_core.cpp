@@ -521,7 +521,7 @@ error_type icy::to_value(const json& input, render_mesh::channel& output) noexce
 	{
 		for (auto n = 0u; n < tex->size(); ++n)
 		{
-			render_vec3 vec;
+			render_vec2 vec;
 			ICY_ERROR(to_value(*tex->at(n), vec));
 			ICY_ERROR(output.tex.push_back(vec));
 		}
@@ -535,7 +535,6 @@ error_type icy::to_value(const json& input, render_mesh::channel& output) noexce
 			ICY_ERROR(output.color.push_back(color));
 		}
 	}
-	ICY_ERROR(input.get(key_uv_count, output.uv));
 	return error_type();
 }
 error_type icy::to_value(const json& input, render_mesh& output) noexcept
@@ -590,7 +589,7 @@ error_type icy::to_value(const json& input, render_mesh& output) noexcept
 	const auto channels = input.find(key_channels);
 	if (channels && channels->type() == json_type::array)
 	{
-		for (auto k = 0u; k < std::min(8_z, channels->size()); ++k)
+		for (auto k = 0u; k < std::min(render_channel_count, channels->size()); ++k)
 			ICY_ERROR(to_value(*channels->at(k), output.channels[k]));
 	}
 	return error_type();
@@ -864,7 +863,6 @@ error_type icy::to_json(const render_mesh::channel& input, json& output) noexcep
 		ICY_ERROR(texs.push_back(std::move(new_tex)));
 	}
 	ICY_ERROR(output.insert(key_tex, std::move(texs)));
-	ICY_ERROR(output.insert(key_uv_count, input.uv));
 	return error_type();
 }
 error_type icy::to_json(const render_mesh& input, json& output) noexcept
@@ -908,7 +906,7 @@ error_type icy::to_json(const render_mesh& input, json& output) noexcept
 	json channels = json_type::array;
 	for (auto&& channel : input.channels)
 	{
-		if (!channel.uv)
+		if (channel.tex.empty() && channel.color.empty())
 			break;
 		json new_channel;
 		ICY_ERROR(to_json(channel, new_channel));

@@ -176,9 +176,11 @@ private:
     error_type store(const resource_header& header, const string_view path) noexcept override;
     error_type store(const resource_header& header, const const_array_view<uint8_t> bytes) noexcept override;
     error_type store(const guid& index, const const_matrix_view<color> colors) noexcept override;
+    error_type load(const resource_header& header, resource_event& new_event) const noexcept;
     error_type list(map<guid, resource_data>& output) const noexcept override;
+    error_type list(const resource_locale locale, array<resource_event>& output) const noexcept override;
 private:
-    error_type parse_image(const const_array_view<uint8_t> input, matrix<color>& output) noexcept;
+    error_type parse_image(const const_array_view<uint8_t> input, matrix<color>& output) const noexcept;
     error_type import_assimp(const const_array_view<uint8_t> input, assimp_scene& output) noexcept;
     error_type store_assimp(const assimp_scene& output, txn_write& txn) noexcept;
 private:
@@ -443,123 +445,7 @@ error_type resource_system_data::exec() noexcept
             }
             else
             {
-                txn_read txn;
-                if (!new_event.error)
-                    new_event.error = txn.initialize(*this);
-                
-                resource_data resource;
-                if (!new_event.error)
-                    new_event.error = txn.load(new_event.header.index, resource);
-                
-                const_array_view<uint8_t> input;
-                if (!new_event.error)
-                {
-                    if (const auto ptr = resource.binary.try_find(uint32_t(event_data.header.locale)))
-                    {
-                        if (const auto error = txn.cur_binary.get_var_by_type(ptr->hash, input, database_oper_read::none))
-                        {
-                            if (error != database_error_not_found)
-                                new_event.error = error;
-                        }
-                        else if (!input.empty())
-                        {
-                            new_event.hash = ptr->hash;
-                            new_event.time_create = ptr->time_create;
-                            new_event.time_update = ptr->time_update;
-                        }
-                    }
-                }
-                if (!new_event.error)
-                {
-                    new_event.error = make_stdlib_error(std::errc::invalid_argument);
-                    switch (event_data.header.type)
-                    {
-                    case resource_type::text:
-                    {
-                        if (resource.type == resource_type::text)
-                        {
-                            string_view input_str;
-                            new_event.error = to_string(input, input_str);
-                            if (!new_event.error)
-                            {
-                                string tmp_str;
-                                ICY_ERROR(to_string(input_str, tmp_str));
-                                auto new_text = make_unique<string>(std::move(tmp_str));
-                                if (!new_text)
-                                    ICY_ERROR(make_stdlib_error(std::errc::not_enough_memory));
-                                new_event.bytes = new_text.release();
-                            }
-                        }
-                        break;
-                    }
-                    case resource_type::image:
-                    {
-                        if (resource.type == resource_type::image)
-                        {
-                            matrix<color> image;
-                            unique_ptr<matrix<color>> new_image;
-                            new_event.error = parse_image(input, image);
-                            if (!new_event.error)
-                                new_event.error = make_unique(std::move(image), new_image);
-                            if (!new_event.error)
-                                new_event.bytes = new_image.release();
-                        }
-                        break;
-                    }
-                    case resource_type::user:
-                    {
-                        auto new_user = make_unique<array<uint8_t>>();
-                        if (!new_user)
-                            ICY_ERROR(make_stdlib_error(std::errc::not_enough_memory));
-                        ICY_ERROR(new_user->assign(input));
-                        new_event.bytes = new_user.release();
-                        break;
-                    }
-                    default:
-                    {
-                        string_view input_str;
-                        new_event.error = to_string(input, input_str);
-
-                        json json;
-                        if (!new_event.error)
-                            new_event.error = to_value(input_str, json);
-
-                        const auto func = [&new_event, &json](auto&& new_value)
-                        {
-                            if (!new_value)
-                                ICY_ERROR(make_stdlib_error(std::errc::not_enough_memory));
-                            new_event.error = to_value(json, *new_value);
-                            if (!new_event.error)
-                                new_event.bytes = new_value.release();
-                            return error_type();
-                        };
-                        if (event_data.header.type == resource_type::animation && json.get(key_type) == to_string(resource_type::animation))
-                        {
-                            ICY_ERROR(func(make_unique<render_animation>()));
-                        }
-                        else if (event_data.header.type == resource_type::texture && json.get(key_type) == to_string(resource_type::texture))
-                        {
-                            ICY_ERROR(func(make_unique<render_texture>()));
-                        }
-                        else if (event_data.header.type == resource_type::material && json.get(key_type) == to_string(resource_type::material))
-                        {
-                            ICY_ERROR(func(make_unique<render_material>()));
-                        }
-                        else if (event_data.header.type == resource_type::mesh && json.get(key_type) == to_string(resource_type::mesh))
-                        {
-                            ICY_ERROR(func(make_unique<render_mesh>()));
-                        }
-                        else if (event_data.header.type == resource_type::node && json.get(key_type) == to_string(resource_type::node))
-                        {
-                            ICY_ERROR(func(make_unique<render_node>()));
-                        }
-                        break;
-                    }
-                    }
-                }
-                if (!new_event.bytes && !new_event.error)
-                    new_event.error = make_stdlib_error(std::errc::invalid_argument);
-
+                ICY_ERROR(load(event_data.header, new_event));
                 ICY_ERROR(event::post(this, event_type::resource_load, std::move(new_event)));
             }          
         }
@@ -598,6 +484,127 @@ error_type resource_system_data::load(const resource_header& header) noexcept
     msg.header.locale = header.locale;
     msg.header.type = header.type;
     ICY_ERROR(event_system::post(nullptr, event_type::system_internal, std::move(msg)));
+    return error_type();
+}
+error_type resource_system_data::load(const resource_header& header, resource_event& new_event) const noexcept
+{
+    txn_read txn;
+    if (!new_event.error)
+        new_event.error = txn.initialize(*this);
+
+    resource_data resource;
+    if (!new_event.error)
+        new_event.error = txn.load(new_event.header.index, resource);
+
+    const_array_view<uint8_t> input;
+    if (!new_event.error)
+    {
+        if (const auto ptr = resource.binary.try_find(uint32_t(header.locale)))
+        {
+            if (const auto error = txn.cur_binary.get_var_by_type(ptr->hash, input, database_oper_read::none))
+            {
+                if (error != database_error_not_found)
+                    new_event.error = error;
+            }
+            else if (!input.empty())
+            {
+                new_event.hash = ptr->hash;
+                new_event.time_create = ptr->time_create;
+                new_event.time_update = ptr->time_update;
+            }
+        }
+    }
+    if (!new_event.error)
+    {
+        new_event.error = make_stdlib_error(std::errc::invalid_argument);
+        switch (header.type)
+        {
+        case resource_type::text:
+        {
+            if (resource.type == resource_type::text)
+            {
+                string_view input_str;
+                new_event.error = to_string(input, input_str);
+                if (!new_event.error)
+                {
+                    string tmp_str;
+                    ICY_ERROR(to_string(input_str, tmp_str));
+                    auto new_text = make_unique<string>(std::move(tmp_str));
+                    if (!new_text)
+                        ICY_ERROR(make_stdlib_error(std::errc::not_enough_memory));
+                    new_event.bytes = new_text.release();
+                }
+            }
+            break;
+        }
+        case resource_type::image:
+        {
+            if (resource.type == resource_type::image)
+            {
+                matrix<color> image;
+                unique_ptr<matrix<color>> new_image;
+                new_event.error = parse_image(input, image);
+                if (!new_event.error)
+                    new_event.error = make_unique(std::move(image), new_image);
+                if (!new_event.error)
+                    new_event.bytes = new_image.release();
+            }
+            break;
+        }
+        case resource_type::user:
+        {
+            auto new_user = make_unique<array<uint8_t>>();
+            if (!new_user)
+                ICY_ERROR(make_stdlib_error(std::errc::not_enough_memory));
+            ICY_ERROR(new_user->assign(input));
+            new_event.bytes = new_user.release();
+            break;
+        }
+        default:
+        {
+            string_view input_str;
+            new_event.error = to_string(input, input_str);
+
+            json json;
+            if (!new_event.error)
+                new_event.error = to_value(input_str, json);
+
+            const auto func = [&new_event, &json](auto&& new_value)
+            {
+                if (!new_value)
+                    ICY_ERROR(make_stdlib_error(std::errc::not_enough_memory));
+                new_event.error = to_value(json, *new_value);
+                if (!new_event.error)
+                    new_event.bytes = new_value.release();
+                return error_type();
+            };
+            if (header.type == resource_type::animation && json.get(key_type) == to_string(resource_type::animation))
+            {
+                ICY_ERROR(func(make_unique<render_animation>()));
+            }
+            else if (header.type == resource_type::texture && json.get(key_type) == to_string(resource_type::texture))
+            {
+                ICY_ERROR(func(make_unique<render_texture>()));
+            }
+            else if (header.type == resource_type::material && json.get(key_type) == to_string(resource_type::material))
+            {
+                ICY_ERROR(func(make_unique<render_material>()));
+            }
+            else if (header.type == resource_type::mesh && json.get(key_type) == to_string(resource_type::mesh))
+            {
+                ICY_ERROR(func(make_unique<render_mesh>()));
+            }
+            else if (header.type == resource_type::node && json.get(key_type) == to_string(resource_type::node))
+            {
+                ICY_ERROR(func(make_unique<render_node>()));
+            }
+            break;
+        }
+        }
+    }
+    if (!new_event.bytes && !new_event.error)
+        new_event.error = make_stdlib_error(std::errc::invalid_argument);
+
     return error_type();
 }
 error_type resource_system_data::store(const resource_header& header, const string_view path) noexcept
@@ -661,7 +668,24 @@ error_type resource_system_data::list(map<guid, resource_data>& output) const no
         return error;
     return error_type();
 }
-error_type resource_system_data::parse_image(const const_array_view<uint8_t> input, matrix<color>& output) noexcept
+error_type resource_system_data::list(const resource_locale locale, array<resource_event>& output) const noexcept
+{
+    map<guid, resource_data> list_resource;
+    ICY_ERROR(list(list_resource));
+
+    for (auto&& pair : list_resource)
+    {
+        resource_event new_event;
+        auto& header = new_event.header;
+        new_event.header.index = pair.key;
+        new_event.header.locale = locale;
+        new_event.header.type = pair.value.type;
+        ICY_ERROR(load(header, new_event));
+        ICY_ERROR(output.push_back(std::move(new_event)));
+    }
+    return error_type();
+}
+error_type resource_system_data::parse_image(const const_array_view<uint8_t> input, matrix<color>& output) const noexcept
 {
     return error_type();
 }
@@ -1013,8 +1037,7 @@ error_type assimp_scene::import_mesh(const aiMesh& old_mesh) noexcept
             const auto color = old_mesh.mColors[k][n];
             const auto tex = old_mesh.mTextureCoords[k][n];
             ICY_ERROR(new_mesh.channels[k].color.push_back(color::from_rgbaf(color.r, color.g, color.b, color.a)));
-            ICY_ERROR(new_mesh.channels[k].tex.push_back({ tex.x, tex.y, tex.z }));
-            new_mesh.channels[k].uv = old_mesh.mNumUVComponents[k];
+            ICY_ERROR(new_mesh.channels[k].tex.push_back({ tex.x, tex.y }));
         }
 
     }

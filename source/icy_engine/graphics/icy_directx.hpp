@@ -4,6 +4,7 @@
 #include <icy_engine/core/icy_string.hpp>
 #include <icy_engine/core/icy_smart_pointer.hpp>
 #include <icy_engine/core/icy_queue.hpp>
+#include <icy_engine/core/icy_set.hpp>
 #include <icy_engine/graphics/icy_gpu.hpp>
 #include <icy_engine/graphics/icy_display.hpp>
 #include <icy_engine/graphics/icy_render.hpp>
@@ -15,6 +16,27 @@
 
 namespace icy
 {
+    enum class directx_render_internal_event_type : uint32_t
+    {
+        none,
+        repaint,
+    };
+    enum directx_material_state : uint32_t
+    {
+        directx_material_none,
+        directx_material_ready_vtx,
+        directx_material_ready_obj,
+    };
+    using directx_vec4 = __m128;
+    using directx_vec2 = render_vec2;
+    static const uint32_t directx_max_bone_weights = 64;
+    struct directx_transform
+    {
+        directx_vec4 world;
+        directx_vec4 scale;
+        directx_vec4 angle;
+    };
+
     class directx_gpu_device;
     class directx_system
     {
@@ -91,10 +113,6 @@ namespace icy
     {
         duration_type frame = duration_type(-1);
         window_size size;
-    };
-    struct directx_render_internal_event
-    {
-
     };
     struct directx_display_texture
     {
@@ -178,9 +196,13 @@ namespace icy
         map<guid, com_ptr<ID3D11ShaderResourceView>> m_tex2d;
     };
 
+    struct directx_render_node;
+    struct directx_render_mesh;
+    struct directx_render_material;
     class directx_render_system;
     class directx_render_surface : public render_surface
     {
+        friend directx_render_system;
     public:
         directx_render_surface(directx_render_system& system, const uint32_t index) noexcept :
             m_system(make_shared_from_this(&system)), m_index(index)
@@ -192,17 +214,74 @@ namespace icy
         {
             return m_index;
         }
-        error_type repaint(render_scene& scene) noexcept override;
     private:
         weak_ptr<directx_render_system> m_system;
         uint32_t m_index = 0;
+        com_ptr<ID3D11Texture2D> m_buffer;
+        com_ptr<ID3D11RenderTargetView> m_rtv;
+        com_ptr<ID3D11ShaderResourceView> m_srv;
     };
-    class directx_render_texture 
+    struct directx_render_texture 
     {
-    public:
         com_ptr<ID3D11Texture2D> buffer;
         com_ptr<ID3D11RenderTargetView> rtv;
     };
+    struct directx_render_internal_event
+    {
+        directx_render_internal_event_type type = directx_render_internal_event_type::none;
+        window_size size;
+    };
+    struct directx_render_node
+    {
+        directx_transform transform;
+        set<directx_render_mesh*> meshes;
+        set<directx_render_material*> materials;
+    };
+    struct directx_render_material : public render_material
+    {
+        directx_render_material() noexcept = default;
+        directx_render_material(directx_render_material&& rhs) noexcept = default;
+        ICY_DEFAULT_MOVE_ASSIGN(directx_render_material);
+        uint32_t state = 0;
+        com_ptr<ID3D11Buffer> vtx_world;
+        com_ptr<ID3D11Buffer> vtx_toobj;
+        com_ptr<ID3D11Buffer> vtx_angle;
+        com_ptr<ID3D11Buffer> vtx_color[render_channel_count];
+        com_ptr<ID3D11Buffer> vtx_texuv[render_channel_count];
+        com_ptr<ID3D11Buffer> idx_array;
+        com_ptr<ID3D11Buffer> obj_world;
+        com_ptr<ID3D11Buffer> obj_angle;
+        com_ptr<ID3D11Buffer> obj_scale;
+
+        set<directx_render_mesh*> meshes;
+        set<directx_render_node*> nodes;
+    };
+    struct directx_render_weight
+    {
+        uint32_t vertex = 0;
+        float value = 0;
+    };
+    struct directx_render_bone
+    {
+        directx_render_weight weights[directx_max_bone_weights];
+        directx_transform transform;
+    };
+    struct directx_render_mesh
+    {
+        directx_render_mesh() noexcept = default;
+        directx_render_mesh(directx_render_mesh&& rhs) noexcept = default;
+        ICY_DEFAULT_MOVE_ASSIGN(directx_render_mesh);
+        render_mesh_type type = render_mesh_type::none;
+        array<directx_vec4> world;
+        array<directx_vec4> angle;
+        array<directx_vec4> color[render_channel_count];
+        array<directx_vec2> texuv[render_channel_count];
+        array<uint32_t> indices;
+        array<directx_render_bone> bones;
+        directx_render_material* material = nullptr;
+        set<directx_render_node*> nodes;
+    };
+    
     class directx_render_system : public render_system
     {
     public:
@@ -213,19 +292,38 @@ namespace icy
         ~directx_render_system() noexcept;
         error_type initialize() noexcept;
     private:
+        struct cpu_buffer 
+        {
+            com_ptr<ID3D11Buffer> vtx_world;    //  
+            com_ptr<ID3D11Buffer> vtx_angle;    //  
+            com_ptr<ID3D11Buffer> vtx_color;    //  
+            com_ptr<ID3D11Buffer> vtx_texuv;    //  
+            com_ptr<ID3D11Buffer> idx_array;    //  
+            com_ptr<ID3D11Buffer> obj_world;    //  
+            com_ptr<ID3D11Buffer> obj_angle;    //  
+            com_ptr<ID3D11Buffer> obj_scale;    // 
+        };
+    private:
         error_type exec() noexcept override;
         error_type signal(const event_data* event) noexcept override;
         const icy::thread& thread() const noexcept override
         {
             return *m_thread;
         }
-        error_type create(const window_size size, shared_ptr<render_surface>& surface) noexcept override;
+        error_type repaint(const window_size size) noexcept override;
+        error_type load_mesh(const guid index, const render_mesh& mesh) noexcept;
+        error_type load_material(const guid index, const render_material& material) noexcept;
+        error_type do_repaint(const window_size size) noexcept;
+        error_type do_repaint(directx_render_surface& surface, const window_size size) noexcept;
     private:
         shared_ptr<directx_gpu_device> m_adapter;
         com_ptr<ID3D11Device> m_device;
         sync_handle m_sync;
         shared_ptr<event_thread> m_thread;
-        map<uint32_t, directx_render_texture> m_render;
-        std::atomic<uint32_t> m_count = 0;
+        std::atomic<uint32_t> m_index = 0;
+        map<guid, unique_ptr<directx_render_material>> m_materials;
+        map<guid, unique_ptr<directx_render_mesh>> m_meshes;
+        map<uint64_t, unique_ptr<directx_render_node>> m_nodes;
+        cpu_buffer m_cpu_buffer;
     };
 }

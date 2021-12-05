@@ -20,7 +20,6 @@ namespace icy
         }
         virtual shared_ptr<render_system> system() noexcept = 0;
         virtual uint32_t index() const noexcept = 0;
-        virtual error_type repaint(render_scene& scene) noexcept = 0;
     };
     struct render_system : public event_system
     {
@@ -29,7 +28,7 @@ namespace icy
         {
             return const_cast<icy::thread&>(static_cast<const render_system*>(this)->thread());
         }
-        virtual error_type create(const window_size size, shared_ptr<render_surface>& surface) noexcept = 0;
+        virtual error_type repaint(const window_size size) noexcept = 0;
     };
 
     error_type create_render_system(shared_ptr<render_system>& system, const shared_ptr<gpu_device> gpu) noexcept;

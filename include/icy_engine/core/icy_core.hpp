@@ -174,6 +174,7 @@ namespace icy
             none,
             container,
             pointer,
+            enumeration,
         };
         template<typename T> int compare_ex(std::integral_constant<compare_type, compare_type::container>, const T& lhs, const T& rhs) noexcept;
         
@@ -214,14 +215,21 @@ namespace icy
         {
             return int(rhs < lhs) - int(lhs < rhs);
         }
+        template<typename T>
+        inline int compare_ex(std::integral_constant<compare_type, compare_type::enumeration>, const T lhs, const T rhs) noexcept
+        {
+            return int(rhs < lhs) - int(lhs < rhs);
+        }
     }
 
     template<typename T>
     inline int compare(const T& lhs, const T& rhs) noexcept
     {
+        using U = std::remove_cv_t<std::remove_reference_t<T>>;
         return detail::compare_ex(std::integral_constant<detail::compare_type,
-            detail::is_container<T>::value ? detail::compare_type::container :
-            std::is_pointer<T>::value ? detail::compare_type::pointer : detail::compare_type::none>{}, lhs, rhs);
+            std::is_enum<U>::value ? detail::compare_type::enumeration :
+            detail::is_container<U>::value ? detail::compare_type::container :
+            std::is_pointer<U>::value ? detail::compare_type::pointer : detail::compare_type::none>{}, lhs, rhs);
     }
 
     template<typename T>

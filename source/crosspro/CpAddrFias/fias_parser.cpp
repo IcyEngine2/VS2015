@@ -12,7 +12,7 @@ using namespace icy;
 #else
 #pragma comment(lib, "icy_engine_core")
 #endif
-const auto max_region = 100;
+//const auto max_region = 100;
 const auto max_xml_length = 1500;
 const auto max_str_length = 500;
 
@@ -58,20 +58,18 @@ error_type console_write(const string_view msg)
     
 }
 
-error_type parse_houses(const string_view path_input, const string_view dir_output)
+error_type parse_houses(const size_t region, const string_view path_input, const string_view dir_output)
 {
     file input;
     ICY_ERROR(input.open(path_input, file_access::read, file_open::open_existing, file_share::read));
 
-    file output[max_region];
-    bool first[max_region] = {};
-    for (auto n = 1u; n < max_region; ++n)
-    {
-        string str_output;
-        ICY_ERROR(to_string("%1%2.txt"_s, str_output, dir_output, n));
-        ICY_ERROR(output[n].open(str_output, file_access::app, file_open::create_always, file_share::read));
-        first[n] = true;
-    }
+    file output;
+    bool first = {};
+
+    string str_output;
+    ICY_ERROR(to_string("%1%2.txt"_s, str_output, dir_output, region));
+    ICY_ERROR(output.open(str_output, file_access::app, file_open::create_always, file_share::read));
+    first = true;
 
     auto now = clock_type::now();
     auto offset = 0ui64;
@@ -146,7 +144,11 @@ error_type parse_houses(const string_view path_input, const string_view dir_outp
                     for (auto ptr = beg; ptr && *ptr; ++ptr)
                     {
                         if (*ptr == '\"')
-                            return string_view(beg, ptr);
+                        {
+                            string_view tmp;
+                            to_string(const_array_view<char>(beg, ptr), tmp);
+                            return tmp;
+                        }
                     }
                     return string_view();
                 };
@@ -218,20 +220,17 @@ error_type parse_houses(const string_view path_input, const string_view dir_outp
     ICY_ERROR(console_write(msg));
     return {};
 }
-error_type parse_addrobj(const string_view path_addrobj, const string_view dir_output)
+error_type parse_addrobj(const size_t region, const string_view path_addrobj, const string_view dir_output)
 {
     file input;
     ICY_ERROR(input.open(path_addrobj, file_access::read, file_open::open_existing, file_share::read));
 
-    file output[max_region];
-    bool first[max_region];
-    for (auto n = 1u; n < max_region; ++n)
-    {
-        string str_output;
-        ICY_ERROR(to_string("%1%2.txt"_s, str_output, dir_output, n));
-        ICY_ERROR(output[n].open(str_output, file_access::app, file_open::create_always, file_share::read));
-        first[n] = true;
-    }
+    file output;
+    bool first = true;
+
+    string str_output;
+    ICY_ERROR(to_string("%1%2.txt"_s, str_output, dir_output, region));
+    ICY_ERROR(output.open(str_output, file_access::app, file_open::create_always, file_share::read));
 
     auto now = clock_type::now();
     auto offset = 0ui64;
@@ -277,7 +276,7 @@ error_type parse_addrobj(const string_view path_addrobj, const string_view dir_o
                         if (xml.back() == '/')
                         {
                             ICY_ERROR(xml.push_back('\0'));
-                            if (strstr(xml.data(), "Object") == xml.data() + 1)
+                            if (strstr(xml.data(), "OBJECT") == xml.data() + 1)
                             {
                                 done = true;
                                 break;
@@ -307,7 +306,11 @@ error_type parse_addrobj(const string_view path_addrobj, const string_view dir_o
                     for (auto ptr = beg; ptr && *ptr; ++ptr)
                     {
                         if (*ptr == '\"')
-                            return string_view(beg, ptr);
+                        {
+                            string_view tmp;
+                            to_string(const_array_view<char>(beg, ptr), tmp);
+                            return tmp;
+                        }
                     }
                     return string_view();
                 };
@@ -429,7 +432,7 @@ error_type remove_duplicate_houses(const string_view path_house, const string_vi
                 {
                     string str_tabs;
                     array<string_view> tabs;
-                    ICY_ERROR(to_string(string_view(str.data(), str.size()), str_tabs));
+                    ICY_ERROR(to_string(str, str_tabs));
                     ICY_ERROR(split(str_tabs, tabs));
 
                     if (tabs.size() < 3)
@@ -572,7 +575,7 @@ error_type make_list(const string_view path_house, const string_view path_addr, 
                     {
                         string str_tabs;
                         array<string_view> tabs;
-                        ICY_ERROR(to_string(string_view(str.data(), str.size()), str_tabs));
+                        ICY_ERROR(to_string(str, str_tabs));
                         ICY_ERROR(split(str_tabs, tabs, '\t'));
 
                         if (tabs.size() < 4)
@@ -666,7 +669,7 @@ error_type make_list(const string_view path_house, const string_view path_addr, 
                     {
                         string str_tabs;
                         array<string_view> tabs;
-                        ICY_ERROR(to_string(string_view(str.data(), str.size()), str_tabs));
+                        ICY_ERROR(to_string(str, str_tabs));
                         ICY_ERROR(split(str_tabs, tabs, '\t'));
 
                         if (tabs.size() < 3)
@@ -764,10 +767,12 @@ error_type make_list(const string_view path_house, const string_view path_addr, 
 
             if (town != addr.end())
             {
+                string_view house_text;
+                to_string(const_array_view<char>(house.text), house_text);
+
                 string out_str;
                 ICY_ERROR(to_string("%1\t%2\t%3\t%4\t%5\t%6"_s, out_str, 
-                    string_view(town_str), string_view(street->text), string_view(house.text), 
-                    street->par, street->key, house.key));
+                    string_view(town_str), string_view(street->text), house_text, street->par, street->key, house.key));
                 output_str.push_back(std::move(out_str));
             }   
             new_percent = offset * 100ui64 / output_str.size();
@@ -819,11 +824,12 @@ int main()
 {
     heap gheap;
     gheap.initialize(heap_init::global(4_gb));
-    create_console(con);
-    shared_ptr<thread> con_thread;
-    create_event_thread(con_thread, con);
-    con_thread->launch();
+    shared_ptr<console_system> con;
+    create_console_system(con);
+    con->thread().launch();
     
+    parse_addrobj("");
+
     //const auto error = parse_houses("C:/VS2015/dat/fias/as_house.xml"_s, "C:/VS2015/dat/fias/test_house/"_s);
     //return 0;
     //const auto error = parse_steads("C:/VS2015/dat/fias/as_stead.xml"_s, "C:/VS2015/dat/fias/test_stead/"_s);
@@ -846,8 +852,6 @@ int main()
             //win32_message(str);
         }
     }
-    con_thread->wait();
-    con_thread = 0;
     con = 0;
     return 0;
 }

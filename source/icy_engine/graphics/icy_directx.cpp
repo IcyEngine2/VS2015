@@ -3,6 +3,8 @@
 #include "shaders/draw_texture_ps.hpp"
 #include "shaders/gui_vs.hpp"
 #include "shaders/gui_ps.hpp"
+#include <icy_engine/core/icy_entity.hpp>
+#include <xmmintrin.h>
 
 using namespace icy;
 
@@ -645,10 +647,6 @@ shared_ptr<render_system> directx_render_surface::system() noexcept
 {
     return shared_ptr<directx_render_system>(m_system);
 }
-error_type directx_render_surface::repaint(render_scene& scene) noexcept
-{
-    return error_type();
-}
 
 directx_render_system::~directx_render_system() noexcept
 {
@@ -663,10 +661,23 @@ error_type directx_render_system::initialize() noexcept
 
     ICY_ERROR(m_sync.initialize());
 
+    CD3D11_BUFFER_DESC desc(uint32_t(64_kb), D3D11_BIND_VERTEX_BUFFER, D3D11_USAGE_DYNAMIC, D3D11_CPU_ACCESS_WRITE);
+    ICY_COM_ERROR(m_device->CreateBuffer(&desc, nullptr, &m_cpu_buffer.vtx_world));
+    ICY_COM_ERROR(m_device->CreateBuffer(&desc, nullptr, &m_cpu_buffer.vtx_angle));
+    ICY_COM_ERROR(m_device->CreateBuffer(&desc, nullptr, &m_cpu_buffer.vtx_color));
+    ICY_COM_ERROR(m_device->CreateBuffer(&desc, nullptr, &m_cpu_buffer.vtx_texuv));
+    ICY_COM_ERROR(m_device->CreateBuffer(&desc, nullptr, &m_cpu_buffer.obj_world));
+    ICY_COM_ERROR(m_device->CreateBuffer(&desc, nullptr, &m_cpu_buffer.obj_scale));
+    ICY_COM_ERROR(m_device->CreateBuffer(&desc, nullptr, &m_cpu_buffer.obj_angle));
+
+    desc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+    ICY_COM_ERROR(m_device->CreateBuffer(&desc, nullptr, &m_cpu_buffer.idx_array));
+
+    
     ICY_ERROR(make_shared(m_thread));
     m_thread->system = this;
 
-    filter(event_type::system_internal);
+    filter(event_type::system_internal | event_type::resource_load | event_type::entity_event);
     return error_type();
 }
 error_type directx_render_system::exec() noexcept
@@ -679,6 +690,124 @@ error_type directx_render_system::exec() noexcept
             if (event->type == event_type::system_internal)
             {
                 const auto& event_data = event->data<directx_render_internal_event>();
+                if (event_data.type == directx_render_internal_event_type::repaint)
+                {
+                    ICY_ERROR(do_repaint(event_data.size));
+                }
+            }
+            else if (event->type == event_type::resource_load)
+            {
+                const auto& event_data = event->data<resource_event>();
+                if (event_data.error)
+                    continue;
+
+                if (event_data.header.type == resource_type::mesh)
+                {
+                    ICY_ERROR(load_mesh(event_data.header.index, event_data.mesh()));
+                }
+                else if (event_data.header.type == resource_type::material)
+                {
+                    const auto it = m_materials.find(event_data.header.index);
+                    if (it == m_materials.end())
+                        continue;
+                    ICY_ERROR(copy(event_data.material(), *it->value));
+                }
+            }
+            else if (event->type == event_type::entity_event)
+            {
+                const auto& event_data = event->data<entity_event>();
+                if (event_data.type == entity_event_type::create_entity)
+                {
+                    if (uint32_t(event_data.entity.types()) & uint32_t(component_type::mesh))
+                    {
+                        auto new_node = make_unique<directx_render_node>();
+                        ICY_ERROR(m_nodes.insert(event_data.entity.index(), std::move(new_node)));
+                    }
+                }
+                else if (event_data.type == entity_event_type::remove_entity)
+                {
+                    const auto it = m_nodes.find(event_data.entity.index());
+                    if (it != m_nodes.end())
+                    {
+                        //reset_materials(it->value);
+                        m_nodes.erase(it);
+                    }
+                }
+                else if (event_data.type == entity_event_type::modify_component)
+                {
+                    if (event_data.ctype == component_type::transform)
+                    {
+                        const auto it = m_nodes.find(event_data.entity.index());
+                        if (it == m_nodes.end())
+                            continue;
+
+                        if (!event_data.value.get(it->value->transform))
+                            continue;
+
+                       /* for (auto&& pair : it->value->materials)
+                        {
+                            //pair.value->meshes;
+                        }
+
+                        for (auto&& index : it->value.meshes)
+                        {
+                            const auto mesh = m_meshes.find(index);
+                            if (mesh != m_meshes.end())
+                            {
+                                const auto material = m_materials.find(mesh->value.material);
+                                if (material != m_materials.end())
+                                    material->value.state &= ~directx_material_ready_obj;
+                            }
+                        }*/
+                    }
+                    else if (event_data.ctype == component_type::mesh)
+                    {
+                        const auto it = m_nodes.find(event_data.entity.index());
+                        if (it == m_nodes.end())
+                            continue;
+
+                        /*for (auto&& index : it->value.meshes)
+                        {
+                            const auto mesh = m_meshes.find(index);
+                            if (mesh != m_meshes.end())
+                            {
+                                const auto material = m_materials.find(mesh->value.material);
+                                if (material != m_materials.end())
+                                    material->value.state &= ~directx_material_ready_vtx;
+                            }
+                        }
+
+                        const_array_view<guid> meshes;
+                        if (event_data.value.get(meshes))
+                        {
+                            ICY_ERROR(it->value.meshes.assign(meshes));
+                            for (auto&& mesh : it->value.meshes)
+                            {
+                                const auto jt = m_meshes.find(mesh);
+                                if (jt == m_meshes.end())
+                                {
+                                    ICY_ERROR(m_meshes.insert(mesh, directx_render_mesh()));
+                                    auto rsystem = resource_system::global();
+                                    if (rsystem)
+                                    {
+                                        resource_header header;
+                                        header.index = mesh;
+                                        header.type = resource_type::mesh;
+                                        ICY_ERROR(rsystem->load(header));
+                                    }
+                                }
+                                else
+                                {
+                                    const auto material = m_materials.find(jt->value.material);
+                                    if (material != m_materials.end())
+                                        material->value.state &= ~directx_material_ready_vtx;
+                                }
+                            }
+                        }*/
+                    }
+                    
+                }
+
             }
         }
         ICY_ERROR(m_sync.wait());
@@ -689,11 +818,208 @@ error_type directx_render_system::signal(const event_data* event) noexcept
 {
     return m_sync.wake();
 }
-error_type directx_render_system::create(const window_size size, shared_ptr<render_surface>& surface) noexcept
+error_type directx_render_system::repaint(const window_size size) noexcept
 {
-    const auto index = m_count.fetch_add(1, std::memory_order_acq_rel);
+    directx_render_internal_event new_event;
+    new_event.type = directx_render_internal_event_type::repaint;
+    new_event.size = size;
+    ICY_ERROR(event_system::post(nullptr, event_type::system_internal, std::move(new_event)));
+    return error_type();
+}
+error_type directx_render_system::load_mesh(const guid index, const render_mesh& mesh) noexcept
+{
+    const auto it = m_meshes.find(index);
+    if (it == m_meshes.end())
+        return error_type();
+
+    auto& new_mesh = *it->value;
+    new_mesh.type = mesh.type;
+    for (auto&& vec : mesh.world)
+    {
+        ICY_ERROR(new_mesh.world.push_back(_mm_set_ps(vec.x, vec.y, vec.z, 1)));
+    }
+    for (auto&& vec : mesh.angle)
+    {
+        ICY_ERROR(new_mesh.angle.push_back(_mm_set_ps(vec.x, vec.y, vec.z, 1)));
+    }
+    ICY_ERROR(copy(mesh.indices, new_mesh.indices));
+
+ /*  auto jt = m_materials.find(old_mesh.material);
+    if (jt == m_materials.end())
+    {
+        auto new_material = make_unique<directx_render_material>();
+        if (!new_material)
+            return make_stdlib_error(std::errc::not_enough_memory);
+
+        ICY_ERROR(new_material->meshes.insert(it->key, &new_mesh));
+        ICY_ERROR(m_materials.insert(old_mesh.material, std::move(new_material), &jt));
+
+        auto rsystem = resource_system::global();
+        if (rsystem)
+        {
+            resource_header header;
+            header.index = old_mesh.material;
+            header.type = resource_type::material;
+            ICY_ERROR(rsystem->load(header));
+        }
+    }
+
+    new_mesh.material = jt->value.get();
+    ICY_ERROR(jt->value->meshes.insert(it->key, &new_mesh));*/
+    return error_type();
+}
+error_type directx_render_system::do_repaint(const window_size size) noexcept
+{
+    /*  const auto update_buffer = [this](com_ptr<ID3D11Buffer>& cpu_buffer, com_ptr<ID3D11Buffer>& gpu_buffer, const void* const data, const size_t bytes)
+    {
+        D3D11_BUFFER_DESC cpu_desc = {};
+        D3D11_BUFFER_DESC gpu_desc = {};
+        cpu_buffer->GetDesc(&cpu_desc);
+        if (!gpu_buffer)
+        {
+            gpu_desc = cpu_desc;
+            gpu_desc.CPUAccessFlags = 0;
+            gpu_desc.Usage = D3D11_USAGE_DEFAULT;
+            ICY_COM_ERROR(m_device->CreateBuffer(&gpu_desc, nullptr, &gpu_buffer));
+        }
+        else
+        {
+            gpu_buffer->GetDesc(&gpu_desc);
+        }
+
+        if (cpu_desc.ByteWidth < bytes)
+        {
+            cpu_desc.ByteWidth = UINT(bytes);
+            ICY_COM_ERROR(m_device->CreateBuffer(&cpu_desc, nullptr, &cpu_buffer));
+        }
+        if (gpu_desc.ByteWidth < bytes)
+        {
+            gpu_desc.ByteWidth = UINT(bytes);
+            ICY_COM_ERROR(m_device->CreateBuffer(&gpu_desc, nullptr, &gpu_buffer));
+        }
+        com_ptr<ID3D11DeviceContext> context;
+        m_device->GetImmediateContext(&context);
+
+        D3D11_MAPPED_SUBRESOURCE map;
+        ICY_COM_ERROR(context->Map(cpu_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &map));
+        memcpy(map.pData, data, bytes);
+        context->Unmap(cpu_buffer, 0);
+        context->CopyResource(gpu_buffer, cpu_buffer);
+        return error_type();
+    };
+    for (auto&& pair : m_materials)
+    {
+       
+        if (pair.value.state & directx_material_ready_vtx)
+            continue;
+
+        auto vcount = 0u;
+        auto icount = 0u;
+        array<const directx_render_mesh*> mesh_list;
+
+        auto offset = 0u;
+        for (auto&& mesh_pair : m_meshes)
+        {
+            const auto& mesh = mesh_pair.value;
+            if (mesh.material != pair.key)
+                continue;
+
+            ICY_ERROR(mesh_list.push_back(&mesh));
+            vcount += uint32_t(mesh.world.size());
+            icount += uint32_t(mesh.indices.size());
+            ICY_ERROR(pair.value.mesh_to_index.insert(pair.key, offset));
+            offset += uint32_t(mesh.indices.size());
+        }
+        array<directx_vec4> world;
+        array<uint32_t> index;
+        ICY_ERROR(world.reserve(vcount));
+        ICY_ERROR(index.reserve(icount));
+
+        offset = 0u;
+        for (auto&& ptr : mesh_list)
+        {
+            ICY_ERROR(world.append(ptr->world.begin(), ptr->world.end()));
+            for (auto&& value : ptr->indices)
+            {
+                ICY_ERROR(index.push_back(value + offset));
+            }
+            offset += uint32_t(ptr->indices.size());
+        }
+        ICY_ERROR(update_buffer(m_cpu_buffer.vtx_world, pair.value.vtx_world, world.data(), world.size() * sizeof(world[0])));
+        ICY_ERROR(update_buffer(m_cpu_buffer.idx_array, pair.value.idx_array, index.data(), index.size() * sizeof(index[0])));
+        pair.value.state |= directx_material_ready_vtx;
+    }
+    for (auto&& pair : m_materials)
+    {
+        if (pair.value.state & directx_material_ready_obj)
+            continue;
+
+        array<directx_vec4> world;
+        array<directx_vec4> angle;
+        array<directx_vec4> scale;
+        auto offset = 0u;
+        for (auto&& node_pair : m_nodes)
+        {
+            const auto it = node_pair.value.meshes.find(pair.key);
+            if (it == node_pair.value.meshes.end())
+                continue;
+
+            ICY_ERROR(world.push_back(node_pair.value.transform.world));
+            ICY_ERROR(scale.push_back(node_pair.value.transform.scale));
+            ICY_ERROR(angle.push_back(node_pair.value.transform.angle));
+
+            ICY_ERROR(pair.value.node_to_index.insert(node_pair.key, offset));
+            offset += 1;
+        }
+        ICY_ERROR(update_buffer(m_cpu_buffer.obj_world, pair.value.obj_world, world.data(), world.size() * sizeof(world[0])));
+        ICY_ERROR(update_buffer(m_cpu_buffer.obj_scale, pair.value.obj_scale, scale.data(), scale.size() * sizeof(scale[0])));
+        ICY_ERROR(update_buffer(m_cpu_buffer.obj_angle, pair.value.obj_angle, world.data(), angle.size() * sizeof(angle[0])));
+        pair.value.state |= directx_material_ready_obj;
+    }
+
     shared_ptr<directx_render_surface> new_surface;
-    ICY_ERROR(make_shared(new_surface, *this, index));
-    surface = new_surface;
+    ICY_ERROR(make_shared(new_surface, *this, m_index.fetch_add(1, std::memory_order_acq_rel) + 1));
+    ICY_ERROR(do_repaint(*new_surface, size));
+    */
+    render_event new_event;
+    //new_event.surface = std::move(new_surface);
+    
+    
+    ICY_ERROR(event::post(this, event_type::render_event, std::move(new_event)));
+    
+
+    return error_type();
+}
+error_type directx_render_system::do_repaint(directx_render_surface& surface, const window_size size) noexcept
+{
+  /*  CD3D11_TEXTURE2D_DESC desc(DXGI_FORMAT_R8G8B8A8_UNORM, size.x, size.y, 1, 1, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET);
+    ICY_COM_ERROR(m_device->CreateTexture2D(&desc, nullptr, &surface.m_buffer));
+
+    auto rtv = CD3D11_RENDER_TARGET_VIEW_DESC(D3D11_RTV_DIMENSION_TEXTURE2D);
+    auto srv = CD3D11_SHADER_RESOURCE_VIEW_DESC(D3D11_SRV_DIMENSION_TEXTURE2D);
+    ICY_COM_ERROR(m_device->CreateRenderTargetView(surface.m_buffer, &rtv, &surface.m_rtv));
+    ICY_COM_ERROR(m_device->CreateShaderResourceView(surface.m_buffer, &srv, &surface.m_srv));
+
+    com_ptr<ID3D11DeviceContext> context;
+    m_device->GetImmediateContext(&context);
+
+    context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+    for (auto&& pair : m_materials)
+    {
+        const auto& material = pair.value;
+        context->IASetIndexBuffer(material.idx_array, DXGI_FORMAT_R32_UINT, 0);
+
+        ID3D11Buffer* buffers[] = { material.vtx_world, material.obj_world };
+        context->IASetVertexBuffers(0, _countof(buffers), buffers, strides, offsets);
+        context->
+
+    }
+
+    context->IASetInputLayout(m_layout);
+
+    context->Flush();
+
+    */
     return error_type();
 }

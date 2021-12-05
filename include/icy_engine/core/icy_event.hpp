@@ -22,6 +22,7 @@ namespace icy
             bitcnt_gui      =   0x02,
             bitcnt_display  =   0x01,
             bitcnt_render   =   0x01,
+            bitcnt_entity   =   0x01,
 
             bitcnt_user     =   0x20,
         };
@@ -36,6 +37,7 @@ namespace icy
             offset_gui      =   offset_window + bitcnt_window,
             offset_display  =   offset_gui + bitcnt_gui,
             offset_render   =   offset_display + bitcnt_display,
+            offset_entity   =   offset_render + bitcnt_render,
 
             offset_user     =   0x20,
         };
@@ -50,6 +52,7 @@ namespace icy
             mask_gui        =   ((1ui64 << bitcnt_gui)      - 1)    <<  offset_gui,
             mask_display    =   ((1ui64 << bitcnt_display)  - 1)    <<  offset_display,
             mask_render     =   ((1ui64 << bitcnt_render)   - 1)    <<  offset_render,
+            mask_entity     =   ((1ui64 << bitcnt_entity)   - 1)    <<  offset_entity,
             mask_user       =   ((1ui64 << bitcnt_user)     - 1)    <<  offset_user,
         };
         enum : uint64_t
@@ -101,10 +104,13 @@ namespace icy
             render_event            =   1ui64   <<  (offset_render + 0x00),
             render_any              =   mask_render,
 
+            entity_event            =   1ui64   <<  (offset_entity + 0x00),
+            entity_any              =   mask_entity,
+
             user                    =   1ui64   <<  (offset_user + 0x00),
             user_any                =   mask_user,
         };
-        static_assert(offset_user >= offset_render + bitcnt_render, "INVALID USER MESSAGE OFFSET");
+        static_assert(offset_user >= offset_entity + bitcnt_entity, "INVALID USER MESSAGE OFFSET");
     }
     
     using event_type = decltype(event_type_enum::none);
